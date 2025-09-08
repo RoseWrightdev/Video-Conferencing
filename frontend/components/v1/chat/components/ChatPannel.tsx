@@ -12,17 +12,16 @@ interface ChatPanelProps {
 
 export default function ChatPanel({ dependencies }: ChatPanelProps) {
   const { chatService, roomService, participantService } = dependencies;
-  
   const messages = chatService.messages;
   const currentUserId = roomService.currentUserId;
   const isHost = participantService.getParticipant(currentUserId || "")?.role === "host";
 
   return (
-    <div 
+    <div
+    // className="min-w-3xs max-w-full"
       style={{
-        width: '320px',
-        minWidth: '320px', 
-        maxWidth: '320px',
+        minWidth: '480px', 
+        maxWidth: '720px',
         flexShrink: 0,
         display: 'block',
         overflow: 'hidden'
