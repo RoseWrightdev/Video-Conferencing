@@ -1,4 +1,3 @@
-
 import type { WebSocketClient } from '@/lib/websockets';
 import type { ClientInfo } from '../../shared/types/events';
 import type { WebRTCManager } from '@/lib/webrtc';
@@ -122,6 +121,11 @@ export interface RoomSlice {
   currentUserId: string | null;
   currentUsername: string | null;
   clientInfo: ClientInfo | null;
+  wsClient: WebSocketClient | null;
+  webrtcManager: WebRTCManager | null;
+  initializeRoom: (roomId: string, username: string, token?: string) => Promise<void>;
+  joinRoom: (approvalToken?: string) => Promise<void>;
+  leaveRoom: () => void;
   updateRoomSettings: (settings: Partial<RoomSettings>) => void;
 }
 

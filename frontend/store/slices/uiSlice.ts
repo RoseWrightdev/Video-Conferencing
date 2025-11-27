@@ -6,7 +6,7 @@ export const createUISlice: StateCreator<
   [],
   [],
   UiSlice
-> = (set, get) => ({
+> = (set) => ({
   isParticipantsPanelOpen: false,
   gridLayout: 'gallery',
   isPinned: false,
