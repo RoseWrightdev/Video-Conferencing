@@ -1,6 +1,46 @@
 import { StateCreator } from 'zustand';
 import { type ParticipantSlice, type RoomStoreState, type Participant } from '../types';
 
+/**
+ * Participant slice for managing room members and their states.
+ * 
+ * State:
+ * - participants: Map of all active participants (hosts + regular participants)
+ * - localParticipant: This client's participant data (for self-view)
+ * - speakingParticipants: Set of participant IDs with raised hands
+ * - pendingParticipants: Array of users waiting in lobby for approval
+ * - selectedParticipantId: Currently selected participant for actions
+ * - isHost: Whether current user has host privileges
+ * 
+ * Actions:
+ * - addParticipant: Add new participant to room
+ * - removeParticipant: Remove participant and cleanup references
+ * - updateParticipant: Update specific fields (audio/video state)
+ * - approveParticipant: Admit from waiting room (host only)
+ * - kickParticipant: Remove participant from room (host only)
+ * - toggleParticipantAudio: Mute/unmute participant (host only)
+ * - toggleParticipantVideo: Enable/disable video (host only)
+ * - selectParticipant: Set selected for spotlight view
+ * 
+ * Participant Synchronization:
+ * - Full participant list received via 'room_state' WebSocket event
+ * - Incremental updates via join/leave events
+ * - Audio/video states from WebRTC track enabled flags
+ * - Speaking states from 'raise_hand'/'lower_hand' events
+ * 
+ * Host Permissions:
+ * - Only hosts can approve/kick participants
+ * - Only hosts can toggle other participants' media
+ * - Host status determined by room_state.hosts array
+ * 
+ * Cleanup:
+ * - removeParticipant clears from all collections
+ * - Auto-clears selection/pin if removed participant
+ * - WebRTC peer connections closed separately
+ * 
+ * @see RoomStatePayload For participant list structure
+ * @see WebSocketClient For host action methods
+ */
 export const createParticipantSlice: StateCreator<
   RoomStoreState,
   [],

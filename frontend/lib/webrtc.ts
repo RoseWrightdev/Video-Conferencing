@@ -1,11 +1,51 @@
 /**
- * WebRTC Client for Peer-to-Peer Video Conferencing
+ * WebRTC peer-to-peer connection management for video conferencing.
+ * 
+ * This module provides a complete WebRTC implementation with:
+ * - Peer connection lifecycle management (create, maintain, destroy)
+ * - Media stream handling (camera, microphone, screen sharing)
+ * - ICE candidate negotiation for NAT traversal
+ * - SDP offer/answer exchange via WebSocket signaling
+ * - RTCDataChannel for real-time data messaging
+ * - Event-driven architecture for stream and state changes
+ * 
+ * Architecture:
+ * - PeerConnection: Manages individual peer-to-peer connections
+ * - WebRTCManager: Coordinates multiple peer connections (mesh topology)
+ * - MediaDeviceUtils: Device enumeration and permission helpers
+ * 
+ * WebRTC Flow:
+ * 1. Create RTCPeerConnection with ICE servers (STUN/TURN)
+ * 2. Add local media streams (getUserMedia)
+ * 3. Create offer or receive offer via WebSocket
+ * 4. Exchange SDP (Session Description Protocol)
+ * 5. Exchange ICE candidates for connectivity
+ * 6. Establish peer-to-peer connection
+ * 7. Receive remote streams via ontrack event
  * 
  * @example
  * ```typescript
- * const manager = new WebRTCManager(clientInfo, websocketClient);
- * await manager.initializeLocalMedia();
- * await manager.addPeer('peer-id', true);
+ * // Initialize manager with client info and WebSocket
+ * const manager = new WebRTCManager(clientInfo, wsClient);
+ * 
+ * // Get local media
+ * const stream = await manager.initializeLocalMedia();
+ * 
+ * // Add peer connection
+ * await manager.addPeer('remote-peer-id', true);
+ * 
+ * // Start screen sharing
+ * const screenStream = await manager.startScreenShare();
+ * 
+ * // Listen for remote streams
+ * manager.onStreamAdded((stream, peerId, type) => {
+ *   if (type === 'camera') {
+ *     videoElement.srcObject = stream;
+ *   }
+ * });
+ * 
+ * // Cleanup on disconnect
+ * manager.cleanup();
  * ```
  */
 
@@ -18,6 +58,14 @@ import type {
     WebRTCRenegotiatePayload
 } from '../../shared/types/events';
 
+/**
+ * Configuration for WebRTC peer connections.
+ * 
+ * @property iceServers - STUN/TURN servers for NAT traversal
+ * @property video - Video constraints or boolean to enable camera
+ * @property audio - Audio constraints or boolean to enable microphone
+ * @property screenshare - Whether screen sharing is enabled
+ */
 export interface WebRTCConfig {
   iceServers: RTCIceServer[];
   video: boolean | MediaTrackConstraints;
@@ -47,6 +95,32 @@ export type ICECandidateHandler = (candidate: RTCIceCandidate, peerId: string) =
 export type NegotiationNeededHandler = (peerId: string) => void;
 export type DataChannelMessageHandler = (message: unknown, peerId: string) => void;
 
+/**
+ * Manages a single WebRTC peer-to-peer connection.
+ * 
+ * Responsibilities:
+ * - Create and configure RTCPeerConnection instance
+ * - Handle SDP offer/answer exchange
+ * - Process ICE candidates for NAT traversal
+ * - Manage local and remote media streams
+ * - Provide RTCDataChannel for messaging
+ * - Emit events for streams and connection state
+ * 
+ * Stream Management:
+ * - Supports multiple stream types (camera, screen, audio-only)
+ * - Tracks both local and remote streams separately
+ * - Allows replacing streams (e.g., switch camera to screen)
+ * 
+ * Connection Lifecycle:
+ * 1. new: RTCPeerConnection created
+ * 2. connecting: ICE negotiation in progress
+ * 3. connected: Peer-to-peer link established
+ * 4. disconnected: Temporary connection loss
+ * 5. failed: Connection cannot be established
+ * 6. closed: Connection terminated
+ * 
+ * @see WebRTCManager For multi-peer coordination
+ */
 export class PeerConnection {
   private pc: RTCPeerConnection;
   private peerId: string;
@@ -363,6 +437,36 @@ export class PeerConnection {
   }
 }
 
+/**
+ * Manages multiple WebRTC peer connections in a mesh topology.
+ * 
+ * Coordinates:
+ * - Local media stream initialization (getUserMedia)
+ * - Screen sharing lifecycle (getDisplayMedia)
+ * - Multiple peer connections (one per remote participant)
+ * - WebSocket signaling event handling
+ * - Stream distribution to all peers
+ * 
+ * Mesh Topology:
+ * - Each participant connects directly to every other participant
+ * - N participants = N*(N-1)/2 total connections
+ * - Scales well for small rooms (< 6 participants)
+ * - For larger rooms, consider SFU (Selective Forwarding Unit)
+ * 
+ * Media Management:
+ * - Shares local stream with all peers automatically
+ * - Handles screen sharing start/stop with renegotiation
+ * - Supports dynamic peer addition/removal
+ * - Audio/video mute/unmute affects all peer connections
+ * 
+ * Signaling:
+ * - Listens for offer/answer/candidate events from WebSocket
+ * - Routes events to appropriate PeerConnection instance
+ * - Sends local SDP and ICE candidates via WebSocket
+ * 
+ * @see PeerConnection For individual peer management
+ * @see WebSocketClient For signaling protocol
+ */
 export class WebRTCManager {
   private peers = new Map<string, PeerConnection>();
   private localClientInfo: ClientInfo;
@@ -602,6 +706,39 @@ export class WebRTCManager {
   }
 }
 
+/**
+ * Utility functions for media device enumeration and management.
+ * 
+ * Provides:
+ * - Device enumeration (cameras, microphones, speakers)
+ * - Permission request helpers
+ * - Feature detection (screen sharing support)
+ * 
+ * Device Labels:
+ * - Require getUserMedia permission before labels are populated
+ * - Before permission: deviceId available, label empty
+ * - After permission: both deviceId and label available
+ * 
+ * Browser Compatibility:
+ * - enumerateDevices: All modern browsers
+ * - getDisplayMedia: Chrome, Firefox, Edge (Safari 13+)
+ * - audiooutput devices: Not available in Firefox
+ * 
+ * @example
+ * ```typescript
+ * // Request permissions first
+ * await MediaDeviceUtils.requestPermissions();
+ * 
+ * // Get all cameras
+ * const cameras = await MediaDeviceUtils.getVideoDevices();
+ * cameras.forEach(cam => console.log(cam.label));
+ * 
+ * // Check screen share support
+ * if (MediaDeviceUtils.isScreenShareSupported()) {
+ *   await navigator.mediaDevices.getDisplayMedia({ video: true });
+ * }
+ * ```
+ */
 export const MediaDeviceUtils = {
   async getDevices(): Promise<MediaDeviceInfo[]> {
     try {

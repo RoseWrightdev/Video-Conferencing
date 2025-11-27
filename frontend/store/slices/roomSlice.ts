@@ -4,6 +4,52 @@ import { WebRTCManager } from '@/lib/webrtc';
 import { type RoomSlice, type RoomStoreState, type Participant, type ChatMessage } from '../types';
 import type { AddChatPayload, RoomStatePayload, HandStatePayload } from '../../../shared/types/events';
 
+/**
+ * Room slice for managing room lifecycle and core connection infrastructure.
+ * 
+ * State:
+ * - roomId/roomName: Room identifiers
+ * - roomSettings: Configuration (max participants, waiting room, permissions)
+ * - isJoined: Whether successfully joined and approved
+ * - isWaitingRoom: Whether waiting for host approval
+ * - currentUserId/currentUsername: This client's identity
+ * - clientInfo: ClientInfo object for WebSocket messages
+ * - wsClient: WebSocket connection instance
+ * - webrtcManager: WebRTC peer connection manager
+ * 
+ * Actions:
+ * - initializeRoom: Create WebSocket/WebRTC infrastructure
+ * - joinRoom: Request to join (may enter waiting room)
+ * - leaveRoom: Cleanup all connections and reset state
+ * - updateRoomSettings: Modify room configuration (host only)
+ * 
+ * Initialization Flow:
+ * 1. Generate unique client ID
+ * 2. Create WebSocket client with JWT token
+ * 3. Register all event handlers (chat, room_state, etc.)
+ * 4. Connect to WebSocket server
+ * 5. Create WebRTC manager for peer connections
+ * 6. Update store with references
+ * 7. Enumerate available devices
+ * 
+ * Event Handlers:
+ * - add_chat: Append incoming messages
+ * - room_state: Sync participant list
+ * - accept_waiting: Transition from lobby to room
+ * - deny_waiting: Show rejection error
+ * - raise_hand/lower_hand: Update speaking indicators
+ * - Connection state changes: Update UI status
+ * 
+ * Cleanup:
+ * - Stops all media tracks
+ * - Closes WebRTC connections
+ * - Disconnects WebSocket (code 1000)
+ * - Resets all state to null/empty
+ * 
+ * @see RoomService For alternative initialization API
+ * @see WebSocketClient For connection management
+ * @see WebRTCManager For peer connection handling
+ */
 export const createRoomSlice: StateCreator<
   RoomStoreState,
   [],

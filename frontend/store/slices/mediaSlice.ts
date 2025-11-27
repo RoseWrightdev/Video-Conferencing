@@ -1,6 +1,41 @@
 import { StateCreator } from 'zustand';
 import { type MediaSlice, type RoomStoreState } from '../types';
 
+/**
+ * Media slice for managing local audio/video streams and screen sharing.
+ * 
+ * State:
+ * - localStream: MediaStream from camera/microphone
+ * - screenShareStream: MediaStream from display capture
+ * - isAudioEnabled: Microphone track enabled state
+ * - isVideoEnabled: Camera track enabled state
+ * - isScreenSharing: Screen share active flag
+ * 
+ * Actions:
+ * - setLocalStream: Store reference to getUserMedia stream
+ * - toggleAudio: Enable/disable microphone track
+ * - toggleVideo: Enable/disable camera track
+ * - startScreenShare: Capture display and create screen stream
+ * - stopScreenShare: Stop screen share tracks and cleanup
+ * 
+ * MediaStream Management:
+ * - Tracks are never destroyed on toggle, only enabled/disabled
+ * - This allows instant re-enable without requesting permissions
+ * - Actual stream cleanup happens in RoomService.leaveRoom
+ * 
+ * Screen Sharing:
+ * - Delegates to WebRTCManager for track negotiation
+ * - Replaces video track in existing peer connections
+ * - Stops all screen tracks on stopScreenShare
+ * 
+ * Error Handling:
+ * - Permission denials reported via handleError action
+ * - Throws errors for component-level try/catch
+ * - Errors displayed in UI toast notifications
+ * 
+ * @see MediaStream For Web API documentation
+ * @see WebRTCManager.startScreenShare For peer connection updates
+ */
 export const createMediaSlice: StateCreator<
   RoomStoreState,
   [],

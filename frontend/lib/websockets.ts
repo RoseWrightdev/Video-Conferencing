@@ -17,10 +17,52 @@ import type {
     WebRTCRenegotiatePayload
 } from '../../shared/types/events';
 
-/** WebSocket connection states */
+/**
+ * WebSocket connection lifecycle states.
+ * 
+ * State Transitions:
+ * - disconnected → connecting: connect() called
+ * - connecting → connected: WebSocket.onopen fired
+ * - connected → disconnected: Normal close (code 1000)
+ * - connected → reconnecting: Abnormal close with autoReconnect enabled
+ * - reconnecting → connected: Reconnection successful
+ * - reconnecting → error: Max reconnect attempts exceeded
+ * - any → error: Connection failure or max retries reached
+ * 
+ * @see WebSocketClient.getConnectionState For current state
+ * @see WebSocketClient.onConnectionChange For state change notifications
+ */
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error' | 'reconnecting';
 
-/** WebSocket client configuration */
+/**
+ * Configuration options for WebSocket client initialization.
+ * 
+ * Connection Behavior:
+ * - url: Full WebSocket URL (ws:// or wss://)
+ * - token: JWT authentication token appended as query parameter
+ * - autoReconnect: Enable automatic reconnection on abnormal disconnect
+ * 
+ * Reconnection Strategy:
+ * - reconnectInterval: Base delay between attempts (exponential backoff applied)
+ * - maxReconnectAttempts: Limit on retry count before giving up
+ * - Backoff formula: delay = reconnectInterval * 2^(attempt - 1)
+ * 
+ * Keep-Alive:
+ * - heartbeatInterval: Interval for ping messages to prevent timeout
+ * - Server should respond with pong or close connection
+ * 
+ * @example
+ * ```typescript
+ * const config: WebSocketConfig = {
+ *   url: 'wss://api.example.com/ws/hub/room-123',
+ *   token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+ *   autoReconnect: true,
+ *   reconnectInterval: 3000,  // 3s, 6s, 12s, 24s, 48s
+ *   maxReconnectAttempts: 5,
+ *   heartbeatInterval: 30000  // 30 seconds
+ * };
+ * ```
+ */
 export interface WebSocketConfig {
   url: string;
   token?: string;
@@ -30,20 +72,100 @@ export interface WebSocketConfig {
   heartbeatInterval?: number;
 }
 
-/** Event handler function types */
+/**
+ * Handler for incoming WebSocket messages.
+ * 
+ * Called when a message matching subscribed event type is received.
+ * Multiple handlers can subscribe to the same event type.
+ * 
+ * @param message - Parsed WebSocket message with event and payload
+ * 
+ * @see WebSocketClient.on For subscription
+ * @see WebSocketClient.off For unsubscription
+ */
 export type MessageHandler = (message: WebSocketMessage) => void;
+
+/**
+ * Handler for connection state changes.
+ * 
+ * Called whenever the WebSocket connection state transitions.
+ * Useful for updating UI connection indicators.
+ * 
+ * @param state - New connection state
+ * 
+ * @see ConnectionState For possible states
+ */
 export type ConnectionHandler = (state: ConnectionState) => void;
+
+/**
+ * Handler for WebSocket errors.
+ * 
+ * Called for connection errors, message parsing errors,
+ * and errors thrown by other handlers.
+ * 
+ * @param error - Error instance with descriptive message
+ */
 export type ErrorHandler = (error: Error) => void;
 
 /**
- * WebSocket client for real-time video conferencing
+ * WebSocket client for real-time video conferencing signaling.
+ * 
+ * Responsibilities:
+ * - Establish and maintain WebSocket connection with authentication
+ * - Automatic reconnection with exponential backoff on abnormal disconnect
+ * - Event-driven message routing to registered handlers
+ * - Keep-alive heartbeat to prevent idle timeout
+ * - Type-safe message sending for all conference events
+ * 
+ * Message Protocol:
+ * - All messages are JSON with { event: string, payload: object } structure
+ * - Event types defined in shared/types/events.ts
+ * - Payloads strongly typed per event type
+ * - Authentication via JWT token in URL query parameter
+ * 
+ * Event Categories:
+ * - Chat: add_chat, delete_chat, recents_chat
+ * - Room: room_state, waiting_request, accept_waiting, deny_waiting
+ * - Hand Raising: raise_hand, lower_hand
+ * - Screen Share: request_screenshare, accept_screenshare, deny_screenshare
+ * - WebRTC Signaling: offer, answer, candidate, renegotiate
+ * 
+ * Connection Management:
+ * - Normal disconnect (code 1000): No automatic reconnection
+ * - Abnormal disconnect: Exponential backoff reconnection if enabled
+ * - Max attempts exceeded: Transitions to 'error' state
+ * - Heartbeat ping every 30s (configurable) to maintain connection
  * 
  * @example
  * ```typescript
- * const client = new WebSocketClient({ url: 'wss://api.example.com/ws', token: 'jwt' });
+ * // Initialize client
+ * const client = new WebSocketClient({
+ *   url: 'wss://api.example.com/ws/hub/room-123',
+ *   token: session.accessToken,
+ *   autoReconnect: true
+ * });
+ * 
+ * // Subscribe to events
+ * client.on('add_chat', (msg) => {
+ *   const chat = msg.payload as AddChatPayload;
+ *   console.log(`${chat.displayName}: ${chat.chatContent}`);
+ * });
+ * 
+ * // Monitor connection
+ * client.onConnectionChange((state) => {
+ *   console.log('Connection:', state);
+ * });
+ * 
+ * // Connect and send messages
  * await client.connect();
  * client.sendChat('Hello!', { clientId: 'user123', displayName: 'John' });
+ * 
+ * // Cleanup
+ * client.disconnect();
  * ```
+ * 
+ * @see EventType For all supported event types
+ * @see WebSocketConfig For configuration options
  */
 export class WebSocketClient {
   private ws: WebSocket | null = null;
@@ -56,7 +178,20 @@ export class WebSocketClient {
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
 
-  /** Initialize WebSocket client */
+  /**
+   * Initialize WebSocket client with configuration.
+   * 
+   * Does not establish connection - call connect() to connect.
+   * Merges provided config with sensible defaults.
+   * 
+   * @param config - WebSocket configuration options
+   * @param config.url - WebSocket server URL (required)
+   * @param config.token - JWT authentication token (optional)
+   * @param config.autoReconnect - Enable auto-reconnect (default: true)
+   * @param config.reconnectInterval - Base reconnect delay in ms (default: 3000)
+   * @param config.maxReconnectAttempts - Max retry count (default: 5)
+   * @param config.heartbeatInterval - Ping interval in ms (default: 30000)
+   */
   constructor(config: WebSocketConfig) {
     this.config = {
       token: '',
@@ -68,7 +203,36 @@ export class WebSocketClient {
     };
   }
 
-  /** Establish WebSocket connection */
+  /**
+   * Establish WebSocket connection to server.
+   * 
+   * Connection Process:
+   * 1. Set state to 'connecting'
+   * 2. Append JWT token to URL query parameter
+   * 3. Create native WebSocket instance
+   * 4. Set up event handlers (open, message, close, error)
+   * 5. Wait for connection or timeout
+   * 6. Start heartbeat timer on successful connection
+   * 7. Reset reconnect attempt counter
+   * 
+   * Error Handling:
+   * - Connection timeout: Rejects promise
+   * - Authentication failure: Rejects with auth error
+   * - Network error: Rejects with connection error
+   * 
+   * @returns Promise that resolves when connected, rejects on error
+   * @throws {Error} If connection fails or times out
+   * 
+   * @example
+   * ```typescript
+   * try {
+   *   await client.connect();
+   *   console.log('Connected!');
+   * } catch (error) {
+   *   console.error('Failed to connect:', error);
+   * }
+   * ```
+   */
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
@@ -122,7 +286,28 @@ export class WebSocketClient {
     });
   }
 
-  /** Gracefully disconnect from WebSocket server */
+  /**
+   * Gracefully disconnect from WebSocket server.
+   * 
+   * Disconnection Process:
+   * 1. Disable auto-reconnect to prevent reconnection
+   * 2. Send close frame with code 1000 (normal closure)
+   * 3. Clear heartbeat timer
+   * 4. Clear reconnect timer if pending
+   * 5. Set connection state to 'disconnected'
+   * 
+   * Close Code:
+   * - 1000: Normal closure (no reconnection attempt)
+   * - Reason: 'Client disconnect'
+   * 
+   * Safe to call multiple times - idempotent operation.
+   * 
+   * @example
+   * ```typescript
+   * // On component unmount or logout
+   * client.disconnect();
+   * ```
+   */
   disconnect(): void {
     this.config.autoReconnect = false;
     
@@ -134,7 +319,30 @@ export class WebSocketClient {
     this.setConnectionState('disconnected');
   }
 
-  /** Send message to WebSocket server */
+  /**
+   * Send typed message to WebSocket server.
+   * 
+   * Validates connection state before sending.
+   * Serializes message to JSON format: { event, payload }
+   * 
+   * @param event - Event type identifier (e.g., 'add_chat', 'offer')
+   * @param payload - Event-specific payload data
+   * 
+   * @throws {Error} If WebSocket is not connected
+   * @throws {Error} If message serialization fails
+   * 
+   * @example
+   * ```typescript
+   * // Send custom event
+   * client.send('custom_event', { data: 'value' });
+   * 
+   * // Prefer helper methods for standard events
+   * client.sendChat('Hello!', clientInfo);
+   * ```
+   * 
+   * @see sendChat For chat messages
+   * @see sendWebRTCOffer For WebRTC signaling
+   */
   send(event: EventType, payload: AnyPayload): void {
     if (!this.isConnected()) {
       throw new Error('WebSocket not connected');
@@ -149,7 +357,34 @@ export class WebSocketClient {
     }
   }
 
-  /** Send chat message to room */
+  /**
+   * Send chat message to all room participants.
+   * 
+   * Automatically generates:
+   * - Unique chat ID (timestamp + random string)
+   * - Timestamp in milliseconds since epoch
+   * - Broadcasts to all participants via server
+   * 
+   * Server broadcasts message to all clients including sender.
+   * Clients receive via 'add_chat' event handler.
+   * 
+   * @param content - Chat message text content
+   * @param clientInfo - Sender's client information
+   * @param clientInfo.clientId - Unique client identifier
+   * @param clientInfo.displayName - Sender's display name
+   * 
+   * @throws {Error} If WebSocket is not connected
+   * 
+   * @example
+   * ```typescript
+   * const clientInfo = {
+   *   clientId: 'user_123',
+   *   displayName: 'John Doe'
+   * };
+   * 
+   * client.sendChat('Hello everyone!', clientInfo);
+   * ```
+   */
   sendChat(content: string, clientInfo: ClientInfo): void {
     const payload: AddChatPayload = {
       ...clientInfo,
@@ -171,19 +406,55 @@ export class WebSocketClient {
     this.send('delete_chat', payload);
   }
 
-  /** Request recent chat history */
+  /**
+   * Request chat message history from server.
+   * 
+   * Server responds with 'recents_chat' event containing
+   * array of recent messages (typically last 50-100).
+   * 
+   * Called automatically when:
+   * - Joining room as host (room_state event)
+   * - Accepted from waiting room (accept_waiting event)
+   * 
+   * @param clientInfo - Requester's client information
+   * 
+   * @example
+   * ```typescript
+   * // Subscribe to response
+   * client.on('recents_chat', (msg) => {
+   *   const { chats } = msg.payload;
+   *   console.log(`Loaded ${chats.length} messages`);
+   * });
+   * 
+   * // Request history
+   * client.requestChatHistory(clientInfo);
+   * ```
+   */
   requestChatHistory(clientInfo: ClientInfo): void {
     const payload: GetRecentChatsPayload = clientInfo;
     this.send('recents_chat', payload);
   }
 
-  /** Raise hand to request speaking */
+  /**
+   * Raise hand to request speaking permission.
+   * 
+   * Notifies host and other participants that user wants to speak.
+   * Visual indicator shown in participant list.
+   * 
+   * @param clientInfo - Participant raising hand
+   */
   raiseHand(clientInfo: ClientInfo): void {
     const payload: HandStatePayload = clientInfo;
     this.send('raise_hand', payload);
   }
 
-  /** Lower raised hand */
+  /**
+   * Lower previously raised hand.
+   * 
+   * Removes speaking request indicator from UI.
+   * 
+   * @param clientInfo - Participant lowering hand
+   */
   lowerHand(clientInfo: ClientInfo): void {
     const payload: HandStatePayload = clientInfo;
     this.send('lower_hand', payload);
@@ -271,7 +542,38 @@ export class WebSocketClient {
     this.send('renegotiate', payload);
   }
 
-  /** Subscribe to WebSocket message events */
+  /**
+   * Subscribe to WebSocket message events.
+   * 
+   * Multiple handlers can subscribe to the same event type.
+   * Handlers called in registration order when message received.
+   * 
+   * @param event - Event type to listen for
+   * @param handler - Callback function for messages
+   * 
+   * @example
+   * ```typescript
+   * // Chat messages
+   * client.on('add_chat', (msg) => {
+   *   const chat = msg.payload as AddChatPayload;
+   *   addMessageToUI(chat);
+   * });
+   * 
+   * // Room state updates
+   * client.on('room_state', (msg) => {
+   *   const state = msg.payload as RoomStatePayload;
+   *   updateParticipantList(state.participants);
+   * });
+   * 
+   * // WebRTC signaling
+   * client.on('offer', async (msg) => {
+   *   const offer = msg.payload as WebRTCOfferPayload;
+   *   await handleRemoteOffer(offer);
+   * });
+   * ```
+   * 
+   * @see off For unsubscribing
+   */
   on(event: EventType, handler: MessageHandler): void {
     if (!this.messageHandlers.has(event)) {
       this.messageHandlers.set(event, []);
@@ -279,7 +581,24 @@ export class WebSocketClient {
     this.messageHandlers.get(event)!.push(handler);
   }
 
-  /** Unsubscribe from WebSocket message events */
+  /**
+   * Unsubscribe from WebSocket message events.
+   * 
+   * Removes specific handler from event subscriptions.
+   * Must pass exact same function reference used in on().
+   * 
+   * @param event - Event type to unsubscribe from
+   * @param handler - Handler function to remove
+   * 
+   * @example
+   * ```typescript
+   * const chatHandler = (msg) => console.log(msg);
+   * client.on('add_chat', chatHandler);
+   * 
+   * // Later, remove subscription
+   * client.off('add_chat', chatHandler);
+   * ```
+   */
   off(event: EventType, handler: MessageHandler): void {
     const handlers = this.messageHandlers.get(event);
     if (handlers) {
@@ -300,12 +619,31 @@ export class WebSocketClient {
     this.errorHandlers.push(handler);
   }
 
-  /** Get current connection state */
+  /**
+   * Get current connection state.
+   * 
+   * @returns Current state (connecting, connected, disconnected, error, reconnecting)
+   * 
+   * @see ConnectionState For state descriptions
+   */
   getConnectionState(): ConnectionState {
     return this.connectionState;
   }
 
-  /** Check if WebSocket is connected */
+  /**
+   * Check if WebSocket is currently connected.
+   * 
+   * @returns true if connection is open and ready for messages
+   * 
+   * @example
+   * ```typescript
+   * if (client.isConnected()) {
+   *   client.sendChat('Hello!', clientInfo);
+   * } else {
+   *   console.log('Cannot send - not connected');
+   * }
+   * ```
+   */
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
@@ -408,7 +746,38 @@ export class WebSocketClient {
   }
 }
 
-/** Factory function to create WebSocket clients */
+/**
+ * Factory function to create WebSocket client for a room.
+ * 
+ * Convenience method that constructs proper WebSocket URL
+ * and applies standard configuration defaults.
+ * 
+ * URL Construction:
+ * - baseUrl: ws://localhost:8080 (development) or wss://api.example.com (production)
+ * - path: /hub/{roomId}
+ * - query: ?token={jwtToken}
+ * 
+ * @param roomId - Unique room identifier
+ * @param token - JWT authentication token
+ * @param baseUrl - WebSocket server base URL (default: ws://localhost:8080)
+ * 
+ * @returns Configured WebSocketClient instance
+ * 
+ * @example
+ * ```typescript
+ * // Development
+ * const client = createWebSocketClient('room-123', session.accessToken);
+ * 
+ * // Production
+ * const client = createWebSocketClient(
+ *   'room-123',
+ *   session.accessToken,
+ *   'wss://api.example.com'
+ * );
+ * 
+ * await client.connect();
+ * ```
+ */
 export const createWebSocketClient = (
   roomId: string,
   token: string,

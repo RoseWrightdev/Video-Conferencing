@@ -12,11 +12,70 @@ import type {
   ClientInfo,
 } from '../../shared/types/events';
 
+/**
+ * RoomService manages the lifecycle of a video conferencing room.
+ * 
+ * Responsibilities:
+ * - Initializes and maintains WebSocket connections to the signaling server
+ * - Manages WebRTC peer connections for audio/video streaming
+ * - Handles room state synchronization and event routing
+ * - Coordinates chat messages and participant actions
+ * 
+ * Architecture:
+ * - Singleton pattern via exported instance
+ * - Event-driven communication through WebSocket message handlers
+ * - State management delegated to Zustand store
+ * - Separation of concerns: WebSocket for signaling, WebRTC for media
+ * 
+ * @example
+ * ```typescript
+ * // Initialize room connection
+ * await roomService.initializeRoom('room-123', 'John Doe', 'jwt-token');
+ * 
+ * // Join as participant
+ * await roomService.joinRoom();
+ * 
+ * // Clean up on exit
+ * roomService.leaveRoom();
+ * ```
+ */
 export class RoomService {
   private wsClient: WebSocketClient | null = null;
   private webrtcManager: WebRTCManager | null = null;
   private clientInfo: ClientInfo | null = null;
 
+  /**
+   * Initializes the room connection and establishes WebSocket/WebRTC infrastructure.
+   * 
+   * This method:
+   * 1. Disconnects any existing WebSocket connection
+   * 2. Generates a unique client ID for this session
+   * 3. Creates WebSocket client with auto-reconnect
+   * 4. Establishes connection to signaling server
+   * 5. Initializes WebRTC manager for peer connections
+   * 6. Updates global store with connection state
+   * 7. Refreshes available media devices
+   * 
+   * @param roomId - Unique identifier for the room to join
+   * @param username - Display name for this participant
+   * @param token - JWT authentication token for authorization
+   * 
+   * @throws {Error} If WebSocket connection fails
+   * @throws {Error} If device enumeration fails
+   * 
+   * @example
+   * ```typescript
+   * try {
+   *   await roomService.initializeRoom(
+   *     'room-abc123',
+   *     'Alice',
+   *     session.accessToken
+   *   );
+   * } catch (error) {
+   *   console.error('Failed to initialize room:', error);
+   * }
+   * ```
+   */
   public async initializeRoom(roomId: string, username: string, token: string) {
     if (this.wsClient) {
       this.wsClient.disconnect();
@@ -61,6 +120,24 @@ export class RoomService {
     }
   }
 
+  /**
+   * Requests to join the room as a participant.
+   * 
+   * For rooms with waiting room enabled, this sends a request to the host
+   * for approval. The host will receive a waiting room event and can
+   * accept or deny the request.
+   * 
+   * @throws {Error} If connection is not initialized
+   * @throws {Error} If WebSocket send fails
+   * 
+   * @see setupEventHandlers For accept_waiting and deny_waiting event handling
+   * 
+   * @example
+   * ```typescript
+   * await roomService.joinRoom();
+   * // Wait for 'accept_waiting' or 'deny_waiting' event
+   * ```
+   */
   public async joinRoom() {
     if (!this.wsClient || !this.clientInfo) {
       useRoomStore.getState().handleError('Connection not ready. Please try again.');
@@ -75,6 +152,24 @@ export class RoomService {
     }
   }
 
+  /**
+   * Gracefully disconnects from the room and cleans up all resources.
+   * 
+   * Cleanup process:
+   * 1. Stops all local media tracks (camera, microphone)
+   * 2. Stops screen sharing if active
+   * 3. Closes all WebRTC peer connections
+   * 4. Disconnects WebSocket connection
+   * 5. Resets store to initial state
+   * 
+   * Safe to call multiple times - will not throw if already disconnected.
+   * 
+   * @example
+   * ```typescript
+   * // On component unmount or user logout
+   * roomService.leaveRoom();
+   * ```
+   */
   public leaveRoom() {
     const { localStream, screenShareStream } = useRoomStore.getState();
 
@@ -117,6 +212,24 @@ export class RoomService {
     });
   }
 
+  /**
+   * Registers WebSocket event handlers for room-level events.
+   * 
+   * Event handlers:
+   * - add_chat: Receives new chat messages from other participants
+   * - recents_chat: Loads chat history when joining room
+   * - room_state: Synchronizes participant list and room metadata
+   * - accept_waiting: Notification of approval to join room
+   * - deny_waiting: Notification of denied room access
+   * - raise_hand: Participant requests to speak
+   * - lower_hand: Participant cancels speak request
+   * 
+   * All handlers update the Zustand store to trigger React re-renders.
+   * Error handling delegates to store's handleError method.
+   * 
+   * @private
+   * @see WebSocketClient.on For event subscription API
+   */
   private setupEventHandlers() {
     if (!this.wsClient) return;
 

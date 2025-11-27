@@ -3,12 +3,45 @@ import { useRoomStore } from '@/store/useRoomStore';
 import { roomService } from '@/services/roomService';
 
 /**
- * Room management hook for video conferencing
+ * Room management hook for video conferencing sessions.
+ * 
+ * Provides high-level room operations including:
+ * - Automatic room initialization and connection
+ * - Authentication-aware joining (waits for Auth0 session)
+ * - Connection state monitoring and reconnection handling
+ * - Room lifecycle management (join/leave)
+ * - Settings configuration
+ * 
+ * Architecture:
+ * - Delegates actual WebSocket/WebRTC logic to RoomService
+ * - Uses refs to prevent duplicate initialization attempts
+ * - Auto-join triggers when authentication completes
+ * - Cleanup on unmount via exitRoom
+ * 
+ * @param params - Configuration for room connection
+ * @param params.roomId - Room identifier to join
+ * @param params.username - Display name for this participant
+ * @param params.token - JWT authentication token
+ * @param params.autoJoin - Whether to automatically join when ready (default: false)
+ * 
+ * @returns Room state and control methods
  * 
  * @example
  * ```tsx
- * const { isRoomReady } = useRoom();
- * // Auto-joins room when authentication is ready
+ * // Manual join
+ * const { joinRoomWithAuth, isRoomReady } = useRoom();
+ * 
+ * // Auto-join when authenticated
+ * const { isRoomReady } = useRoom({
+ *   roomId: 'room-123',
+ *   username: session.user.name,
+ *   token: session.accessToken,
+ *   autoJoin: status === 'authenticated'
+ * });
+ * 
+ * if (isRoomReady) {
+ *   return <RoomInterface />;
+ * }
  * ```
  */
 export const useRoom = (params?: {
