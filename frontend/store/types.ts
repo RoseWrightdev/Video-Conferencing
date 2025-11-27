@@ -1,5 +1,6 @@
 
-import type { WebSocketClient, ClientInfo } from '@/lib/websockets';
+import type { WebSocketClient } from '@/lib/websockets';
+import type { ClientInfo } from '../../shared/types/events';
 import type { WebRTCManager } from '@/lib/webrtc';
 
 // ===================
