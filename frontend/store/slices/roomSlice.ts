@@ -137,7 +137,6 @@ export const createRoomSlice: StateCreator<
     });
 
     wsClient.onError((error) => {
-      console.error('WebSocket error:', error);
       get().handleError(`Connection error: ${error.message}`);
     });
 
@@ -156,9 +155,9 @@ export const createRoomSlice: StateCreator<
 
       await get().refreshDevices();
     } catch (error) {
-      console.error('Failed to initialize room:', error);
-      get().handleError(`Failed to initialize room: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
+      const errorMessage = `Failed to initialize room: ${error instanceof Error ? error.message : String(error)}`;
+      get().handleError(errorMessage);
+      throw new Error(errorMessage);
     }
   },
 

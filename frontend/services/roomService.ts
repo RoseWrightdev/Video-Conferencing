@@ -46,12 +46,12 @@ export class RoomService {
         currentUserId: this.clientInfo.clientId,
         currentUsername: username,
         clientInfo: this.clientInfo,
+        wsClient: this.wsClient,
       });
 
       // Assuming refreshDevices is a method in the store
       await useRoomStore.getState().refreshDevices();
     } catch (error) {
-      console.error('Failed to initialize room:', error);
       useRoomStore.getState().handleError(
         `Failed to initialize room: ${
           error instanceof Error ? error.message : String(error)
@@ -91,6 +91,9 @@ export class RoomService {
       isHost: false,
       currentUserId: null,
       currentUsername: null,
+      clientInfo: null,
+      wsClient: null,
+      webrtcManager: null,
       participants: new Map(),
       localParticipant: null,
       speakingParticipants: new Set(),
@@ -128,6 +131,19 @@ export class RoomService {
         type: 'text',
       };
       useRoomStore.getState().addMessage(chatMessage);
+    });
+
+    this.wsClient.on('recents_chat', (message) => {
+      const payload = message.payload as unknown as { chats: AddChatPayload[] };
+      const chatMessages: ChatMessage[] = (payload.chats || []).map((chat) => ({
+        id: chat.chatId,
+        participantId: chat.clientId,
+        username: chat.displayName,
+        content: chat.chatContent,
+        timestamp: new Date(chat.timestamp),
+        type: 'text' as const,
+      }));
+      useRoomStore.setState({ messages: chatMessages });
     });
 
     this.wsClient.on('room_state', (message) => {
@@ -172,17 +188,28 @@ export class RoomService {
           lastActivity: new Date(),
         })) || [];
 
+      const isHost = payload.hosts?.some((h) => h.clientId === this.clientInfo?.clientId) || false;
+
       useRoomStore.setState({
         participants: newParticipants,
         pendingParticipants: waitingParticipants,
-        isHost:
-          payload.hosts?.some((h) => h.clientId === this.clientInfo?.clientId) ||
-          false,
+        isHost,
+        isJoined: true,
       });
+
+      // Request chat history when room state is received (for hosts or approved participants)
+      if (this.wsClient && this.clientInfo) {
+        this.wsClient.requestChatHistory(this.clientInfo);
+      }
     });
 
     this.wsClient.on('accept_waiting', () => {
       useRoomStore.setState({ isWaitingRoom: false, isJoined: true });
+      
+      // Request chat history when accepted into room
+      if (this.wsClient && this.clientInfo) {
+        this.wsClient.requestChatHistory(this.clientInfo);
+      }
     });
 
     this.wsClient.on('deny_waiting', () => {
@@ -215,7 +242,6 @@ export class RoomService {
     });
 
     this.wsClient.onError((error) => {
-      console.error('WebSocket error:', error);
       useRoomStore.getState().handleError(`Connection error: ${error.message}`);
     });
   }

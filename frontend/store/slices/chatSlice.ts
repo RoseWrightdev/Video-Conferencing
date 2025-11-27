@@ -16,11 +16,15 @@ export const createChatSlice: StateCreator<
     const clientInfo = get().clientInfo;
 
     if (!wsClient || !clientInfo) {
-      console.warn('Cannot send message: WebSocket client or user info not available.');
+      get().handleError('Cannot send message: Not connected to room');
       return;
     }
     
-    wsClient.sendChat(content, clientInfo);
+    try {
+      wsClient.sendChat(content, clientInfo);
+    } catch (error) {
+      get().handleError(`Failed to send message: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     if (type === 'private') {
       // maybe some special handling for private messages

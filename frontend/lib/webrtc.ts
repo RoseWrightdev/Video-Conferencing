@@ -93,8 +93,7 @@ export class PeerConnection {
 
       this.localStreams.set(streamType, stream);
     } catch (error) {
-      console.error(`Failed to add local ${streamType} stream:`, error);
-      throw error;
+      throw new Error(`Failed to add local ${streamType} stream: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -114,8 +113,7 @@ export class PeerConnection {
 
       this.localStreams.delete(streamType);
     } catch (error) {
-      console.error(`Failed to remove local ${streamType} stream:`, error);
-      throw error;
+      throw new Error(`Failed to remove local ${streamType} stream: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -130,8 +128,7 @@ export class PeerConnection {
       this.websocketClient.sendWebRTCOffer(offer, this.peerId, this.localClientInfo);      
       return offer;
     } catch (error) {
-      console.error('Failed to create offer:', error);
-      throw error;
+      throw new Error(`Failed to create offer for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -145,8 +142,7 @@ export class PeerConnection {
       this.websocketClient.sendWebRTCAnswer(answer, this.peerId, this.localClientInfo);
       return answer;
     } catch (error) {
-      console.error('Failed to handle offer:', error);
-      throw error;
+      throw new Error(`Failed to handle offer from peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -154,8 +150,7 @@ export class PeerConnection {
     try {
       await this.pc.setRemoteDescription(answer);
     } catch (error) {
-      console.error('Failed to handle answer:', error);
-      throw error;
+      throw new Error(`Failed to handle answer from peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -169,8 +164,7 @@ export class PeerConnection {
       
       await this.pc.addIceCandidate(candidate);
     } catch (error) {
-      console.error('Failed to add ICE candidate:', error);
-      throw error;
+      throw new Error(`Failed to add ICE candidate for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -178,20 +172,19 @@ export class PeerConnection {
     try {
       this.websocketClient.requestRenegotiation(this.peerId, reason, this.localClientInfo);
     } catch (error) {
-      console.error('Failed to request renegotiation:', error);
-      throw error;
+      throw new Error(`Failed to request renegotiation with peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   sendData(data: unknown): void {
-    if (this.dataChannel && this.dataChannel.readyState === 'open') {
-      try {
-        this.dataChannel.send(JSON.stringify(data));
-      } catch (error) {
-        console.error('Failed to send data:', error);
-      }
-    } else {
-      console.warn('Data channel not available or not open');
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+      throw new Error(`Data channel not available or not open for peer ${this.peerId}`);
+    }
+    
+    try {
+      this.dataChannel.send(JSON.stringify(data));
+    } catch (error) {
+      throw new Error(`Failed to send data to peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -224,10 +217,8 @@ export class PeerConnection {
       }
 
       this.pc.close();
-      
-      console.log(`Closed peer connection with ${this.peerId}`);
     } catch (error) {
-      console.error('Error closing peer connection:', error);
+      throw new Error(`Error closing peer connection with ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -264,7 +255,7 @@ export class PeerConnection {
           try {
             handler(event.candidate!, this.peerId);
           } catch (error) {
-            console.error('Error in ICE candidate handler:', error);
+            throw new Error(`Error in ICE candidate handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
           }
         });
       }
@@ -289,11 +280,9 @@ export class PeerConnection {
           try {
             handler(stream, this.peerId, streamType);
           } catch (error) {
-            console.error('Error in stream added handler:', error);
+            throw new Error(`Error in stream added handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
           }
         });
-
-        console.log(`Received remote ${streamType} stream from peer ${this.peerId}`);
       }
     };
 
@@ -304,15 +293,15 @@ export class PeerConnection {
         try {
           handler(state, this.peerId);
         } catch (error) {
-          console.error('Error in connection state handler:', error);
+          throw new Error(`Error in connection state handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
         }
       });
-
-      console.log(`Peer ${this.peerId} connection state: ${state}`);
     };
 
     this.pc.oniceconnectionstatechange = () => {
-      console.log(`Peer ${this.peerId} ICE connection state: ${this.pc.iceConnectionState}`);
+      if (this.pc.iceConnectionState === 'failed') {
+        throw new Error(`ICE connection failed for peer ${this.peerId}`);
+      }
     };
 
     this.pc.onnegotiationneeded = () => {
@@ -320,11 +309,9 @@ export class PeerConnection {
         try {
           handler(this.peerId);
         } catch (error) {
-          console.error('Error in negotiation needed handler:', error);
+          throw new Error(`Error in negotiation needed handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
         }
       });
-
-      console.log(`Negotiation needed for peer ${this.peerId}`);
     };
 
     this.pc.ondatachannel = (event) => {
@@ -342,17 +329,17 @@ export class PeerConnection {
       
       this.setupDataChannelEvents(this.dataChannel);
     } catch (error) {
-      console.error('Failed to create data channel:', error);
+      throw new Error(`Failed to create data channel for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   private setupDataChannelEvents(channel: RTCDataChannel): void {
     channel.onopen = () => {
-      console.log(`Data channel opened with peer ${this.peerId}`);
+      // Data channel ready for use
     };
 
     channel.onclose = () => {
-      console.log(`Data channel closed with peer ${this.peerId}`);
+      // Data channel closed
     };
 
     channel.onmessage = (event) => {
@@ -362,16 +349,16 @@ export class PeerConnection {
           try {
             handler(data, this.peerId);
           } catch (error) {
-            console.error('Error in data channel message handler:', error);
+            throw new Error(`Error in data channel message handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
           }
         });
       } catch (error) {
-        console.error('Failed to parse data channel message:', error);
+        throw new Error(`Failed to parse data channel message from peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
 
     channel.onerror = (error) => {
-      console.error(`Data channel error with peer ${this.peerId}:`, error);
+      throw new Error(`Data channel error with peer ${this.peerId}: ${String(error)}`);
     };
   }
 }
@@ -418,11 +405,9 @@ export class WebRTCManager {
         await peer.addLocalStream(stream, 'camera');
       }
 
-      console.log('Local media stream initialized');
       return stream;
     } catch (error) {
-      console.error('Failed to initialize local media:', error);
-      throw error;
+      throw new Error(`Failed to initialize local media: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -444,11 +429,9 @@ export class WebRTCManager {
         this.stopScreenShare();
       };
 
-      console.log('Screen sharing started');
       return stream;
     } catch (error) {
-      console.error('Failed to start screen sharing:', error);
-      throw error;
+      throw new Error(`Failed to start screen sharing: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -463,11 +446,8 @@ export class WebRTCManager {
 
       this.localScreenStream.getTracks().forEach(track => track.stop());
       this.localScreenStream = null;
-
-      console.log('Screen sharing stopped');
     } catch (error) {
-      console.error('Failed to stop screen sharing:', error);
-      throw error;
+      throw new Error(`Failed to stop screen sharing: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -508,7 +488,6 @@ export class WebRTCManager {
       await peer.createOffer();
     }
 
-    console.log(`Added peer ${peerId}`);
     return peer;
   }
 
@@ -517,7 +496,6 @@ export class WebRTCManager {
     if (peer) {
       peer.close();
       this.peers.delete(peerId);
-      console.log(`Removed peer ${peerId}`);
     }
   }
 
@@ -565,8 +543,6 @@ export class WebRTCManager {
       this.localScreenStream.getTracks().forEach(track => track.stop());
       this.localScreenStream = null;
     }
-
-    console.log('WebRTC manager cleaned up');
   }
 
   onStreamAdded(handler: StreamEventHandler): void {
@@ -620,7 +596,6 @@ export class WebRTCManager {
         const peer = this.getPeer(payload.clientId);
         if (peer) {
           await peer.createOffer();
-          console.log(`Renegotiation requested by ${payload.clientId}: ${payload.reason}`);
         }
       }
     });
@@ -632,8 +607,7 @@ export const MediaDeviceUtils = {
     try {
       return await navigator.mediaDevices.enumerateDevices();
     } catch (error) {
-      console.error('Failed to enumerate devices:', error);
-      return [];
+      throw new Error(`Failed to enumerate devices: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
@@ -661,8 +635,7 @@ export const MediaDeviceUtils = {
       stream.getTracks().forEach(track => track.stop());
       return true;
     } catch (error) {
-      console.error('Failed to request media permissions:', error);
-      return false;
+      throw new Error(`Failed to request media permissions: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 

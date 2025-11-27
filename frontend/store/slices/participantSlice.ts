@@ -47,7 +47,7 @@ export const createParticipantSlice: StateCreator<
       if (existing) {
         newParticipants.set(participantId, { ...existing, ...updates });
       } else {
-        console.warn('Attempted to update non-existent participant:', participantId);
+        throw new Error(`Attempted to update non-existent participant: ${participantId}`);
       }
       
       return { participants: newParticipants };

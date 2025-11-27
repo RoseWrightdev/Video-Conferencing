@@ -25,8 +25,9 @@ export const createDeviceSlice: StateCreator<
         availableDevices: { cameras, microphones, speakers }
       });
     } catch (error) {
-      console.error('Failed to refresh devices:', error);
-      get().handleError(`Failed to refresh devices: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = `Failed to refresh devices: ${error instanceof Error ? error.message : String(error)}`;
+      get().handleError(errorMessage);
+      throw new Error(errorMessage);
     }
   },
 

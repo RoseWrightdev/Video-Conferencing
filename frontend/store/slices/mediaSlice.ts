@@ -24,8 +24,9 @@ export const createMediaSlice: StateCreator<
       });
       set({ isAudioEnabled: !isAudioEnabled });
     } else {
-      console.warn('No local stream available for audio toggle');
-      get().handleError('Microphone not available. Please check permissions.');
+      const error = 'Microphone not available. Please check permissions.';
+      get().handleError(error);
+      throw new Error(error);
     }
   },
 
@@ -38,8 +39,9 @@ export const createMediaSlice: StateCreator<
       });
       set({ isVideoEnabled: !isVideoEnabled });
     } else {
-      console.warn('No local stream available for video toggle');
-      get().handleError('Camera not available. Please check permissions.');
+      const error = 'Camera not available. Please check permissions.';
+      get().handleError(error);
+      throw new Error(error);
     }
   },
 
@@ -54,9 +56,9 @@ export const createMediaSlice: StateCreator<
         });
       }
     } catch (error) {
-      console.error('Failed to start screen share:', error);
-      get().handleError(`Failed to start screen share: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
+      const errorMessage = `Failed to start screen share: ${error instanceof Error ? error.message : String(error)}`;
+      get().handleError(errorMessage);
+      throw new Error(errorMessage);
     }
   },
 

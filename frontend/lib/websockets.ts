@@ -83,7 +83,6 @@ export class WebSocketClient {
         this.ws = new WebSocket(wsUrl.toString());
         
         this.ws.onopen = () => {
-          console.log('WebSocket connected');
           this.setConnectionState('connected');
           this.reconnectAttempts = 0;
           this.startHeartbeat();
@@ -95,12 +94,13 @@ export class WebSocketClient {
         };
 
         this.ws.onclose = (event) => {
-          console.log('WebSocket closed:', event.code, event.reason);
           this.cleanup();
           
-          if (event.code === 1000) {
+          // Normal closure (1000) or client-initiated disconnect - don't reconnect
+          if (event.code === 1000 || !this.config.autoReconnect) {
             this.setConnectionState('disconnected');
-          } else if (this.config.autoReconnect && this.reconnectAttempts < this.config.maxReconnectAttempts) {
+          } else if (this.reconnectAttempts < this.config.maxReconnectAttempts) {
+            // Only reconnect on abnormal closures if autoReconnect is enabled
             this.setConnectionState('reconnecting');
             this.scheduleReconnect();
           } else {
@@ -108,16 +108,16 @@ export class WebSocketClient {
           }
         };
 
-        this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          this.notifyErrorHandlers(new Error('WebSocket connection error'));
+        this.ws.onerror = () => {
+          const error = new Error('WebSocket connection error');
+          this.notifyErrorHandlers(error);
           reject(new Error('Failed to connect to WebSocket server'));
         };
 
       } catch (error) {
-        console.error('Failed to create WebSocket connection:', error);
         this.setConnectionState('error');
-        reject(error);
+        const err = new Error(`Failed to create WebSocket connection: ${error instanceof Error ? error.message : String(error)}`);
+        reject(err);
       }
     });
   }
@@ -145,8 +145,7 @@ export class WebSocketClient {
     try {
       this.ws!.send(JSON.stringify(message));
     } catch (error) {
-      console.error('Failed to send message:', error);
-      throw new Error('Failed to send WebSocket message');
+      throw new Error(`Failed to send WebSocket message: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -324,13 +323,16 @@ export class WebSocketClient {
           try {
             handler(message);
           } catch (error) {
-            console.error(`Error in message handler for ${message.event}:`, error);
+            const err = new Error(`Error in message handler for ${message.event}: ${error instanceof Error ? error.message : String(error)}`);
+            this.notifyErrorHandlers(err);
+            throw err;
           }
         });
       }
     } catch (error) {
-      console.error('Failed to parse WebSocket message:', error);
-      this.notifyErrorHandlers(new Error('Invalid message format'));
+      const err = new Error(`Failed to parse WebSocket message: ${error instanceof Error ? error.message : String(error)}`);
+      this.notifyErrorHandlers(err);
+      throw err;
     }
   }
 
@@ -341,7 +343,7 @@ export class WebSocketClient {
         try {
           handler(state);
         } catch (error) {
-          console.error('Error in connection handler:', error);
+          throw new Error(`Error in connection handler: ${error instanceof Error ? error.message : String(error)}`);
         }
       });
     }
@@ -352,7 +354,7 @@ export class WebSocketClient {
       try {
         handler(error);
       } catch (handlerError) {
-        console.error('Error in error handler:', handlerError);
+        throw new Error(`Error in error handler: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`);
       }
     });
   }
@@ -368,7 +370,7 @@ export class WebSocketClient {
         try {
           this.ws!.send(JSON.stringify({ event: 'ping', payload: {} }));
         } catch (error) {
-          console.error('Failed to send heartbeat:', error);
+          throw new Error(`Failed to send heartbeat: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     }, this.config.heartbeatInterval);
@@ -385,7 +387,8 @@ export class WebSocketClient {
       try {
         await this.connect();
       } catch (error) {
-        console.error('Reconnection failed:', error);
+        const err = new Error(`Reconnection attempt ${this.reconnectAttempts} failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.notifyErrorHandlers(err);
       }
     }, delay);
   }

@@ -79,7 +79,7 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
           };
         }
       } else if (audio) {
-        console.warn('Audio requested but no microphones available');
+        throw new Error('Audio requested but no microphones available. Please connect a microphone.');
       }
 
       if (video && availableDevices.cameras.length > 0) {
@@ -91,7 +91,7 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
           };
         }
       } else if (video) {
-        console.warn('Video requested but no cameras available');
+        throw new Error('Video requested but no cameras available. Please connect a camera.');
       }
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -107,7 +107,6 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
       return stream;
 
     } catch (error) {
-      console.error('Failed to initialize media stream:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to initialize media stream';
       
       setState(prev => ({
@@ -147,7 +146,7 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
   const restartStream = useCallback(async (newOptions?: MediaStreamOptions) => {
     cleanup();
     if (newOptions) {
-      console.warn('New options provided to restartStream, but dynamic constraint updates not fully implemented');
+      throw new Error('Dynamic constraint updates not fully implemented. Please use fixed options.');
     }
     return initializeStream();
   }, [cleanup, initializeStream]);
