@@ -6,7 +6,7 @@ export const createConnectionSlice: StateCreator<
   [],
   [],
   ConnectionSlice
-> = (set, get) => ({
+> = (set) => ({
   connectionState: {
     wsConnected: false,
     wsReconnecting: false,
