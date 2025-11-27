@@ -5,6 +5,7 @@ import { X as XIcon } from "lucide-react";
 import ChatMessage from "@/components/chat-panel/components/ChatMessage";
 import ChatInput from "@/components/chat-panel/components/ChatInput";
 import { ChatDependencies } from "@/components/chat-panel/types/ChatDependencies";
+import { Small } from "@/components/ui/typography";
 
 interface ChatPanelProps {
   dependencies: ChatDependencies;
@@ -17,36 +18,23 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
   const isHost = participantService.getParticipant(currentUserId || "")?.role === "host";
 
   return (
-    <div
-      style={{
-        minWidth: '480px',
-        maxWidth: '720px',
-        flexShrink: 0,
-        display: 'block',
-        overflow: 'hidden'
-      }}
-    >
-      <Card.Card
-        style={{
-          width: '100%',
-          height: '100%'
-        }}
-      >
+    <div className="min-w-[480px] max-w-[720px] shrink-0 block overflow-hidden">
+      <Card.Card className="w-full h-full">
         <Card.CardHeader>
           <Card.CardAction>
             <Button
               variant="ghost"
               size="icon"
               onClick={chatService.closeChat}
-              className="h-8 w-8 rounded-4xl"
+              className="rounded-4xl"
             >
-              <XIcon />
+              <XIcon className="h-12 w-12" />
             </Button>
           </Card.CardAction>
         </Card.CardHeader>
         <Card.CardContent className="overflow-hidden">
           {messages.length === 0 ? (
-            <div className="text-center text-gray-500 py-8 select-none">No messages yet</div>
+            <div className="text-center text-gray-500 py-8 select-none"><Small>No messages yet</Small></div>
           ) : (
             <div className="w-full overflow-hidden">
               {messages.map((msg) => (
