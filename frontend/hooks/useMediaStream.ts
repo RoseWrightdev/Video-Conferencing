@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRoomStore } from '@/hooks/useRoomStore';
+import { useRoomStore } from '@/store/useRoomStore';
 
 /**
  * Media stream management hook for video conferencing
@@ -48,7 +48,6 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
     isScreenSharing,
     availableDevices,
     selectedDevices,
-    webrtcManager,
     toggleAudio,
     toggleVideo,
     startScreenShare,
@@ -129,7 +128,6 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
     availableDevices.cameras.length,
     selectedDevices.microphone,
     selectedDevices.camera,
-    webrtcManager,
     refreshDevices,
     handleError,
   ]);

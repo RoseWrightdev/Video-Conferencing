@@ -89,6 +89,7 @@ const (
 	// Connection lifecycle events
 	EventConnect    Event = "connect"    // Client establishes connection to room
 	EventDisconnect Event = "disconnect" // Client leaves the room
+	EventPing       Event = "ping"       // Heartbeat to keep connection alive
 
 	// Screen sharing events
 	EventRequestScreenshare Event = "request_screenshare" // Request permission to share screen
@@ -150,7 +151,7 @@ type RoomStatePayload struct {
 type ChatInfo struct {
 	ClientInfo              // Who sent the message
 	ChatId      ChatId      `json:"chatId"`      // Unique identifier for this message
-	Timestamp   Timestamp   `json:"chatIndex"`   // When the message was sent
+	Timestamp   Timestamp   `json:"timestamp"`   // When the message was sent
 	ChatContent ChatContent `json:"chatContent"` // The actual message content
 }
 

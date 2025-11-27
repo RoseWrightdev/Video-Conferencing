@@ -9,7 +9,14 @@
  * ```
  */
 
-import { WebSocketClient, ClientInfo, WebRTCOfferPayload, WebRTCAnswerPayload, WebRTCCandidatePayload, WebRTCRenegotiatePayload } from './websockets';
+import { WebSocketClient } from './websockets';
+import type { 
+    ClientInfo,
+    WebRTCOfferPayload,
+    WebRTCAnswerPayload,
+    WebRTCCandidatePayload,
+    WebRTCRenegotiatePayload
+} from '../../shared/types/events';
 
 export interface WebRTCConfig {
   iceServers: RTCIceServer[];
@@ -38,7 +45,7 @@ export type StreamEventHandler = (stream: MediaStream, peerId: string, streamTyp
 export type ConnectionStateHandler = (state: PeerConnectionState, peerId: string) => void;
 export type ICECandidateHandler = (candidate: RTCIceCandidate, peerId: string) => void;
 export type NegotiationNeededHandler = (peerId: string) => void;
-export type DataChannelMessageHandler = (message: any, peerId: string) => void;
+export type DataChannelMessageHandler = (message: unknown, peerId: string) => void;
 
 export class PeerConnection {
   private pc: RTCPeerConnection;
@@ -85,7 +92,6 @@ export class PeerConnection {
       });
 
       this.localStreams.set(streamType, stream);
-      console.log(`Added local ${streamType} stream to peer ${this.peerId}`);
     } catch (error) {
       console.error(`Failed to add local ${streamType} stream:`, error);
       throw error;
@@ -107,7 +113,6 @@ export class PeerConnection {
       });
 
       this.localStreams.delete(streamType);
-      console.log(`Removed local ${streamType} stream from peer ${this.peerId}`);
     } catch (error) {
       console.error(`Failed to remove local ${streamType} stream:`, error);
       throw error;
@@ -122,9 +127,7 @@ export class PeerConnection {
       });
       
       await this.pc.setLocalDescription(offer);
-      this.websocketClient.sendWebRTCOffer(offer, this.peerId, this.localClientInfo);
-      
-      console.log(`Created and sent offer to peer ${this.peerId}`);
+      this.websocketClient.sendWebRTCOffer(offer, this.peerId, this.localClientInfo);      
       return offer;
     } catch (error) {
       console.error('Failed to create offer:', error);
@@ -140,8 +143,6 @@ export class PeerConnection {
       await this.pc.setLocalDescription(answer);
       
       this.websocketClient.sendWebRTCAnswer(answer, this.peerId, this.localClientInfo);
-      
-      console.log(`Created and sent answer to peer ${this.peerId}`);
       return answer;
     } catch (error) {
       console.error('Failed to handle offer:', error);
@@ -152,7 +153,6 @@ export class PeerConnection {
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
     try {
       await this.pc.setRemoteDescription(answer);
-      console.log(`Set remote description from peer ${this.peerId}`);
     } catch (error) {
       console.error('Failed to handle answer:', error);
       throw error;
@@ -168,7 +168,6 @@ export class PeerConnection {
       });
       
       await this.pc.addIceCandidate(candidate);
-      console.log(`Added ICE candidate from peer ${this.peerId}`);
     } catch (error) {
       console.error('Failed to add ICE candidate:', error);
       throw error;
@@ -178,14 +177,13 @@ export class PeerConnection {
   async requestRenegotiation(reason: string): Promise<void> {
     try {
       this.websocketClient.requestRenegotiation(this.peerId, reason, this.localClientInfo);
-      console.log(`Requested renegotiation with peer ${this.peerId}: ${reason}`);
     } catch (error) {
       console.error('Failed to request renegotiation:', error);
       throw error;
     }
   }
 
-  sendData(data: any): void {
+  sendData(data: unknown): void {
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
       try {
         this.dataChannel.send(JSON.stringify(data));

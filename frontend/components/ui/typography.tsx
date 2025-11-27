@@ -6,7 +6,7 @@ type TypoProps = {
   children?: ReactNode;
   className?: string;
   style?: CSSProperties;
-  [key: string]: any; // Accept any other props
+  [key: string]: unknown; // Accept any other props
 };
 
 export function H1({ children, className, style, ...rest }: TypoProps) {
