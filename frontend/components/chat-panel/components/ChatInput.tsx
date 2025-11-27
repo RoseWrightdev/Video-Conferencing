@@ -1,7 +1,5 @@
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Send } from "lucide-react";
 import { ChatDependencies } from "../types/ChatDependencies";
 
 export interface ChatInputProps {
@@ -42,16 +40,6 @@ export default function ChatInput({
           disabled={disabled}
           className="font-extralight"
         />
-        <Button
-          onClick={handleSendMessage}
-          disabled={disabled || !message.trim()}
-          size="icon"
-          variant="ghost"
-          className="absolute right-1 top-1/2 -translate-y-1/2"
-          tabIndex={-1}
-        >
-          <Send className="h-4 w-4" />
-        </Button>
       </div>
     </div>
   );
