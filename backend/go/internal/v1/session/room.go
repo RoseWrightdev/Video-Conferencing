@@ -279,6 +279,9 @@ func (r *Room) router(client *Client, data any) {
 			r.handleWebRTCRenegotiate(client, msg.Event, msg.Payload)
 		}
 
+	case EventPing:
+		// Heartbeat ping - silently ignore
+
 	default:
 		slog.Warn("Received unknown message event", "event", msg.Event)
 	}

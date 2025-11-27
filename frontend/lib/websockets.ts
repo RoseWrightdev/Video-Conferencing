@@ -1,117 +1,21 @@
-/**
- * WebSocket client for real-time video conferencing platform
- * 
- * @example
- * ```typescript
- * const client = createWebSocketClient('zoom', 'room123', 'jwt-token');
- * await client.connect();
- * client.sendChat('Hello!', { clientId: 'user1', displayName: 'John' });
- * ```
- */
-
-/** Event types for WebSocket communication */
-export type EventType = 
-  | 'add_chat'
-  | 'delete_chat' 
-  | 'get_recent_chats'
-  | 'raise_hand'
-  | 'lower_hand'
-  | 'request_waiting'
-  | 'accept_waiting'
-  | 'deny_waiting'
-  | 'connect'
-  | 'disconnect'
-  | 'request_screenshare'
-  | 'accept_screenshare'
-  | 'deny_screenshare'
-  | 'offer'
-  | 'answer'
-  | 'candidate'
-  | 'renegotiate'
-  | 'room_state';
-
-/** User role types */
-export type RoleType = 'waiting' | 'participant' | 'screenshare' | 'host';
-
-/** Client information for user identification */
-export interface ClientInfo {
-  clientId: string;
-  displayName: string;
-}
-
-/** Chat message payload */
-export interface ChatPayload extends ClientInfo {
-  chatId: string;
-  timestamp: number;
-  chatContent: string;
-}
-
-/** Participant information */
-export interface ParticipantPayload extends ClientInfo {}
-
-/** Room state synchronization payload */
-export interface RoomStatePayload extends ClientInfo {
-  roomId: string;
-  hosts: ClientInfo[];
-  participants: ClientInfo[];
-  handsRaised: ClientInfo[];
-  waitingUsers: ClientInfo[];
-  sharingScreen: ClientInfo[];
-}
-
-/** Screen sharing coordination payload */
-export interface ScreenSharePayload extends ClientInfo {}
-
-/** WebRTC offer payload */
-export interface WebRTCOfferPayload extends ClientInfo {
-  targetClientId: string;
-  sdp: string;
-  type: 'offer';
-}
-
-/** WebRTC answer payload */
-export interface WebRTCAnswerPayload extends ClientInfo {
-  targetClientId: string;
-  sdp: string;
-  type: 'answer';
-}
-
-/** WebRTC ICE candidate payload */
-export interface WebRTCCandidatePayload extends ClientInfo {
-  targetClientId: string;
-  candidate: string;
-  sdpMid?: string;
-  sdpMLineIndex?: number;
-}
-
-/** WebRTC renegotiation request */
-export interface WebRTCRenegotiatePayload extends ClientInfo {
-  targetClientId: string;
-  reason?: string;
-}
-
-export type MessagePayload = 
-  | ChatPayload
-  | ParticipantPayload
-  | RoomStatePayload
-  | ScreenSharePayload
-  | WebRTCOfferPayload
-  | WebRTCAnswerPayload
-  | WebRTCCandidatePayload
-  | WebRTCRenegotiatePayload;
-
-/** WebSocket message structure */
-export interface WebSocketMessage {
-  event: EventType;
-  payload: MessagePayload;
-}
-
-/** Chat history response */
-export interface ChatHistoryResponse {
-  messages: ChatPayload[];
-  total: number;
-  hasMore: boolean;
-}
+import type {
+    EventType,
+    AnyPayload,
+    WebSocketMessage,
+    ClientInfo,
+    AddChatPayload,
+    DeleteChatPayload,
+    GetRecentChatsPayload,
+    HandStatePayload,
+    RequestWaitingPayload,
+    WaitingRoomDecisionPayload,
+    RequestScreensharePayload,
+    ScreenshareDecisionPayload,
+    WebRTCOfferPayload,
+    WebRTCAnswerPayload,
+    WebRTCCandidatePayload,
+    WebRTCRenegotiatePayload
+} from '../../shared/types/events';
 
 /** WebSocket connection states */
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error' | 'reconnecting';
@@ -119,7 +23,7 @@ export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'err
 /** WebSocket client configuration */
 export interface WebSocketConfig {
   url: string;
-  token: string;
+  token?: string;
   autoReconnect?: boolean;
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
@@ -155,6 +59,7 @@ export class WebSocketClient {
   /** Initialize WebSocket client */
   constructor(config: WebSocketConfig) {
     this.config = {
+      token: '',
       autoReconnect: true,
       reconnectInterval: 3000,
       maxReconnectAttempts: 5,
@@ -171,7 +76,9 @@ export class WebSocketClient {
         
         // Construct WebSocket URL with JWT token
         const wsUrl = new URL(this.config.url);
-        wsUrl.searchParams.set('token', this.config.token);
+        if (this.config.token) {
+          wsUrl.searchParams.set('token', this.config.token);
+        }
         
         this.ws = new WebSocket(wsUrl.toString());
         
@@ -228,7 +135,7 @@ export class WebSocketClient {
   }
 
   /** Send message to WebSocket server */
-  send(event: EventType, payload: MessagePayload): void {
+  send(event: EventType, payload: AnyPayload): void {
     if (!this.isConnected()) {
       throw new Error('WebSocket not connected');
     }
@@ -245,7 +152,7 @@ export class WebSocketClient {
 
   /** Send chat message to room */
   sendChat(content: string, clientInfo: ClientInfo): void {
-    const payload: ChatPayload = {
+    const payload: AddChatPayload = {
       ...clientInfo,
       chatId: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: Date.now(),
@@ -257,11 +164,9 @@ export class WebSocketClient {
 
   /** Delete chat message from room */
   deleteChat(chatId: string, clientInfo: ClientInfo): void {
-    const payload: ChatPayload = {
+    const payload: DeleteChatPayload = {
       ...clientInfo,
       chatId,
-      timestamp: Date.now(),
-      chatContent: '',
     };
     
     this.send('delete_chat', payload);
@@ -269,47 +174,56 @@ export class WebSocketClient {
 
   /** Request recent chat history */
   requestChatHistory(clientInfo: ClientInfo): void {
-    this.send('get_recent_chats', clientInfo);
+    const payload: GetRecentChatsPayload = clientInfo;
+    this.send('recents_chat', payload);
   }
 
   /** Raise hand to request speaking */
   raiseHand(clientInfo: ClientInfo): void {
-    this.send('raise_hand', clientInfo);
+    const payload: HandStatePayload = clientInfo;
+    this.send('raise_hand', payload);
   }
 
   /** Lower raised hand */
   lowerHand(clientInfo: ClientInfo): void {
-    this.send('lower_hand', clientInfo);
+    const payload: HandStatePayload = clientInfo;
+    this.send('lower_hand', payload);
   }
 
   /** Request to join from waiting room */
   requestWaiting(clientInfo: ClientInfo): void {
-    this.send('request_waiting', clientInfo);
+    const payload: RequestWaitingPayload = clientInfo;
+    this.send('waiting_request', payload);
   }
 
   /** Accept waiting user (host only) */
   acceptWaiting(targetClient: ClientInfo, hostInfo: ClientInfo): void {
-    this.send('accept_waiting', targetClient);
+    const payload: WaitingRoomDecisionPayload = { ...hostInfo, clientId: targetClient.clientId };
+    this.send('accept_waiting', payload);
   }
 
   /** Deny waiting user (host only) */
   denyWaiting(targetClient: ClientInfo, hostInfo: ClientInfo): void {
-    this.send('deny_waiting', targetClient);
+    const payload: WaitingRoomDecisionPayload = { ...hostInfo, clientId: targetClient.clientId };
+    this.send('deny_waiting', payload);
   }
 
   /** Request screen sharing permission */
   requestScreenShare(clientInfo: ClientInfo): void {
-    this.send('request_screenshare', clientInfo);
+    const payload: RequestScreensharePayload = clientInfo;
+    this.send('request_screenshare', payload);
   }
 
   /** Accept screen sharing request (host only) */
   acceptScreenShare(targetClient: ClientInfo, hostInfo: ClientInfo): void {
-    this.send('accept_screenshare', targetClient);
+    const payload: ScreenshareDecisionPayload = { ...hostInfo, clientId: targetClient.clientId };
+    this.send('accept_screenshare', payload);
   }
 
   /** Deny screen sharing request (host only) */
   denyScreenShare(targetClient: ClientInfo, hostInfo: ClientInfo): void {
-    this.send('deny_screenshare', targetClient);
+    const payload: ScreenshareDecisionPayload = { ...hostInfo, clientId: targetClient.clientId };
+    this.send('deny_screenshare', payload);
   }
 
   /** Send WebRTC offer for peer connection */
@@ -318,7 +232,6 @@ export class WebSocketClient {
       ...clientInfo,
       targetClientId,
       sdp: offer.sdp!,
-      type: 'offer',
     };
     
     this.send('offer', payload);
@@ -330,7 +243,6 @@ export class WebSocketClient {
       ...clientInfo,
       targetClientId,
       sdp: answer.sdp!,
-      type: 'answer',
     };
     
     this.send('answer', payload);
@@ -468,10 +380,7 @@ export class WebSocketClient {
     }
 
     this.reconnectAttempts++;
-    const delay = this.config.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);
-    
-    console.log(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
-    
+    const delay = this.config.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);    
     this.reconnectTimer = setTimeout(async () => {
       try {
         await this.connect();

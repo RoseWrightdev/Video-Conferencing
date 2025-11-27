@@ -57,8 +57,9 @@ func logHelper(ok bool, ClientId ClientIdType, methodName string, RoomId RoomIdT
 }
 
 // assertPayload is a generic helper function for type-safe payload validation.
-// This function attempts to cast the incoming payload to the expected type,
-// returning both the cast result and a boolean indicating success.
+// This function attempts to cast the incoming payload to the expected type.
+// Since JSON unmarshaling into interface{} creates map[string]interface{},
+// this function re-marshals and unmarshals to get the correct struct type.
 //
 // Type Safety:
 // This function provides compile-time type safety for payload handling while
@@ -73,14 +74,30 @@ func logHelper(ok bool, ClientId ClientIdType, methodName string, RoomId RoomIdT
 //	}
 //
 // Parameters:
-//   - payload: The raw payload from the WebSocket message
+//   - payload: The raw payload from the WebSocket message (typically a map from JSON)
 //
 // Returns:
 //   - T: The payload cast to the expected type (zero value if assertion fails)
 //   - bool: Whether the type assertion was successful
 func assertPayload[T any](payload any) (T, bool) {
-	p, ok := payload.(T)
-	return p, ok
+	var result T
+
+	// First try direct type assertion (for tests that pass the correct type)
+	if typed, ok := payload.(T); ok {
+		return typed, true
+	}
+
+	// Otherwise, re-marshal and unmarshal to convert map to struct
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return result, false
+	}
+
+	if err := json.Unmarshal(jsonBytes, &result); err != nil {
+		return result, false
+	}
+
+	return result, true
 }
 
 // handleAddChat processes requests to add new chat messages to the room.

@@ -1,15 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useRoom, useParticipants } from '@/hooks/useRoom';
-import { useMediaStream } from '@/hooks/useMediaStream';
+import React, { useEffect, useRef } from 'react';
+import { useParams } from 'next/navigation';
+
 
 export default function RoomPage() {
   const params = useParams();
-  const router = useRouter();
   const roomId = params?.roomid as string;
-  return (
-    <></>
-  );
+
 }
