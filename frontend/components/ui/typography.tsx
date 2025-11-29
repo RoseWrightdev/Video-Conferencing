@@ -60,7 +60,7 @@ export function H4({ children, className, style, ...rest }: TypoProps) {
 export function P({ children, className, style, ...rest }: TypoProps) {
   return (
     <p
-      className={cn("leading-7 [&:not(:first-child)]:mt-6", className)}
+      className={cn("leading-7 not-first:mt-6", className)}
       style={style}
       {...rest}
     >
