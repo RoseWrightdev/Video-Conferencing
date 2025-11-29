@@ -19,7 +19,7 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
 
   return (
     <div className="min-w-[480px] max-w-[720px] shrink-0 block overflow-hidden">
-      <Card.Card className="w-full h-full">
+      <Card.Card className="w-full h-full bg-white/80 frosted-2 flex flex-col">
         <Card.CardHeader>
           <Card.CardAction>
             <Button

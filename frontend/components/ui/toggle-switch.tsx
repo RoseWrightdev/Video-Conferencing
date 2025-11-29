@@ -2,6 +2,12 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import * as Typo from "@/components/ui/typography";
 
 /**
  * Configuration for toggle state appearance.
@@ -10,12 +16,14 @@ import { cn } from "@/lib/utils";
  * @property color - Background color for the knob (Tailwind color class)
  * @property bgColor - Background color for the layer (Tailwind color class)
  * @property textColor - Text/icon color for the knob (Tailwind color class, defaults to "text-white")
+ * @property tooltip - Optional tooltip text to display on hover
  */
 export interface ToggleState {
   icon: React.ReactNode;
   color: string;
   bgColor: string;
   textColor?: string;
+  tooltip?: string;
 }
 
 export interface ToggleSwitchProps {
@@ -56,19 +64,21 @@ export interface ToggleSwitchProps {
  *   aria-label="Enable feature"
  * />
  * 
- * // With Lucide icons
+ * // With Lucide icons and tooltips
  * <ToggleSwitch
  *   before={{ 
  *     icon: <Volume2 className="size-3" />, 
  *     color: "bg-green-500", 
  *     bgColor: "bg-green-50",
- *     textColor: "text-white"
+ *     textColor: "text-white",
+ *     tooltip: "Sound on"
  *   }}
  *   after={{ 
  *     icon: <VolumeX className="size-3" />, 
  *     color: "bg-gray-500", 
  *     bgColor: "bg-gray-50",
- *     textColor: "text-gray-900"
+ *     textColor: "text-gray-900",
+ *     tooltip: "Sound muted"
  *   }}
  *   checked={isMuted}
  *   onCheckedChange={setIsMuted}
@@ -97,7 +107,7 @@ export const ToggleSwitch = React.forwardRef<HTMLInputElement, ToggleSwitchProps
 
     const currentState = checked ? after : before;
 
-    return (
+    const toggleContent = (
       <div
         className={cn(
           "relative inline-block w-24 h-9 overflow-hidden select-none",
@@ -143,6 +153,22 @@ export const ToggleSwitch = React.forwardRef<HTMLInputElement, ToggleSwitchProps
         />
       </div>
     );
+
+    // If current state has a tooltip, wrap in Tooltip component
+    if (currentState.tooltip) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {toggleContent}
+          </TooltipTrigger>
+          <TooltipContent>
+            <Typo.P>{currentState.tooltip}</Typo.P>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return toggleContent;
   }
 );
 

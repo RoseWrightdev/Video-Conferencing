@@ -210,6 +210,40 @@ export const NoScreenSharePermission: Story = {
 };
 
 /**
+ * Example showing unread chat messages badge.
+ * Badge appears on chat button when there are unread messages.
+ */
+export const UnreadMessages: Story = {
+  args: {
+    dependencies: createMockControlDependencies({
+      isAudioEnabled: true,
+      isVideoEnabled: true,
+      isScreenSharing: false,
+      unreadCount: 5,
+      participantCount: 3,
+      participants: mockParticipants,
+    }),
+  },
+};
+
+/**
+ * Example showing many unread messages.
+ * Tests badge with larger numbers.
+ */
+export const ManyUnreadMessages: Story = {
+  args: {
+    dependencies: createMockControlDependencies({
+      isAudioEnabled: true,
+      isVideoEnabled: true,
+      isScreenSharing: false,
+      unreadCount: 99,
+      participantCount: 10,
+      participants: mockParticipants,
+    }),
+  },
+};
+
+/**
  * Example showing all frosted glass effects in action.
  * Includes active toggles and various button states.
  */
@@ -240,6 +274,7 @@ export const Interactive: Story = {
     const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
     const [isHandRaised, setIsHandRaised] = useState(false);
     const [canScreenShare, setCanScreenShare] = useState(true);
+    const [unreadCount, setUnreadCount] = useState(3);
     const participantCount = 3;
 
     const dependencies = createMockControlDependencies({
@@ -249,6 +284,7 @@ export const Interactive: Story = {
       isHost: true,
       canScreenShare,
       isHandRaised,
+      unreadCount,
       participantCount,
       participants: mockParticipants,
     });
@@ -288,6 +324,10 @@ export const Interactive: Story = {
 
     dependencies.roomControlService.leaveRoom = () => {
       alert("Leave room clicked!");
+    };
+
+    dependencies.chatService.markMessagesRead = () => {
+      setUnreadCount(0);
     };
 
     return (
@@ -341,6 +381,13 @@ export const Interactive: Story = {
                 {isChatOpen ? "✓ Panel Open" : "✗ Panel Closed"}
               </p>
             </div>
+
+            <div>
+              <p className="font-medium">Unread Messages</p>
+              <p className={unreadCount > 0 ? "text-red-600" : "text-gray-500"}>
+                {unreadCount > 0 ? `${unreadCount} unread` : "No unread messages"}
+              </p>
+            </div>
           </div>
 
           <div className="pt-4 border-t space-y-2">
@@ -353,6 +400,12 @@ export const Interactive: Story = {
                 className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
               >
                 {canScreenShare ? "Disable" : "Enable"} Screen Share Permission
+              </button>
+              <button
+                onClick={() => setUnreadCount(unreadCount + 1)}
+                className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                Add Unread Message
               </button>
             </div>
           </div>

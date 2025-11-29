@@ -1,5 +1,7 @@
-import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Send } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import { ChatDependencies } from "../types/ChatDependencies";
 
 export interface ChatInputProps {
@@ -14,6 +16,7 @@ export default function ChatInput({
   placeholder = "Message"
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSendMessage = () => {
     if (message.trim() && !disabled) {
@@ -29,17 +32,40 @@ export default function ChatInput({
     }
   };
 
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [message]);
+
   return (
     <div className="flex items-center w-full">
       <div className="relative flex-1">
-        <Input
+        <Textarea
+          ref={textareaRef}
           value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="font-extralight"
+          className={`font-extralight bg-white resize-none min-h-10 max-h-[200px] overflow-y-auto ${message.trim() ? "pr-12" : ""}`}
+          rows={1}
         />
+        {message.trim() && (
+          <Button
+            onClick={handleSendMessage}
+            disabled={disabled}
+            size="icon"
+            className="absolute right-1 bottom-1 top-1 h-8 w-8 shrink-0 rounded-full"
+            aria-label="Send message"
+            variant="ghost"
+          >
+            <Send className="h-4 w-4 text-gray-900" />
+          </Button>
+        )}
       </div>
     </div>
   );

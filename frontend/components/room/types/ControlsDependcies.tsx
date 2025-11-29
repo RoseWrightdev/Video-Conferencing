@@ -20,8 +20,14 @@ export interface RoomControlService {
   toggleHand: () => void;
 }
 
+export interface ChatService {
+  unreadCount: number;
+  markMessagesRead: () => void;
+}
+
 // Combined dependencies for control components
 export interface ControlDependencies {
   mediaService: MediaService;
   roomControlService: RoomControlService;
+  chatService: ChatService;
 }

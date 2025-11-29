@@ -56,7 +56,7 @@ function StandardChat({ chatMessage, currentUserId, isPriv, isHost, dependencies
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <Avatar className="w-11 h-11 flex-shrink-0">
+      <Avatar className="w-11 h-11 shrink-0 mt-2">
         <AvatarImage
           src={`https://api.dicebear.com/5.x/initials/svg?seed=${chatMessage.username}`}
         />
@@ -67,8 +67,8 @@ function StandardChat({ chatMessage, currentUserId, isPriv, isHost, dependencies
       <div className={`flex flex-col justify-center w-full ${isCurrentUser ? "items-end" : "items-start"}`}>
         <div className={`flex items-center gap-3 mt-2 ${isCurrentUser ? "flex-row-reverse" : ""}`}>
           <Typo.H4 className="my-0">{chatMessage.username}</Typo.H4>
-          {isHost && <Badge variant="outline" className={badgeStyle}>Host</Badge>}
-          {isPriv && <Badge variant="outline" className={badgeStyle}>Private</Badge>}
+          {isHost && <Badge variant="outline" className={badgeStyle + " bg-white"}>Host</Badge>}
+          {isPriv && <Badge variant="outline" className={badgeStyle + " bg-white"}>Private</Badge>}
           <Typo.Muted className={`mt-1 transition-opacity duration-200 ${isHovered ? "opacity-100" : "opacity-0"}`}>
             {chatMessage.timestamp.toLocaleTimeString([], {
               hour: "2-digit",
@@ -171,7 +171,7 @@ function RenderMessageContent({
           <Badge
             key={index}
             variant={part === "@everyone" ? "secondary" : "outline"}
-            className="text-xs px-1.5 py-0.5 mx-0.5 inline-flex"
+            className="text-xs px-1.5 py-0.5 mx-0.5 inline-flex bg-white"
           >
             {part}
           </Badge>
@@ -185,7 +185,7 @@ function RenderMessageContent({
   return (
     <Typo.P
       ref={ref}
-      className={`font-medium mt-0 relative transition-all duration-100 ${hasOverflow ? "overflow-y-auto" : "overflow-y-hidden"} max-h-32`}
+      className={`text-wrap font-medium mt-0 relative transition-all duration-100 ${hasOverflow ? "overflow-y-auto" : "overflow-y-hidden"} max-h-32`}
       style={{
         ...(hasOverflow ? {
           scrollbarWidth: "thin",

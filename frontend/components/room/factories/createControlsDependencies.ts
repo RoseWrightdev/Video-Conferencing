@@ -12,6 +12,7 @@ export function createMockControlDependencies({
   isMuted = false,
   canScreenShare = true,
   isHandRaised = false,
+  unreadCount = 0,
 }: {
   isAudioEnabled?: boolean;
   isVideoEnabled?: boolean;
@@ -20,6 +21,7 @@ export function createMockControlDependencies({
   isMuted?: boolean;
   canScreenShare?: boolean;
   isHandRaised?: boolean;
+  unreadCount?: number;
   participantCount?: number;
   participants?: Participant[];
   availableCameras?: MediaDeviceInfo[];
@@ -85,6 +87,10 @@ export function createMockControlDependencies({
       toggleParticipantsPanel: () => console.log("Mock toggleParticipantsPanel"),
       toggleChatPanel: () => console.log("Mock toggleChatPanel"),
       toggleHand: () => console.log("Mock toggleHand"),
-    }
+    },
+    chatService: {
+      unreadCount,
+      markMessagesRead: () => console.log("Mock markMessagesRead"),
+    },
   };
 }
