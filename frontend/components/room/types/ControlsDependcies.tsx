@@ -1,5 +1,3 @@
-import { type Participant } from "@/hooks/useRoomStore";
-
 export interface MediaService {
   isAudioEnabled: boolean;
   isVideoEnabled: boolean;
@@ -8,29 +6,22 @@ export interface MediaService {
   toggleVideo: () => Promise<void>;
   startScreenShare: () => Promise<void>;
   stopScreenShare: () => Promise<void>;
+  requestScreenShare: () => Promise<boolean>;
 }
 
 export interface RoomControlService {
   isHost: boolean;
   isMuted: boolean;
+  isHandRaised: boolean;
   canScreenShare: boolean;
   leaveRoom: () => void;
   toggleParticipantsPanel: () => void;
   toggleChatPanel: () => void;
-}
-
-export interface ParticipantControlService {
-  participants: Participant[];
-  participantCount: number;
-  getParticipant: (id: string) => Participant | undefined;
-  kickParticipant?: (id: string) => void;
-  toggleParticipantAudio?: (id: string) => void;
-  toggleParticipantVideo?: (id: string) => void;
+  toggleHand: () => void;
 }
 
 // Combined dependencies for control components
 export interface ControlDependencies {
   mediaService: MediaService;
   roomControlService: RoomControlService;
-  participantControlService: ParticipantControlService;
 }

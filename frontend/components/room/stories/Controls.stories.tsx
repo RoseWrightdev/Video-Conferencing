@@ -2,15 +2,25 @@ import ControlBar from "@/components/room/components/Controls";
 import { createMockControlDependencies } from "../factories/createControlsDependencies";
 import { type Meta, type StoryObj } from "@storybook/nextjs-vite";
 import { useState } from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const meta: Meta<typeof ControlBar> = {
   title: "Room/ControlBar",
   component: ControlBar,
   tags: ["autodocs"],
+  decorators: [
+    (Story) => (
+      <TooltipProvider>
+        <div className="bg-gray-900 min-h-[200px] flex items-end p-4">
+          <Story />
+        </div>
+      </TooltipProvider>
+    ),
+  ],
   parameters: {
     docs: {
       description: {
-        component: "Control bar component with dependency injection for managing media controls, room settings, and participant actions.",
+        component: "Control bar component with dependency injection for managing media controls, room settings, and participant actions. Features frosted glass styling, animated toggle switches, hand raise button, and tooltips for permissions.",
       },
     },
   },
@@ -156,8 +166,6 @@ export const NoDevices: Story = {
       isAudioEnabled: false,
       isVideoEnabled: false,
       isScreenSharing: false,
-      availableCameras: [],
-      availableMicrophones: [],
       canScreenShare: false,
       participantCount: 1,
       participants: [],
@@ -166,8 +174,62 @@ export const NoDevices: Story = {
 };
 
 /**
+ * Example showing hand raise feature.
+ * Users can raise/lower their hand to signal they want to speak.
+ */
+export const HandRaised: Story = {
+  args: {
+    dependencies: createMockControlDependencies({
+      isAudioEnabled: false,
+      isVideoEnabled: true,
+      isScreenSharing: false,
+      isMuted: true,
+      isHandRaised: true,
+      participantCount: 8,
+      participants: mockParticipants,
+    }),
+  },
+};
+
+/**
+ * Example showing screen share permission tooltip.
+ * When canScreenShare is false, a tooltip explains why.
+ */
+export const NoScreenSharePermission: Story = {
+  args: {
+    dependencies: createMockControlDependencies({
+      isAudioEnabled: true,
+      isVideoEnabled: true,
+      isScreenSharing: false,
+      canScreenShare: false,
+      isHost: false,
+      participantCount: 5,
+      participants: mockParticipants,
+    }),
+  },
+};
+
+/**
+ * Example showing all frosted glass effects in action.
+ * Includes active toggles and various button states.
+ */
+export const FrostedGlassShowcase: Story = {
+  args: {
+    dependencies: createMockControlDependencies({
+      isAudioEnabled: true,
+      isVideoEnabled: false,
+      isScreenSharing: true,
+      isHost: true,
+      participantCount: 12,
+      participants: mockParticipants,
+    }),
+  },
+};
+
+/**
  * Interactive playground to test all control bar features.
- * Toggle media controls and see real-time state updates.
+ * Toggle media controls, raise hand, and see real-time state updates.
+ * Features tooltips, frosted glass styling, and permission handling.
  */
 export const Interactive: Story = {
   render: () => {
@@ -176,13 +238,17 @@ export const Interactive: Story = {
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
-    const [participantCount, setParticipantCount] = useState(3);
+    const [isHandRaised, setIsHandRaised] = useState(false);
+    const [canScreenShare, setCanScreenShare] = useState(true);
+    const participantCount = 3;
 
     const dependencies = createMockControlDependencies({
       isAudioEnabled,
       isVideoEnabled,
       isScreenSharing,
       isHost: true,
+      canScreenShare,
+      isHandRaised,
       participantCount,
       participants: mockParticipants,
     });
@@ -204,12 +270,20 @@ export const Interactive: Story = {
       setIsScreenSharing(false);
     };
 
+    dependencies.mediaService.requestScreenShare = async () => {
+      return canScreenShare;
+    };
+
     dependencies.roomControlService.toggleChatPanel = () => {
       setIsChatOpen(!isChatOpen);
     };
 
     dependencies.roomControlService.toggleParticipantsPanel = () => {
       setIsParticipantsOpen(!isParticipantsOpen);
+    };
+
+    dependencies.roomControlService.toggleHand = () => {
+      setIsHandRaised(!isHandRaised);
     };
 
     dependencies.roomControlService.leaveRoom = () => {
@@ -222,7 +296,7 @@ export const Interactive: Story = {
           <ControlBar dependencies={dependencies} />
         </div>
 
-        <div className="p-6 bg-white rounded-lg border space-y-4">
+        <div className="p-6 bg-white/80 frosted-3 rounded-lg border space-y-4">
           <h3 className="text-lg font-semibold">Current State</h3>
           
           <div className="grid grid-cols-2 gap-4 text-sm">
@@ -248,6 +322,13 @@ export const Interactive: Story = {
             </div>
 
             <div>
+              <p className="font-medium">Hand Raised</p>
+              <p className={isHandRaised ? "text-yellow-600" : "text-gray-500"}>
+                {isHandRaised ? "✓ Hand Up" : "✗ Hand Down"}
+              </p>
+            </div>
+
+            <div>
               <p className="font-medium">Participants</p>
               <p className={isParticipantsOpen ? "text-blue-600" : "text-gray-500"}>
                 {isParticipantsOpen ? "✓ Panel Open" : "✗ Panel Closed"} ({participantCount})
@@ -262,10 +343,18 @@ export const Interactive: Story = {
             </div>
           </div>
 
-          <div className="pt-4 border-t">
+          <div className="pt-4 border-t space-y-2">
             <p className="text-xs text-gray-600">
               💡 Click the controls above to toggle states and see real-time updates
             </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCanScreenShare(!canScreenShare)}
+                className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                {canScreenShare ? "Disable" : "Enable"} Screen Share Permission
+              </button>
+            </div>
           </div>
         </div>
       </div>

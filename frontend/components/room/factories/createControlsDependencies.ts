@@ -11,8 +11,7 @@ export function createMockControlDependencies({
   isHost = false,
   isMuted = false,
   canScreenShare = true,
-  participantCount = 3,
-  participants = [],
+  isHandRaised = false,
 }: {
   isAudioEnabled?: boolean;
   isVideoEnabled?: boolean;
@@ -20,6 +19,7 @@ export function createMockControlDependencies({
   isHost?: boolean;
   isMuted?: boolean;
   canScreenShare?: boolean;
+  isHandRaised?: boolean;
   participantCount?: number;
   participants?: Participant[];
   availableCameras?: MediaDeviceInfo[];
@@ -71,22 +71,20 @@ export function createMockControlDependencies({
       toggleVideo: async () => console.log("Mock toggleVideo"),
       startScreenShare: async () => console.log("Mock startScreenShare"),
       stopScreenShare: async () => console.log("Mock stopScreenShare"),
+      requestScreenShare: async () => {
+        console.log("Mock requestScreenShare");
+        return canScreenShare;
+      },
     },
     roomControlService: {
       isHost,
       isMuted,
       canScreenShare,
+      isHandRaised,
       leaveRoom: () => console.log("Mock leaveRoom"),
       toggleParticipantsPanel: () => console.log("Mock toggleParticipantsPanel"),
       toggleChatPanel: () => console.log("Mock toggleChatPanel"),
-    },
-    participantControlService: {
-      participants,
-      participantCount,
-      getParticipant: (id: string) => participants.find(p => p.id === id),
-      kickParticipant: isHost ? (id: string) => console.log("Mock kickParticipant:", id) : undefined,
-      toggleParticipantAudio: isHost ? (id: string) => console.log("Mock toggleParticipantAudio:", id) : undefined,
-      toggleParticipantVideo: isHost ? (id: string) => console.log("Mock toggleParticipantVideo:", id) : undefined,
-    },
+      toggleHand: () => console.log("Mock toggleHand"),
+    }
   };
 }

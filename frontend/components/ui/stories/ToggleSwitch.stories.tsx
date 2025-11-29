@@ -89,11 +89,13 @@ export const MicrophoneToggle: Story = {
       icon: <Mic className="size-3.5" />,
       color: "bg-green-500",
       bgColor: "bg-green-50",
+      textColor: "text-white",
     },
     after: {
       icon: <MicOff className="size-3.5" />,
       color: "bg-gray-500",
       bgColor: "bg-gray-100",
+      textColor: "text-white",
     },
     checked: false,
     "aria-label": "Toggle microphone",
@@ -305,6 +307,30 @@ export const Playground: Story = {
 };
 
 /**
+ * Frosted glass effect example.
+ * Shows toggle with glassmorphism styling.
+ */
+export const FrostedGlass: Story = {
+  args: {
+    before: {
+      icon: <Mic className="size-3.5" />,
+      color: "bg-green-500 frosted-2",
+      bgColor: "bg-green-100 frosted-2",
+      textColor: "text-green-900",
+    },
+    after: {
+      icon: <MicOff className="size-3.5" />,
+      color: "bg-red-500 frosted-2",
+      bgColor: "bg-red-100 frosted-2",
+      textColor: "text-red-900",
+    },
+    checked: false,
+    className: "rounded-2xl",
+    "aria-label": "Frosted toggle",
+  },
+};
+
+/**
  * Multiple toggles demonstrating common use cases together.
  * Shows how they can be used in a control panel or settings interface.
  */
@@ -316,7 +342,7 @@ export const MultipleToggles: Story = {
     const [darkMode, setDarkMode] = useState(false);
 
     return (
-      <div className="space-y-6 p-6 bg-white rounded-lg border">
+      <div className="space-y-6 p-6 bg-white/80 frosted-3 rounded-lg border">
         <h3 className="text-lg font-semibold mb-4">Conference Controls</h3>
         
         <div className="flex items-center justify-between">
@@ -402,7 +428,7 @@ export const MultipleToggles: Story = {
             before={{
               icon: <Sun className="size-3.5" />,
               color: "bg-yellow-500",
-              bgColor: "bg-yellow-50",
+              bgColor: "bg-yellow-100",
             }}
             after={{
               icon: <Moon className="size-3.5" />,

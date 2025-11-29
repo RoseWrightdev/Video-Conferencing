@@ -9,11 +9,13 @@ import { cn } from "@/lib/utils";
  * @property icon - Text or icon to display in the knob
  * @property color - Background color for the knob (Tailwind color class)
  * @property bgColor - Background color for the layer (Tailwind color class)
+ * @property textColor - Text/icon color for the knob (Tailwind color class, defaults to "text-white")
  */
 export interface ToggleState {
   icon: React.ReactNode;
   color: string;
   bgColor: string;
+  textColor?: string;
 }
 
 export interface ToggleSwitchProps {
@@ -59,12 +61,14 @@ export interface ToggleSwitchProps {
  *   before={{ 
  *     icon: <Volume2 className="size-3" />, 
  *     color: "bg-green-500", 
- *     bgColor: "bg-green-50" 
+ *     bgColor: "bg-green-50",
+ *     textColor: "text-white"
  *   }}
  *   after={{ 
  *     icon: <VolumeX className="size-3" />, 
  *     color: "bg-gray-500", 
- *     bgColor: "bg-gray-50" 
+ *     bgColor: "bg-gray-50",
+ *     textColor: "text-gray-900"
  *   }}
  *   checked={isMuted}
  *   onCheckedChange={setIsMuted}
@@ -96,8 +100,8 @@ export const ToggleSwitch = React.forwardRef<HTMLInputElement, ToggleSwitchProps
     return (
       <div
         className={cn(
-          "relative inline-block w-[74px] h-9 overflow-hidden select-none",
-          disabled && "opacity-50 cursor-not-allowed",
+          "relative inline-block w-24 h-9 overflow-hidden select-none",
+          disabled && "opacity-90 cursor-not-allowed",
           className
         )}
       >
@@ -117,11 +121,12 @@ export const ToggleSwitch = React.forwardRef<HTMLInputElement, ToggleSwitchProps
         <div className="absolute inset-0 z-20 pointer-events-none">
           <div
             className={cn(
-              "absolute top-1 w-7 h-7 flex items-center justify-center",
-              "text-white text-[10px] font-bold rounded-full",
-              "transition-all duration-300 ease-[cubic-bezier(0.18,0.89,0.35,1.15)]",
+              "absolute w-12 h-full flex items-center justify-center",
+              "text-sm font-medium rounded-full [&>svg]:size-5",
+              "transition-all duration-200 ease-in-out",
               currentState.color,
-              checked ? "left-[42px]" : "left-1"
+              currentState.textColor || "text-white",
+              checked ? "left-12" : "left-0"
             )}
           >
             {currentState.icon}
@@ -132,7 +137,7 @@ export const ToggleSwitch = React.forwardRef<HTMLInputElement, ToggleSwitchProps
         <div
           className={cn(
             "absolute inset-0 w-full h-full rounded-full z-10",
-            "transition-all duration-300 ease-in-out",
+            "transition-all duration-200 ease-in-out",
             currentState.bgColor
           )}
         />
