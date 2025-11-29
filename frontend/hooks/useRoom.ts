@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useRoomStore } from '@/store/useRoomStore';
-import { roomService } from '@/services/roomService';
+import { RoomService } from '@/services/roomService';
 
 /**
  * Room management hook for video conferencing sessions.
@@ -66,6 +66,7 @@ export const useRoom = (params?: {
 
   const hasInitialized = useRef(false);
   const isInitializing = useRef(false);
+  const roomServiceRef = useRef<RoomService | null>(null);
 
   const joinRoomWithAuth = useCallback(async (
     roomId: string,
@@ -76,8 +77,11 @@ export const useRoom = (params?: {
     
     try {
       isInitializing.current = true;
-      await roomService.initializeRoom(roomId, username, token || '');
-      await roomService.joinRoom();
+      if (!roomServiceRef.current) {
+        roomServiceRef.current = new RoomService();
+      }
+      await roomServiceRef.current.initializeRoom(roomId, username, token || '');
+      await roomServiceRef.current.joinRoom();
       hasInitialized.current = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -90,7 +94,8 @@ export const useRoom = (params?: {
   }, [handleError]);
 
   const exitRoom = useCallback(() => {
-    roomService.leaveRoom();
+    roomServiceRef.current?.leaveRoom();
+    roomServiceRef.current = null;
     hasInitialized.current = false;
     isInitializing.current = false;
   }, []);
@@ -109,6 +114,14 @@ export const useRoom = (params?: {
       joinRoomWithAuth(params.roomId, params.username, params.token).catch(() => {});
     }
   }, [params?.autoJoin, params?.roomId, params?.username, params?.token, isJoined, joinRoomWithAuth]);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      roomServiceRef.current?.leaveRoom();
+      roomServiceRef.current = null;
+    };
+  }, []);
 
   const isRoomReady = connectionState.wsConnected && isJoined && !isWaitingRoom;
   const hasConnectionIssues = connectionState.wsReconnecting || 

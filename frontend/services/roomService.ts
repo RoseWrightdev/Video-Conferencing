@@ -359,5 +359,3 @@ export class RoomService {
     });
   }
 }
-
-export const roomService = new RoomService();
