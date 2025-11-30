@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { useRoom, useParticipants, useChat, useMediaControls } from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
@@ -13,15 +13,24 @@ import { useRoomStore } from '@/store/useRoomStore';
 
 export default function RoomPage() {
   const params = useParams();
+  const router = useRouter();
   const { data: session, status } = useSession();
   const roomId = params.roomid as string;
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isParticipantsPanelOpen, setIsParticipantsPanelOpen] = useState(false);
 
   const { requestPermissions, initializeStream } = useMediaStream();
-  const { localStream } = useRoomStore();
+  const { 
+    localStream, 
+    leaveRoom, 
+    wsClient, 
+    clientInfo, 
+    raisingHandParticipants,
+    setHandRaised 
+  } = useRoomStore();
 
   const { 
     currentUserId, 
@@ -143,12 +152,29 @@ export default function RoomPage() {
     roomControlService: {
       isHost: false,
       isMuted: !isAudioEnabled,
-      isHandRaised: false,
+      isHandRaised: currentUserId ? raisingHandParticipants.has(currentUserId) : false,
       canScreenShare: true,
-      leaveRoom: () => {},
-      toggleParticipantsPanel: () => {},
+      leaveRoom: () => {
+        leaveRoom();
+        router.push('/');
+      },
+      toggleParticipantsPanel: () => {
+        setIsParticipantsPanelOpen(!isParticipantsPanelOpen);
+      },
       toggleChatPanel: toggleChatPanel,
-      toggleHand: () => {},
+      toggleHand: () => {
+        if (!wsClient || !clientInfo || !currentUserId) return;
+        
+        const isCurrentlyRaised = raisingHandParticipants.has(currentUserId);
+        
+        if (isCurrentlyRaised) {
+          wsClient.lowerHand(clientInfo);
+          setHandRaised(currentUserId, false);
+        } else {
+          wsClient.raiseHand(clientInfo);
+          setHandRaised(currentUserId, true);
+        }
+      },
     },
     chatService: {
       unreadCount,
