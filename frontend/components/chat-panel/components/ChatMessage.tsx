@@ -12,7 +12,7 @@ export interface ChatMessageProps {
   dependencies: ChatDependencies;
 }
 
-export default function ChatMessage({
+const ChatMessage = React.memo(function ChatMessage({
   chatMessage,
   currentUserId,
   isHost,
@@ -35,7 +35,14 @@ export default function ChatMessage({
   }
 
   return null;
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if message content or read status changes
+  return prevProps.chatMessage.id === nextProps.chatMessage.id &&
+         prevProps.chatMessage.content === nextProps.chatMessage.content &&
+         prevProps.chatMessage.timestamp === nextProps.chatMessage.timestamp &&
+         prevProps.currentUserId === nextProps.currentUserId &&
+         prevProps.isHost === nextProps.isHost;
+});
 
 function StandardChat({ chatMessage, currentUserId, isPriv, isHost, dependencies }: { chatMessage: ChatMessage, currentUserId: string, isPriv: boolean, isHost: boolean, dependencies: ChatDependencies }) {
   const messageContentRef = useRef<HTMLParagraphElement>(null);
@@ -207,3 +214,5 @@ function RenderMessageContent({
     </Typo.P>
   );
 };
+
+export default ChatMessage;

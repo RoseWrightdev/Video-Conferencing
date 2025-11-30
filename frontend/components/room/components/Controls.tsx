@@ -12,7 +12,7 @@ import {
   Users,
   Hand,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
@@ -28,7 +28,7 @@ export interface ControlBarProps {
   dependencies: ControlDependencies;
 }
 
-export default function ControlBar({ dependencies }: ControlBarProps) {
+const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
   const { mediaService, roomControlService, chatService } = dependencies;
   const [hasRequestedScreenShare, setHasRequestedScreenShare] = useState(false);
   
@@ -229,4 +229,6 @@ export default function ControlBar({ dependencies }: ControlBarProps) {
       </Tooltip>
     </div>
   );
-}
+});
+
+export default ControlBar;

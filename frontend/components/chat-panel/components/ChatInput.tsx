@@ -1,7 +1,7 @@
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo, useCallback } from "react";
 import { ChatDependencies } from "../types/ChatDependencies";
 
 export interface ChatInputProps {
@@ -10,7 +10,7 @@ export interface ChatInputProps {
   placeholder?: string;
 }
 
-export default function ChatInput({
+const ChatInput = memo(function ChatInput({
   dependencies,
   disabled = false,
   placeholder = "Message"
@@ -32,13 +32,18 @@ export default function ChatInput({
     }
   };
 
-  // Auto-resize textarea based on content
+  // Auto-resize textarea based on content with debouncing for performance
   useEffect(() => {
     const textarea = textareaRef.current;
-    if (textarea) {
+    if (!textarea) return;
+
+    // Use requestAnimationFrame to debounce resize calculations
+    const timeoutId = requestAnimationFrame(() => {
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-    }
+    });
+
+    return () => cancelAnimationFrame(timeoutId);
   }, [message]);
 
   return (
@@ -53,6 +58,7 @@ export default function ChatInput({
           disabled={disabled}
           className={`font-extralight bg-white resize-none min-h-10 max-h-[200px] overflow-y-auto ${message.trim() ? "pr-12" : ""}`}
           rows={1}
+          aria-label="Chat message input"
         />
         {message.trim() && (
           <Button
@@ -69,4 +75,6 @@ export default function ChatInput({
       </div>
     </div>
   );
-}
+});
+
+export default ChatInput;

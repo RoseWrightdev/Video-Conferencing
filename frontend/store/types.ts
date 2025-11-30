@@ -18,29 +18,28 @@ export type GridLayout = 'gallery' | 'speaker' | 'sidebar';
 /**
  * Participant in a video conference room.
  * 
- * Represents both local and remote participants with their
- * current media states and role permissions.
+ * Matches backend ClientInfo structure. Media states (audio/video/screenshare)
+ * are tracked separately in ParticipantSlice state maps, mirroring the backend's
+ * Room structure where these are stored in separate maps (unmuted, cameraOn, etc.)
  * 
  * @property id - Unique identifier (matches clientId from server)
- * @property username - Display name shown in UI
- * @property role - Permission level (host has full control)
- * @property isAudioEnabled - Microphone track enabled state
- * @property isVideoEnabled - Camera track enabled state
- * @property isScreenSharing - Currently sharing screen
- * @property isSpeaking - Raised hand or active speaker detection
- * @property lastActivity - Timestamp for idle detection
- * @property stream - MediaStream for rendering video element
+ * @property username - Display name shown in UI (matches displayName from server)
+ * @property role - Permission level: 'host' | 'participant' | 'screenshare' | 'waiting'
+ * @property stream - MediaStream for rendering video element (client-side only)
+ * 
+ * Note: The backend tracks participant states in separate Room maps:
+ * - r.unmuted (audio enabled)
+ * - r.cameraOn (video enabled) 
+ * - r.sharingScreen (screen share active)
+ * - r.raisingHand (hand raised)
+ * 
+ * Frontend mirrors this with separate state maps in ParticipantSlice.
  */
 export interface Participant {
   id: string;
   username: string;
-  role: 'host' | 'moderator' | 'participant';
-  isAudioEnabled: boolean;
-  isVideoEnabled: boolean;
-  isScreenSharing: boolean;
-  isSpeaking: boolean;
-  lastActivity: Date;
-  stream?: MediaStream;
+  role: 'host' | 'participant' | 'screenshare' | 'waiting';
+  stream?: MediaStream; // Client-side only for video rendering
 }
 
 /**
@@ -186,22 +185,50 @@ export interface MediaSlice {
 /**
  * Participant slice interface for room member management.
  * 
+ * Mirrors backend Room structure where participant states are tracked
+ * in separate maps rather than as properties on Participant objects.
+ * This matches the backend's architecture:
+ * - Backend: r.unmuted, r.cameraOn, r.sharingScreen, r.raisingHand
+ * - Frontend: unmutedParticipants, cameraOnParticipants, etc.
+ * 
  * @see createParticipantSlice For implementation
  */
 export interface ParticipantSlice {
-  participants: Map<string, Participant>;
-  localParticipant: Participant | null;
-  speakingParticipants: Set<string>;
-  pendingParticipants: Participant[];
+  // Core participant data (matches backend ClientInfo)
+  participants: Map<string, Participant>; // All active participants (hosts + participants)
+  hosts: Map<string, Participant>; // Participants with host role
+  waitingParticipants: Map<string, Participant>; // Users in waiting room
+  localParticipant: Participant | null; // This client's participant data
+  
+  // State tracking maps (mirrors backend Room structure)
+  unmutedParticipants: Set<string>; // Participants with audio enabled
+  cameraOnParticipants: Set<string>; // Participants with video enabled
+  sharingScreenParticipants: Set<string>; // Participants sharing screen
+  raisingHandParticipants: Set<string>; // Participants with hand raised
+  
+  // UI state
   selectedParticipantId: string | null;
   isHost: boolean;
+  
+  // Actions
   addParticipant: (participant: Participant) => void;
   removeParticipant: (participantId: string) => void;
   updateParticipant: (participantId: string, updates: Partial<Participant>) => void;
+  setParticipantStream: (participantId: string, stream: MediaStream | null) => void;
+  
+  // State map updates
+  setAudioEnabled: (participantId: string, enabled: boolean) => void;
+  setVideoEnabled: (participantId: string, enabled: boolean) => void;
+  setScreenSharing: (participantId: string, sharing: boolean) => void;
+  setHandRaised: (participantId: string, raised: boolean) => void;
+  
+  // Host actions
   approveParticipant: (participantId: string) => void;
   kickParticipant: (participantId: string) => void;
   toggleParticipantAudio: (participantId: string) => void;
   toggleParticipantVideo: (participantId: string) => void;
+  
+  // UI
   selectParticipant: (participantId: string | null) => void;
 }
 

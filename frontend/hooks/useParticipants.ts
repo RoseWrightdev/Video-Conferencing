@@ -57,8 +57,8 @@ export const useParticipants = () => {
   const {
     participants,
     localParticipant,
-    speakingParticipants,
-    pendingParticipants,
+    raisingHandParticipants,
+    waitingParticipants,
     selectedParticipantId,
     pinnedParticipantId,
     isHost,
@@ -71,7 +71,7 @@ export const useParticipants = () => {
   } = useRoomStore();
 
   const participantList = Array.from(participants.values());
-  const speakingList = participantList.filter(p => speakingParticipants.has(p.id));
+  const raisingHandList = participantList.filter(p => raisingHandParticipants.has(p.id));
   
   const selectedParticipant = selectedParticipantId 
     ? participants.get(selectedParticipantId) 
@@ -86,8 +86,8 @@ export const useParticipants = () => {
   }, [participants]);
 
   const isParticipantSpeaking = useCallback((id: string) => {
-    return speakingParticipants.has(id);
-  }, [speakingParticipants]);
+    return raisingHandParticipants.has(id);
+  }, [raisingHandParticipants]);
 
   const hostActions = isHost ? {
     approveParticipant,
@@ -99,8 +99,8 @@ export const useParticipants = () => {
   return {
     participants: participantList,
     localParticipant,
-    speakingParticipants: speakingList,
-    pendingParticipants,
+    speakingParticipants: raisingHandList,
+    pendingParticipants: waitingParticipants,
     selectedParticipant,
     pinnedParticipant,
     participantCount: participantList.length,

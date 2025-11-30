@@ -1,6 +1,7 @@
 import *  as Card from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { X as XIcon } from "lucide-react";
+import { useMemo } from "react";
 
 import ChatMessage from "@/components/chat-panel/components/ChatMessage";
 import ChatInput from "@/components/chat-panel/components/ChatInput";
@@ -15,10 +16,15 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
   const { chatService, roomService, participantService } = dependencies;
   const messages = chatService.messages;
   const currentUserId = roomService.currentUserId;
-  const isHost = participantService.getParticipant(currentUserId || "")?.role === "host";
+  
+  // Memoize expensive computations
+  const isHost = useMemo(() => 
+    participantService.getParticipant(currentUserId || "")?.role === "host",
+    [participantService, currentUserId]
+  );
 
   return (
-    <div className="min-w-[480px] max-w-[720px] shrink-0 block overflow-hidden">
+    <div className="w-full h-full flex flex-col overflow-hidden">
       <Card.Card className="w-full h-full bg-white/80 frosted-2 flex flex-col">
         <Card.CardHeader>
           <Card.CardAction>
@@ -27,6 +33,7 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
               size="icon"
               onClick={chatService.closeChat}
               className="rounded-4xl"
+              aria-label="Close chat panel"
             >
               <XIcon className="h-12 w-12" />
             </Button>

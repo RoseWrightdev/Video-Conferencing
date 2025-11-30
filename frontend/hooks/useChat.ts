@@ -73,6 +73,7 @@ export const useChat = () => {
     sendPrivateMessage,
     openChat,
     closeChat,
+    toggleChatPanel,
     markMessagesRead,
   };
 };

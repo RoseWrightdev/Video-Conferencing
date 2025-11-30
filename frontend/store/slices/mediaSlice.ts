@@ -44,11 +44,22 @@ export const createMediaSlice: StateCreator<
 > = (set, get) => ({
   localStream: null,
   screenShareStream: null,
-  isAudioEnabled: true,
-  isVideoEnabled: true,
+  isAudioEnabled: false,
+  isVideoEnabled: false,
   isScreenSharing: false,
 
-  setLocalStream: (stream) => set({ localStream: stream }),
+  setLocalStream: (stream) => {
+    set({ localStream: stream });
+    // When stream is set, check which tracks are present and enable them
+    if (stream) {
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+      set({ 
+        isAudioEnabled: audioTracks.length > 0 && audioTracks[0].enabled,
+        isVideoEnabled: videoTracks.length > 0 && videoTracks[0].enabled
+      });
+    }
+  },
 
   toggleAudio: async () => {
     const { localStream, isAudioEnabled } = get();
@@ -59,9 +70,15 @@ export const createMediaSlice: StateCreator<
       });
       set({ isAudioEnabled: !isAudioEnabled });
     } else {
-      const error = 'Microphone not available. Please check permissions.';
-      get().handleError(error);
-      throw new Error(error);
+      // No stream - try to request permissions and initialize
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        get().setLocalStream(stream);
+        set({ isAudioEnabled: true });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Microphone permission denied';
+        get().handleError(errorMessage);
+      }
     }
   },
 
@@ -74,9 +91,15 @@ export const createMediaSlice: StateCreator<
       });
       set({ isVideoEnabled: !isVideoEnabled });
     } else {
-      const error = 'Camera not available. Please check permissions.';
-      get().handleError(error);
-      throw new Error(error);
+      // No stream - try to request permissions and initialize
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        get().setLocalStream(stream);
+        set({ isVideoEnabled: true });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Camera permission denied';
+        get().handleError(errorMessage);
+      }
     }
   },
 

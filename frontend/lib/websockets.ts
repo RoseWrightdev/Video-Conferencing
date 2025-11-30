@@ -720,7 +720,12 @@ export class WebSocketClient {
     }
 
     this.reconnectAttempts++;
-    const delay = this.config.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);    
+    // Calculate base delay with exponential backoff
+    const baseDelay = this.config.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);
+    // Add random jitter (0-1000ms) to prevent thundering herd problem
+    const jitter = Math.random() * 1000;
+    const delay = baseDelay + jitter;
+    
     this.reconnectTimer = setTimeout(async () => {
       try {
         await this.connect();

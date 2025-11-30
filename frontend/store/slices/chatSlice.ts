@@ -56,7 +56,7 @@ export const createChatSlice: StateCreator<
     }
 
     if (type === 'private') {
-      // maybe some special handling for private messages
+      // todo: maybe some special handling for private messages
     }
   },
 

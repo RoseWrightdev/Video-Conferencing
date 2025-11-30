@@ -78,7 +78,6 @@ export const Default: Story = {
       isScreenSharing: false,
       isHost: false,
       participantCount: 3,
-      participants: mockParticipants,
     }),
   },
 };
@@ -91,7 +90,6 @@ export const Host: Story = {
       isScreenSharing: false,
       isHost: true,
       participantCount: 5,
-      participants: mockParticipants,
     }),
   },
 };
@@ -104,7 +102,6 @@ export const Muted: Story = {
       isScreenSharing: false,
       isMuted: true,
       participantCount: 3,
-      participants: mockParticipants,
     }),
   },
 };
@@ -116,7 +113,6 @@ export const VideoOff: Story = {
       isVideoEnabled: false,
       isScreenSharing: false,
       participantCount: 3,
-      participants: mockParticipants,
     }),
   },
 };
@@ -128,7 +124,6 @@ export const ScreenSharing: Story = {
       isVideoEnabled: true,
       isScreenSharing: true,
       participantCount: 3,
-      participants: mockParticipants,
     }),
   },
 };
@@ -142,7 +137,6 @@ export const AllDisabled: Story = {
       isMuted: true,
       canScreenShare: false,
       participantCount: 3,
-      participants: mockParticipants,
     }),
   },
 };
@@ -155,7 +149,6 @@ export const LargeRoom: Story = {
       isScreenSharing: false,
       isHost: true,
       participantCount: 25,
-      participants: mockParticipants,
     }),
   },
 };
@@ -186,7 +179,6 @@ export const HandRaised: Story = {
       isMuted: true,
       isHandRaised: true,
       participantCount: 8,
-      participants: mockParticipants,
     }),
   },
 };
@@ -204,7 +196,6 @@ export const NoScreenSharePermission: Story = {
       canScreenShare: false,
       isHost: false,
       participantCount: 5,
-      participants: mockParticipants,
     }),
   },
 };
@@ -221,7 +212,6 @@ export const UnreadMessages: Story = {
       isScreenSharing: false,
       unreadCount: 5,
       participantCount: 3,
-      participants: mockParticipants,
     }),
   },
 };
@@ -238,7 +228,6 @@ export const ManyUnreadMessages: Story = {
       isScreenSharing: false,
       unreadCount: 99,
       participantCount: 10,
-      participants: mockParticipants,
     }),
   },
 };
@@ -255,7 +244,6 @@ export const FrostedGlassShowcase: Story = {
       isScreenSharing: true,
       isHost: true,
       participantCount: 12,
-      participants: mockParticipants,
     }),
   },
 };
@@ -286,7 +274,6 @@ export const Interactive: Story = {
       isHandRaised,
       unreadCount,
       participantCount,
-      participants: mockParticipants,
     });
 
     // Override the mock methods to update state

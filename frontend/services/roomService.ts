@@ -190,8 +190,13 @@ export class RoomService {
       wsClient: null,
       webrtcManager: null,
       participants: new Map(),
+      hosts: new Map(),
+      waitingParticipants: new Map(),
       localParticipant: null,
-      speakingParticipants: new Set(),
+      unmutedParticipants: new Set(),
+      cameraOnParticipants: new Set(),
+      sharingScreenParticipants: new Set(),
+      raisingHandParticipants: new Set(),
       localStream: null,
       screenShareStream: null,
       messages: [],
@@ -199,7 +204,6 @@ export class RoomService {
       isChatPanelOpen: false,
       isParticipantsPanelOpen: false,
       isWaitingRoom: false,
-      pendingParticipants: [],
       selectedParticipantId: null,
       gridLayout: 'gallery',
       isPinned: false,
@@ -262,50 +266,43 @@ export class RoomService {
     this.wsClient.on('room_state', (message) => {
       const payload = message.payload as RoomStatePayload;
       const newParticipants = new Map<string, Participant>();
+      const newHosts = new Map<string, Participant>();
+      const newWaiting = new Map<string, Participant>();
 
       payload.hosts?.forEach((host) => {
-        newParticipants.set(host.clientId, {
+        const participant: Participant = {
           id: host.clientId,
           username: host.displayName,
           role: 'host',
-          isAudioEnabled: true,
-          isVideoEnabled: true,
-          isScreenSharing: false,
-          isSpeaking: false,
-          lastActivity: new Date(),
-        });
+        };
+        newParticipants.set(host.clientId, participant);
+        newHosts.set(host.clientId, participant);
       });
 
       payload.participants?.forEach((participant) => {
-        newParticipants.set(participant.clientId, {
+        const p: Participant = {
           id: participant.clientId,
           username: participant.displayName,
           role: 'participant',
-          isAudioEnabled: true,
-          isVideoEnabled: true,
-          isScreenSharing: false,
-          isSpeaking: false,
-          lastActivity: new Date(),
-        });
+        };
+        newParticipants.set(participant.clientId, p);
       });
 
-      const waitingParticipants: Participant[] =
-        payload.waitingUsers?.map((user) => ({
+      payload.waitingUsers?.forEach((user) => {
+        const participant: Participant = {
           id: user.clientId,
           username: user.displayName,
-          role: 'participant' as const,
-          isAudioEnabled: false,
-          isVideoEnabled: false,
-          isScreenSharing: false,
-          isSpeaking: false,
-          lastActivity: new Date(),
-        })) || [];
+          role: 'waiting',
+        };
+        newWaiting.set(user.clientId, participant);
+      });
 
       const isHost = payload.hosts?.some((h) => h.clientId === this.clientInfo?.clientId) || false;
 
       useRoomStore.setState({
         participants: newParticipants,
-        pendingParticipants: waitingParticipants,
+        hosts: newHosts,
+        waitingParticipants: newWaiting,
         isHost,
         isJoined: true,
       });
@@ -331,20 +328,12 @@ export class RoomService {
 
     this.wsClient.on('raise_hand', (message) => {
       const payload = message.payload as HandStatePayload;
-      useRoomStore.setState((state) => {
-        const newSpeaking = new Set(state.speakingParticipants);
-        newSpeaking.add(payload.clientId);
-        return { speakingParticipants: newSpeaking };
-      });
+      useRoomStore.getState().setHandRaised(payload.clientId, true);
     });
 
     this.wsClient.on('lower_hand', (message) => {
       const payload = message.payload as HandStatePayload;
-      useRoomStore.setState((state) => {
-        const newSpeaking = new Set(state.speakingParticipants);
-        newSpeaking.delete(payload.clientId);
-        return { speakingParticipants: newSpeaking };
-      });
+      useRoomStore.getState().setHandRaised(payload.clientId, false);
     });
 
     this.wsClient.onConnectionChange?.((connectionState) => {

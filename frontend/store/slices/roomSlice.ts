@@ -104,47 +104,41 @@ export const createRoomSlice: StateCreator<
     wsClient.on('room_state', (message) => {
       const payload = message.payload as RoomStatePayload;
       const newParticipants = new Map<string, Participant>();
+      const newHosts = new Map<string, Participant>();
+      const newWaiting = new Map<string, Participant>();
       
       payload.hosts?.forEach((host) => {
-        newParticipants.set(host.clientId, {
+        const participant: Participant = {
           id: host.clientId,
           username: host.displayName,
           role: 'host',
-          isAudioEnabled: true,
-          isVideoEnabled: true,
-          isScreenSharing: false,
-          isSpeaking: false,
-          lastActivity: new Date(),
-        });
+        };
+        newParticipants.set(host.clientId, participant);
+        newHosts.set(host.clientId, participant);
       });
 
       payload.participants?.forEach((participant) => {
-        newParticipants.set(participant.clientId, {
+        const p: Participant = {
           id: participant.clientId,
           username: participant.displayName,
           role: 'participant',
-          isAudioEnabled: true,
-          isVideoEnabled: true,
-          isScreenSharing: false,
-          isSpeaking: false,
-          lastActivity: new Date(),
-        });
+        };
+        newParticipants.set(participant.clientId, p);
       });
       
-      const waitingParticipants: Participant[] = payload.waitingUsers?.map((user) => ({
-        id: user.clientId,
-        username: user.displayName,
-        role: 'participant' as const,
-        isAudioEnabled: false,
-        isVideoEnabled: false,
-        isScreenSharing: false,
-        isSpeaking: false,
-        lastActivity: new Date(),
-      })) || [];
+      payload.waitingUsers?.forEach((user) => {
+        const participant: Participant = {
+          id: user.clientId,
+          username: user.displayName,
+          role: 'waiting',
+        };
+        newWaiting.set(user.clientId, participant);
+      });
 
       set({
         participants: newParticipants,
-        pendingParticipants: waitingParticipants,
+        hosts: newHosts,
+        waitingParticipants: newWaiting,
         isHost: payload.hosts?.some((h) => h.clientId === clientInfo.clientId) || false,
       });
     });
@@ -159,20 +153,12 @@ export const createRoomSlice: StateCreator<
 
     wsClient.on('raise_hand', (message) => {
       const payload = message.payload as HandStatePayload;
-      set((state) => {
-        const newSpeaking = new Set(state.speakingParticipants);
-        newSpeaking.add(payload.clientId);
-        return { speakingParticipants: newSpeaking };
-      });
+      get().setHandRaised(payload.clientId, true);
     });
 
     wsClient.on('lower_hand', (message) => {
       const payload = message.payload as HandStatePayload;
-      set((state) => {
-        const newSpeaking = new Set(state.speakingParticipants);
-        newSpeaking.delete(payload.clientId);
-        return { speakingParticipants: newSpeaking };
-      });
+      get().setHandRaised(payload.clientId, false);
     });
 
     wsClient.onConnectionChange?.((connectionState) => {

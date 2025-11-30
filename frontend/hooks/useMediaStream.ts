@@ -82,6 +82,7 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
     isScreenSharing,
     availableDevices,
     selectedDevices,
+    setLocalStream,
     toggleAudio,
     toggleVideo,
     startScreenShare,
@@ -130,6 +131,13 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
+      
+      // Store stream in Zustand store
+      setLocalStream(stream);
+      
+      // Check which tracks were actually obtained
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
 
       setState(prev => ({
         ...prev,
