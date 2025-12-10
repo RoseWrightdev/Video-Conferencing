@@ -146,15 +146,27 @@ func (h *Hub) ServeWs(c *gin.Context) {
 	roomId := c.Param("roomId")
 	room := h.getOrCreateRoom(RoomIdType(roomId))
 
-	displayName := claims.Subject // Fallback to subject if name is not in token
-	if claims.Name != "" {
-		displayName = claims.Name
-	} else if claims.Email != "" {
-		// Use email prefix as display name
-		if parts := strings.Split(claims.Email, "@"); len(parts) > 0 {
-			displayName = parts[0]
+	// Get username from query parameter (sent by frontend with session name/email)
+	usernameParam := c.Query("username")
+
+	displayName := usernameParam // Use frontend-provided username first
+	if displayName == "" {
+		// Fallback to JWT claims if username param not provided
+		displayName = claims.Subject // Fallback to subject if name is not in token
+		if claims.Name != "" {
+			displayName = claims.Name
+		} else if claims.Email != "" {
+			// Use email prefix as display name
+			if parts := strings.Split(claims.Email, "@"); len(parts) > 0 {
+				displayName = parts[0]
+			}
 		}
 	}
+
+	slog.Info("Setting display name for client",
+		"usernameParam", usernameParam,
+		"finalDisplayName", displayName,
+		"clientId", claims.Subject)
 
 	client := &Client{
 		conn:        conn,

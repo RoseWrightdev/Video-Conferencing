@@ -107,9 +107,13 @@ func (r *Room) handleClientConnect(client *Client) {
 	if len(r.participants) == 0 && len(r.hosts) == 0 {
 		slog.Info("First user joined, making them host.", "room", r.ID, "ClientId", client.ID)
 		r.addHost(client)
+		// Broadcast initial room state to the new host
+		r.sendRoomStateToClient(client)
 		return
 	}
 	r.addWaiting(client)
+	// Send current room state to the waiting client so they know they're waiting
+	r.sendRoomStateToClient(client)
 }
 
 // handleClientLeft manages cleanup when a client disconnects.
@@ -351,7 +355,13 @@ func clientsMapToSlice(m map[ClientIdType]*Client) []*Client {
 func (r *Room) getRoomState() RoomStatePayload {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.getRoomStateUnsafe()
+}
 
+// getRoomStateUnsafe returns the current room state without acquiring any locks.
+// Thread Safety: This method is NOT thread-safe and must only be called when
+// the room's mutex lock is already held.
+func (r *Room) getRoomStateUnsafe() RoomStatePayload {
 	// Convert client maps to slices of ClientInfo
 	hosts := make([]ClientInfo, 0, len(r.hosts))
 	for _, client := range r.hosts {
@@ -402,4 +412,32 @@ func (r *Room) getRoomState() RoomStatePayload {
 		WaitingUsers:  waitingUsers,
 		SharingScreen: sharingScreen,
 	}
+}
+
+// sendRoomStateToClient sends the current room state directly to a specific client.
+// This is used when a client first connects to give them the initial state.
+// Thread Safety: This method is NOT thread-safe and must only be called when
+// the room's mutex lock is already held.
+func (r *Room) sendRoomStateToClient(client *Client) {
+	roomState := r.getRoomStateUnsafe()
+
+	if msg, err := json.Marshal(Message{Event: EventRoomState, Payload: roomState}); err == nil {
+		select {
+		case client.send <- msg:
+		default:
+			slog.Warn("Failed to send room state to client - channel full", "ClientId", client.ID, "RoomId", r.ID)
+		}
+	} else {
+		slog.Error("Failed to marshal room state", "error", err, "ClientId", client.ID, "RoomId", r.ID)
+	}
+}
+
+// broadcastRoomState sends the current room state to all clients in the room.
+// This is used after state changes (accept_waiting, deny_waiting, etc.) to
+// keep all clients synchronized with the current state.
+// Thread Safety: This method is NOT thread-safe and must only be called when
+// the room's mutex lock is already held.
+func (r *Room) broadcastRoomState() {
+	roomState := r.getRoomStateUnsafe()
+	r.broadcast(EventRoomState, roomState, nil)
 }

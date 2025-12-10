@@ -7,6 +7,9 @@ import { useMediaStream } from '@/hooks/useMediaStream';
 import ChatPanel from '@/components/chat-panel/components/ChatPanel';
 import ControlsPanel from '@/components/room/components/Controls';
 import PermissionsScreen from '@/components/room/components/PermissionsScreen';
+import { WaitingScreen } from '@/components/room/WaitingScreen';
+import ParticipantGrid, { type GridLayout } from '@/components/participants/components/ParticipantGrid';
+import ParticipantsPanel from '@/components/participants/components/ParticipantsPanel';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import { useRoomStore } from '@/store/useRoomStore';
@@ -18,9 +21,10 @@ export default function RoomPage() {
   const roomId = params.roomid as string;
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [isParticipantsPanelOpen, setIsParticipantsPanelOpen] = useState(false);
+  const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
+  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
+  const [layoutMode, setLayoutMode] = useState<GridLayout>('gallery');
 
   const { requestPermissions, initializeStream } = useMediaStream();
   const { 
@@ -29,12 +33,22 @@ export default function RoomPage() {
     wsClient, 
     clientInfo, 
     raisingHandParticipants,
-    setHandRaised 
+    setHandRaised,
+    participants,
+    unmutedParticipants,
+    cameraOnParticipants,
+    sharingScreenParticipants,
+    waitingParticipants,
+    isWaitingRoom,
+    roomName,
+    approveParticipant,
+    kickParticipant,
   } = useRoomStore();
 
   const { 
     currentUserId, 
-    connectionState 
+    connectionState,
+    isHost 
   } = useRoom({
     roomId,
     username: session?.user?.name || session?.user?.email || 'Anonymous',
@@ -70,24 +84,18 @@ export default function RoomPage() {
   // Auto-initialize stream when authenticated
   useEffect(() => {
     if (status === 'authenticated' && !localStream && !permissionsGranted) {
-      console.log('Auto-requesting permissions...');
       handleRequestPermissions();
     }
   }, [status]);
 
-  // Connect video element to local stream
-  useEffect(() => {
-    if (videoElement && localStream) {
-      console.log('Connecting video element to stream:', localStream);
-      videoElement.srcObject = localStream;
-      videoElement.play().catch((e: Error) => console.error('Error playing video:', e));
-    }
-  }, [videoElement, localStream]);
-
   // Audio level detection for speaking indicator
   useEffect(() => {
-    if (!localStream || !isAudioEnabled) {
-      setIsSpeaking(false);
+    if (!localStream || !isAudioEnabled || !currentUserId) {
+      setSpeakingParticipants(prev => {
+        const next = new Set(prev);
+        if (currentUserId) next.delete(currentUserId);
+        return next;
+      });
       return;
     }
 
@@ -106,7 +114,17 @@ export default function RoomPage() {
       const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
       
       // Threshold for speaking detection (lower = more sensitive)
-      setIsSpeaking(average > 3);
+      const isSpeaking = average > 3;
+      
+      setSpeakingParticipants(prev => {
+        const next = new Set(prev);
+        if (isSpeaking) {
+          next.add(currentUserId);
+        } else {
+          next.delete(currentUserId);
+        }
+        return next;
+      });
       
       animationFrame = requestAnimationFrame(detectSpeaking);
     };
@@ -119,7 +137,7 @@ export default function RoomPage() {
       analyser.disconnect();
       audioContext.close();
     };
-  }, [localStream, isAudioEnabled]);
+  }, [localStream, isAudioEnabled, currentUserId]);
 
   const chatDependencies = {
     chatService: {
@@ -150,7 +168,7 @@ export default function RoomPage() {
       },
     },
     roomControlService: {
-      isHost: false,
+      isHost: isHost || false,
       isMuted: !isAudioEnabled,
       isHandRaised: currentUserId ? raisingHandParticipants.has(currentUserId) : false,
       canScreenShare: true,
@@ -206,6 +224,18 @@ export default function RoomPage() {
     );
   }
 
+  // Show waiting screen if user is in waiting room
+  if (isWaitingRoom) {
+    return (
+      <WaitingScreen
+        roomName={roomName}
+        username={session?.user?.name || session?.user?.email || 'Guest'}
+        isConnected={connectionState.wsConnected}
+        isReconnecting={connectionState.wsReconnecting}
+      />
+    );
+  }
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
       {/* Header */}
@@ -229,23 +259,35 @@ export default function RoomPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Video Area */}
         <div className="flex-1 flex flex-col">
-          <div className="flex-1 bg-[#1a1a1a] flex items-center justify-center relative">
-            <video
-              ref={setVideoElement}
-              autoPlay
-              playsInline
-              muted
-              className={`max-w-full max-h-full object-contain rounded-lg transition-all duration-200 ${
-                isSpeaking ? 'ring-4 ring-green-500 shadow-lg shadow-green-500/50' : ''
-              }`}
-              style={{ transform: 'scaleX(-1)' }}
+          <div className="flex-1 bg-[#1a1a1a] overflow-hidden relative">
+            {/* Layout Mode Selector */}
+            <div className="absolute top-4 right-4 z-10 flex gap-2">
+              <select
+                value={layoutMode}
+                onChange={(e) => setLayoutMode(e.target.value as typeof layoutMode)}
+                className="px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm text-white text-sm border border-white/10 hover:bg-black/70 transition-colors"
+              >
+                <option value="gallery">Gallery</option>
+                <option value="speaker">Speaker</option>
+                <option value="sidebar">Sidebar</option>
+              </select>
+            </div>
+
+            {/* Participant Grid */}
+            <ParticipantGrid
+              participants={Array.from(participants.values())}
+              currentUserId={currentUserId || undefined}
+              pinnedParticipantId={pinnedParticipantId}
+              layout={layoutMode}
+              unmutedParticipants={unmutedParticipants}
+              cameraOnParticipants={cameraOnParticipants}
+              sharingScreenParticipants={sharingScreenParticipants}
+              raisingHandParticipants={raisingHandParticipants}
+              speakingParticipants={speakingParticipants}
+              onPinParticipant={(id) => {
+                setPinnedParticipantId(pinnedParticipantId === id ? null : id);
+              }}
             />
-            {!localStream && (
-              <div className="text-center absolute">
-                <p className="text-muted-foreground mb-2">Initializing camera...</p>
-                <p className="text-sm text-muted-foreground/70">hasStream: {String(!!localStream)}</p>
-              </div>
-            )}
           </div>
           
           {/* Controls at bottom of video */}
@@ -259,6 +301,45 @@ export default function RoomPage() {
           <div className="w-[400px] border-l shrink-0 flex flex-col bg-black">
             <ChatPanel dependencies={chatDependencies} />
           </div>
+        )}
+
+        {/* Participants Panel - Right Side */}
+        {isParticipantsPanelOpen && (
+          <ParticipantsPanel
+            participants={Array.from(participants.values())}
+            waitingParticipants={Array.from(waitingParticipants.values())}
+            currentUserId={currentUserId || undefined}
+            isHost={isHost || false}
+            onClose={() => setIsParticipantsPanelOpen(false)}
+            onMuteParticipant={(id) => {
+              // Host can mute participants via WebSocket
+              if (isHost && wsClient && clientInfo) {
+                // TODO: Implement mute participant event
+                console.log('Mute participant:', id);
+              }
+            }}
+            onRemoveParticipant={(id) => {
+              // Host can remove participants via WebSocket
+              if (isHost && wsClient && clientInfo) {
+                // TODO: Implement remove participant event
+                console.log('Remove participant:', id);
+              }
+            }}
+            onApproveWaiting={(id) => {
+              if (isHost) {
+                approveParticipant(id);
+              }
+            }}
+            onDenyWaiting={(id) => {
+              if (isHost) {
+                kickParticipant(id);
+              }
+            }}
+            unmutedParticipants={unmutedParticipants}
+            cameraOnParticipants={cameraOnParticipants}
+            sharingScreenParticipants={sharingScreenParticipants}
+            raisingHandParticipants={raisingHandParticipants}
+          />
         )}
       </div>
     </div>

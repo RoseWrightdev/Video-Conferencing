@@ -347,6 +347,7 @@ func (r *Room) handleRequestWaiting(client *Client, event Event, payload any) {
 //   - Added to participants map
 //   - Role changed to participant
 //   - Full meeting features become available
+//   - DisplayName and all other fields are preserved
 //
 // Host Authority:
 // Only hosts can accept waiting clients, maintaining meeting control
@@ -368,22 +369,50 @@ func (r *Room) handleAcceptWaiting(client *Client, event Event, payload any) {
 	p, ok := assertPayload[AcceptWaitingPayload](payload)
 	logHelper(ok, client.ID, GetFuncName(), r.ID)
 	if !ok {
+		slog.Error("Failed to assert AcceptWaitingPayload", "ClientId", client.ID, "RoomId", r.ID, "payload", payload)
 		return
 	}
+
+	slog.Info("Accept waiting - checking waiting room",
+		"HostClientId", client.ID,
+		"TargetClientId", p.ClientId,
+		"WaitingCount", len(r.waiting),
+		"RoomId", r.ID)
 
 	// Security check: Only accept requests for clients that are actually waiting
 	waitingClient, exists := r.waiting[p.ClientId]
 	if !exists {
-		slog.Warn("Attempted to accept non-waiting client", "RequestingClientId", client.ID, "TargetClientId", p.ClientId, "RoomId", r.ID)
+		// Log all waiting clients to debug
+		waitingIds := make([]string, 0, len(r.waiting))
+		for id := range r.waiting {
+			waitingIds = append(waitingIds, string(id))
+		}
+		slog.Warn("Attempted to accept non-waiting client",
+			"RequestingClientId", client.ID,
+			"TargetClientId", p.ClientId,
+			"RoomId", r.ID,
+			"WaitingCount", len(r.waiting),
+			"WaitingClientIds", waitingIds)
 		return
 	}
 
-	if waitingClient != nil {
-		r.deleteWaiting(waitingClient)
-		r.addParticipant(waitingClient)
-		slog.Info("Client accepted from waiting room", "AcceptedClientId", waitingClient.ID, "AcceptedByHostId", client.ID, "RoomId", r.ID)
-	}
+	// CRITICAL: Preserve all client fields especially DisplayName
+	// Update role to participant
+	waitingClient.Role = RoleTypeParticipant
+
+	// Move from waiting to participants map
+	r.participants[p.ClientId] = waitingClient
+	delete(r.waiting, p.ClientId)
+
+	slog.Info("Client accepted from waiting room",
+		"AcceptedClientId", waitingClient.ID,
+		"DisplayName", waitingClient.DisplayName,
+		"AcceptedByHostId", client.ID,
+		"RoomId", r.ID)
+
 	r.broadcast(event, p, nil)
+	// Broadcast updated room state so all clients are synchronized
+	r.broadcastRoomState()
 }
 
 // handleDenyWaiting processes host decisions to deny clients from the waiting room.
@@ -423,19 +452,29 @@ func (r *Room) handleDenyWaiting(client *Client, event Event, payload any) {
 	if !ok {
 		return
 	}
+
 	// Find the waiting client to deny
-	var waitingClient *Client
-	for _, c := range r.waiting {
-		if c.ID == p.ClientId {
-			waitingClient = c
-			break
-		}
+	waitingClient, exists := r.waiting[p.ClientId]
+	if !exists {
+		slog.Warn("Deny waiting failed - client not found in waiting room",
+			"TargetClientId", p.ClientId,
+			"HostClientId", client.ID,
+			"RoomId", r.ID)
+		return
 	}
 
-	if waitingClient != nil {
-		r.deleteWaiting(waitingClient)
-	}
+	// Remove from waiting map
+	delete(r.waiting, p.ClientId)
+
+	slog.Info("Waiting client denied",
+		"TargetClientId", p.ClientId,
+		"DisplayName", waitingClient.DisplayName,
+		"HostClientId", client.ID,
+		"RoomId", r.ID)
+
 	r.broadcast(event, p, HasWaitingPermission())
+	// Broadcast updated room state so all clients are synchronized
+	r.broadcastRoomState()
 }
 
 // handleRequestScreenshare processes participant requests to share their screen.

@@ -71,16 +71,23 @@ export const useRoom = (params?: {
   const joinRoomWithAuth = useCallback(async (
     roomId: string,
     username: string,
-    token?: string,
+    token: string,
   ) => {    
     if (isInitializing.current) return;
+    
+    // Validate token is provided before attempting connection
+    if (!token || token.trim() === '') {
+      const error = 'Authentication token is required. Please sign in to continue.';
+      handleError(error);
+      throw new Error(error);
+    }
     
     try {
       isInitializing.current = true;
       if (!roomServiceRef.current) {
         roomServiceRef.current = new RoomService();
       }
-      await roomServiceRef.current.initializeRoom(roomId, username, token || '');
+      await roomServiceRef.current.initializeRoom(roomId, username, token);
       await roomServiceRef.current.joinRoom();
       hasInitialized.current = true;
     } catch (error) {
@@ -94,8 +101,10 @@ export const useRoom = (params?: {
   }, [handleError]);
 
   const exitRoom = useCallback(() => {
-    roomServiceRef.current?.leaveRoom();
-    roomServiceRef.current = null;
+    if (roomServiceRef.current) {
+      roomServiceRef.current.leaveRoom();
+      roomServiceRef.current = null;
+    }
     hasInitialized.current = false;
     isInitializing.current = false;
   }, []);
@@ -115,11 +124,14 @@ export const useRoom = (params?: {
     }
   }, [params?.autoJoin, params?.roomId, params?.username, params?.token, isJoined, joinRoomWithAuth]);
 
-  // Cleanup effect
+  // Cleanup effect - only disconnect on actual unmount, not during React Strict Mode double-mounting
   useEffect(() => {
     return () => {
-      roomServiceRef.current?.leaveRoom();
-      roomServiceRef.current = null;
+      // Only cleanup if we actually initialized a connection
+      if (hasInitialized.current && roomServiceRef.current) {
+        roomServiceRef.current.leaveRoom();
+        roomServiceRef.current = null;
+      }
     };
   }, []);
 

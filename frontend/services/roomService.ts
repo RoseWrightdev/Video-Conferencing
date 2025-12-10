@@ -81,13 +81,36 @@ export class RoomService {
       this.wsClient.disconnect();
     }
 
+    // Validate token is provided
+    if (!token || token.trim() === '') {
+      throw new Error('Authentication token is required. Please sign in to continue.');
+    }
+
+    // Extract client ID from JWT token's 'sub' claim
+    // Backend expects clientId to match the token's subject
+    let clientId: string;
+    try {
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) {
+        throw new Error('Invalid JWT token format');
+      }
+      const payload = JSON.parse(atob(tokenParts[1]));
+      clientId = payload.sub || payload.subject;
+      if (!clientId) {
+        throw new Error('JWT token missing sub/subject claim');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to parse JWT token';
+      throw new Error(`Authentication failed: ${message}`);
+    }
+
     this.clientInfo = {
-      clientId: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      clientId,
       displayName: username,
     };
 
     this.wsClient = new WebSocketClient({
-      url: `ws://localhost:8080/ws/hub/${roomId}`,
+      url: `ws://localhost:8080/ws/hub/${roomId}?username=${encodeURIComponent(username)}`,
       token,
       autoReconnect: true,
       reconnectInterval: 3000,
@@ -99,6 +122,23 @@ export class RoomService {
     try {
       await this.wsClient.connect();
       this.webrtcManager = new WebRTCManager(this.clientInfo, this.wsClient);
+
+      // Setup WebRTC stream handlers to update participant streams
+      this.webrtcManager.onStreamAdded((stream, peerId, streamType) => {
+        const store = useRoomStore.getState();
+        const participant = store.participants.get(peerId);
+        if (participant) {
+          store.updateParticipant(peerId, { stream });
+        }
+      });
+
+      this.webrtcManager.onStreamRemoved((stream, peerId, streamType) => {
+        const store = useRoomStore.getState();
+        const participant = store.participants.get(peerId);
+        if (participant) {
+          store.updateParticipant(peerId, { stream: undefined });
+        }
+      });
 
       useRoomStore.setState({
         roomId,
@@ -263,6 +303,13 @@ export class RoomService {
       useRoomStore.setState({ messages: chatMessages });
     });
 
+    this.wsClient.on('delete_chat', (message) => {
+      const payload = message.payload as { chatId: string; clientId: string; displayName: string };
+      useRoomStore.setState((state) => ({
+        messages: state.messages.filter(msg => msg.id !== payload.chatId)
+      }));
+    });
+
     this.wsClient.on('room_state', (message) => {
       const payload = message.payload as RoomStatePayload;
       const newParticipants = new Map<string, Participant>();
@@ -298,13 +345,16 @@ export class RoomService {
       });
 
       const isHost = payload.hosts?.some((h) => h.clientId === this.clientInfo?.clientId) || false;
+      const isWaiting = payload.waitingUsers?.some((w) => w.clientId === this.clientInfo?.clientId) || false;
+      const isParticipant = payload.participants?.some((p) => p.clientId === this.clientInfo?.clientId) || false;
 
       useRoomStore.setState({
         participants: newParticipants,
         hosts: newHosts,
         waitingParticipants: newWaiting,
         isHost,
-        isJoined: true,
+        isJoined: isHost || isParticipant, // Only truly joined if host or participant
+        isWaitingRoom: isWaiting, // Show waiting screen if in waiting list
       });
 
       // Request chat history when room state is received (for hosts or approved participants)
@@ -334,6 +384,44 @@ export class RoomService {
     this.wsClient.on('lower_hand', (message) => {
       const payload = message.payload as HandStatePayload;
       useRoomStore.getState().setHandRaised(payload.clientId, false);
+    });
+
+    // Handle waiting room requests (host only receives these)
+    this.wsClient.on('waiting_request', (message) => {
+      const payload = message.payload as ClientInfo;
+      const waitingParticipant: Participant = {
+        id: payload.clientId,
+        username: payload.displayName,
+        role: 'waiting',
+      };
+      
+      useRoomStore.setState((state) => {
+        const newWaiting = new Map(state.waitingParticipants);
+        newWaiting.set(payload.clientId, waitingParticipant);
+        return { waitingParticipants: newWaiting };
+      });
+    });
+
+    // Handle screen share requests (host only receives these)
+    this.wsClient.on('request_screenshare', (message) => {
+      const payload = message.payload as ClientInfo;
+      // Store screen share request for host to approve/deny
+      // TODO: Add UI notification for hosts about pending screen share request
+      console.log('Screen share request from:', payload.displayName);
+    });
+
+    // Handle screen share approval (participant receives this)
+    this.wsClient.on('accept_screenshare', () => {
+      // Participant was approved to share screen
+      // This signals the participant can now start screen sharing
+      console.log('Screen share approved by host');
+      // TODO: Automatically trigger screen share or show success notification
+    });
+
+    // Handle screen share denial (participant receives this)
+    this.wsClient.on('deny_screenshare', () => {
+      // Participant's screen share request was denied
+      useRoomStore.getState().handleError('Screen share request denied by host');
     });
 
     this.wsClient.onConnectionChange?.((connectionState) => {

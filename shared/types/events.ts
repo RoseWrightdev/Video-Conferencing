@@ -69,10 +69,9 @@ export type HandStatePayload = ClientInfo;
 export type RequestWaitingPayload = ClientInfo;
 
 // accept_waiting / deny_waiting
-export interface WaitingRoomDecisionPayload {
-  clientId: string; // The client being accepted/denied
-  // The host making the decision is in the top-level ClientInfo
-}
+// Contains the target client's info (who is being accepted/denied)
+export type AcceptWaitingPayload = ClientInfo;
+export type DenyWaitingPayload = ClientInfo;
 
 // request_screenshare
 export type RequestScreensharePayload = ClientInfo;
@@ -80,6 +79,7 @@ export type RequestScreensharePayload = ClientInfo;
 // accept_screenshare / deny_screenshare
 export interface ScreenshareDecisionPayload {
   clientId: string; // The client being accepted/denied
+  displayName: string; // The client's display name
 }
 
 // WebRTC Payloads

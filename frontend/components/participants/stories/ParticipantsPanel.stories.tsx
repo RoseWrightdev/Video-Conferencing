@@ -1,0 +1,277 @@
+import ParticipantsPanel from '@/components/participants/components/ParticipantsPanel';
+import { type Meta, type StoryObj } from '@storybook/nextjs-vite';
+import type { Participant } from '@/store/types';
+
+const meta: Meta<typeof ParticipantsPanel> = {
+  title: 'Room/ParticipantsPanel',
+  component: ParticipantsPanel,
+  tags: ['autodocs'],
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Sidebar panel displaying participant list with management controls. Shows participant status, hand raises, screen sharing, and provides host controls for muting and removing participants.',
+      },
+    },
+  },
+  argTypes: {
+    participants: {
+      control: false,
+      description: 'Array of participant objects',
+    },
+    isHost: {
+      control: 'boolean',
+      description: 'Whether current user is host (enables management controls)',
+    },
+    currentUserId: {
+      control: 'text',
+      description: 'ID of the current user',
+    },
+    onClose: {
+      action: 'close',
+      description: 'Callback when panel is closed',
+    },
+    onMuteParticipant: {
+      action: 'mute',
+      description: 'Callback when host mutes a participant',
+    },
+    onRemoveParticipant: {
+      action: 'remove',
+      description: 'Callback when host removes a participant',
+    },
+  },
+};
+
+export default meta;
+
+type Story = StoryObj<typeof ParticipantsPanel>;
+
+// Mock participants
+const mockParticipants: Participant[] = [
+  { id: '1', username: 'Alice Johnson', role: 'host' },
+  { id: '2', username: 'Bob Smith', role: 'participant' },
+  { id: '3', username: 'Charlie Davis', role: 'participant' },
+  { id: '4', username: 'Diana Prince', role: 'participant' },
+  { id: '5', username: 'Eve Thompson', role: 'participant' },
+  { id: '6', username: 'Frank Miller', role: 'participant' },
+  { id: '7', username: 'Grace Lee', role: 'participant' },
+  { id: '8', username: 'Henry Wilson', role: 'participant' },
+];
+
+/**
+ * Empty participants panel
+ */
+export const Empty: Story = {
+  args: {
+    participants: [],
+    currentUserId: '1',
+    isHost: false,
+    onClose: () => {},
+  },
+};
+
+/**
+ * Basic participant list as regular user
+ */
+export const AsParticipant: Story = {
+  args: {
+    participants: mockParticipants.slice(0, 4),
+    currentUserId: '2',
+    isHost: false,
+    onClose: () => {},
+    unmutedParticipants: new Set(['1', '2', '3']),
+    cameraOnParticipants: new Set(['1', '2', '4']),
+  },
+};
+
+/**
+ * Participant list as host (shows controls on hover)
+ */
+export const AsHost: Story = {
+  args: {
+    participants: mockParticipants.slice(0, 4),
+    currentUserId: '1',
+    isHost: true,
+    onClose: () => {},
+    onMuteParticipant: () => {},
+    onRemoveParticipant: () => {},
+    unmutedParticipants: new Set(['1', '2', '3', '4']),
+    cameraOnParticipants: new Set(['1', '2', '3', '4']),
+  },
+};
+
+/**
+ * Panel with hand raises
+ */
+export const WithHandRaises: Story = {
+  args: {
+    participants: mockParticipants.slice(0, 6),
+    currentUserId: '1',
+    isHost: true,
+    onClose: () => {},
+    onMuteParticipant: () => {},
+    unmutedParticipants: new Set(['1', '2', '3', '4', '5', '6']),
+    cameraOnParticipants: new Set(['1', '2', '3', '4', '5']),
+    raisingHandParticipants: new Set(['3', '5']),
+  },
+};
+
+/**
+ * Panel with screen sharing participant
+ */
+export const WithScreenSharing: Story = {
+  args: {
+    participants: mockParticipants.slice(0, 5),
+    currentUserId: '1',
+    isHost: false,
+    onClose: () => {},
+    unmutedParticipants: new Set(['1', '2', '3', '4', '5']),
+    cameraOnParticipants: new Set(['1', '2', '3', '4', '5']),
+    sharingScreenParticipants: new Set(['3']),
+  },
+};
+
+/**
+ * Panel with mixed participant states
+ */
+export const MixedStates: Story = {
+  args: {
+    participants: mockParticipants,
+    currentUserId: '1',
+    isHost: true,
+    onClose: () => {},
+    onMuteParticipant: () => {},
+    onRemoveParticipant: () => {},
+    unmutedParticipants: new Set(['1', '2', '3', '5', '7']),
+    cameraOnParticipants: new Set(['1', '2', '4', '6', '8']),
+    sharingScreenParticipants: new Set(['4']),
+    raisingHandParticipants: new Set(['3', '6', '7']),
+  },
+};
+
+/**
+ * Many participants (scrollable)
+ */
+export const ManyParticipants: Story = {
+  args: {
+    participants: [
+      ...mockParticipants,
+      { id: '9', username: 'Ivy Chen', role: 'participant' },
+      { id: '10', username: 'Jack Robinson', role: 'participant' },
+      { id: '11', username: 'Kelly Martinez', role: 'participant' },
+      { id: '12', username: 'Leo Anderson', role: 'participant' },
+      { id: '13', username: 'Maya Patel', role: 'participant' },
+      { id: '14', username: 'Noah Taylor', role: 'participant' },
+      { id: '15', username: 'Olivia Brown', role: 'participant' },
+    ],
+    currentUserId: '1',
+    isHost: true,
+    onClose: () => {},
+    onMuteParticipant: () => {},
+    onRemoveParticipant: () => {},
+    unmutedParticipants: new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']),
+    cameraOnParticipants: new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']),
+    raisingHandParticipants: new Set(['5', '8', '12']),
+  },
+};
+
+/**
+ * Minimal audio/video activity
+ */
+export const LowActivity: Story = {
+  args: {
+    participants: mockParticipants.slice(0, 6),
+    currentUserId: '1',
+    isHost: false,
+    onClose: () => {},
+    unmutedParticipants: new Set(['1', '2']),
+    cameraOnParticipants: new Set(['1']),
+  },
+};
+
+/**
+ * High activity with multiple indicators
+ */
+export const HighActivity: Story = {
+  args: {
+    participants: mockParticipants,
+    currentUserId: '1',
+    isHost: false,
+    onClose: () => {},
+    unmutedParticipants: new Set(['1', '2', '3', '4', '5', '6', '7', '8']),
+    cameraOnParticipants: new Set(['1', '2', '3', '4', '5', '6', '7', '8']),
+    sharingScreenParticipants: new Set(['2', '5']),
+    raisingHandParticipants: new Set(['3', '4', '6', '7']),
+  },
+};
+
+/**
+ * Interactive example with state management
+ */
+export const Interactive: Story = {
+  render: (args) => {
+    const [participants, setParticipants] = React.useState(args.participants || []);
+    const [unmuted, setUnmuted] = React.useState<Set<string>>(args.unmutedParticipants || new Set());
+
+    const handleMute = (id: string) => {
+      const newUnmuted = new Set(unmuted);
+      newUnmuted.delete(id);
+      setUnmuted(newUnmuted);
+    };
+
+    const handleRemove = (id: string) => {
+      setParticipants(participants.filter(p => p.id !== id));
+    };
+
+    return (
+      <div className="h-screen bg-gray-900 flex justify-end">
+        <ParticipantsPanel
+          participants={participants}
+          currentUserId="1"
+          isHost={true}
+          onClose={() => alert('Close panel')}
+          onMuteParticipant={handleMute}
+          onRemoveParticipant={handleRemove}
+          unmutedParticipants={unmuted}
+          cameraOnParticipants={new Set(['1', '2', '3', '4', '5', '6'])}
+          raisingHandParticipants={new Set(['3', '5'])}
+        />
+      </div>
+    );
+  },
+  args: {
+    participants: mockParticipants.slice(0, 6),
+    unmutedParticipants: new Set(['1', '2', '3', '4', '5', '6']),
+  },
+};
+
+import * as React from 'react';
+
+/**
+ * Panel in room context (with background)
+ */
+export const InRoomContext: Story = {
+  render: (args) => (
+    <div className="h-screen bg-gray-900 flex">
+      {/* Simulated video area */}
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-white/50 text-lg">Video Area</p>
+      </div>
+      
+      {/* Participants panel */}
+      <ParticipantsPanel {...args} />
+    </div>
+  ),
+  args: {
+    participants: mockParticipants.slice(0, 5),
+    currentUserId: '1',
+    isHost: true,
+    onClose: () => {},
+    onMuteParticipant: () => {},
+    onRemoveParticipant: () => {},
+    unmutedParticipants: new Set(['1', '2', '3', '4', '5']),
+    cameraOnParticipants: new Set(['1', '2', '3', '4']),
+    raisingHandParticipants: new Set(['3']),
+  },
+};

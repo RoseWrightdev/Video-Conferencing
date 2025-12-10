@@ -8,7 +8,8 @@ import type {
     GetRecentChatsPayload,
     HandStatePayload,
     RequestWaitingPayload,
-    WaitingRoomDecisionPayload,
+    AcceptWaitingPayload,
+    DenyWaitingPayload,
     RequestScreensharePayload,
     ScreenshareDecisionPayload,
     WebRTCOfferPayload,
@@ -65,7 +66,7 @@ export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'err
  */
 export interface WebSocketConfig {
   url: string;
-  token?: string;
+  token: string; // Required for authentication - no unauthenticated connections allowed
   autoReconnect?: boolean;
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
@@ -186,7 +187,7 @@ export class WebSocketClient {
    * 
    * @param config - WebSocket configuration options
    * @param config.url - WebSocket server URL (required)
-   * @param config.token - JWT authentication token (optional)
+   * @param config.token - JWT authentication token (required)
    * @param config.autoReconnect - Enable auto-reconnect (default: true)
    * @param config.reconnectInterval - Base reconnect delay in ms (default: 3000)
    * @param config.maxReconnectAttempts - Max retry count (default: 5)
@@ -194,7 +195,6 @@ export class WebSocketClient {
    */
   constructor(config: WebSocketConfig) {
     this.config = {
-      token: '',
       autoReconnect: true,
       reconnectInterval: 3000,
       maxReconnectAttempts: 5,
@@ -240,9 +240,7 @@ export class WebSocketClient {
         
         // Construct WebSocket URL with JWT token
         const wsUrl = new URL(this.config.url);
-        if (this.config.token) {
-          wsUrl.searchParams.set('token', this.config.token);
-        }
+        wsUrl.searchParams.set('token', this.config.token);
         
         this.ws = new WebSocket(wsUrl.toString());
         
@@ -468,13 +466,15 @@ export class WebSocketClient {
 
   /** Accept waiting user (host only) */
   acceptWaiting(targetClient: ClientInfo, hostInfo: ClientInfo): void {
-    const payload: WaitingRoomDecisionPayload = { ...hostInfo, clientId: targetClient.clientId };
+    // Backend expects just the target client's info
+    const payload: AcceptWaitingPayload = targetClient;
     this.send('accept_waiting', payload);
   }
 
   /** Deny waiting user (host only) */
   denyWaiting(targetClient: ClientInfo, hostInfo: ClientInfo): void {
-    const payload: WaitingRoomDecisionPayload = { ...hostInfo, clientId: targetClient.clientId };
+    // Backend expects just the target client's info
+    const payload: DenyWaitingPayload = targetClient;
     this.send('deny_waiting', payload);
   }
 
@@ -485,13 +485,13 @@ export class WebSocketClient {
   }
 
   /** Accept screen sharing request (host only) */
-  acceptScreenShare(targetClient: ClientInfo, hostInfo: ClientInfo): void {
+  acceptScreenshare(targetClient: ClientInfo, hostInfo: ClientInfo): void {
     const payload: ScreenshareDecisionPayload = { ...hostInfo, clientId: targetClient.clientId };
     this.send('accept_screenshare', payload);
   }
 
   /** Deny screen sharing request (host only) */
-  denyScreenShare(targetClient: ClientInfo, hostInfo: ClientInfo): void {
+  denyScreenshare(targetClient: ClientInfo, hostInfo: ClientInfo): void {
     const payload: ScreenshareDecisionPayload = { ...hostInfo, clientId: targetClient.clientId };
     this.send('deny_screenshare', payload);
   }

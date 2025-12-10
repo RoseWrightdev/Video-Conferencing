@@ -178,7 +178,8 @@ export const createParticipantSlice: StateCreator<
     const targetParticipant = waitingParticipants.get(participantId);
 
     if(wsClient && clientInfo && targetParticipant) {
-        wsClient.acceptWaiting({ clientId: targetParticipant.id, displayName: targetParticipant.username }, clientInfo);
+        const targetClientInfo = { clientId: targetParticipant.id, displayName: targetParticipant.username };
+        wsClient.acceptWaiting(targetClientInfo, clientInfo);
         set((state) => {
           const newWaiting = new Map(state.waitingParticipants);
           newWaiting.delete(participantId);

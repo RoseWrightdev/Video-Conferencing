@@ -74,11 +74,29 @@ export const createRoomSlice: StateCreator<
       state.wsClient.disconnect();
     }
 
+    // Extract client ID from JWT token's 'sub' claim (backend uses this as the client ID)
+    let clientId: string;
+    try {
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) {
+        throw new Error('Invalid JWT token format');
+      }
+      const payload = JSON.parse(atob(tokenParts[1]));
+      clientId = payload.sub || payload.subject;
+      if (!clientId) {
+        throw new Error('JWT token missing sub/subject claim');
+      }
+    } catch (error) {
+      console.error('[RoomSlice] Failed to extract clientId from token:', error);
+      throw new Error('Invalid authentication token');
+    }
+
     const clientInfo = {
-      clientId: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      clientId,
       displayName: username,
     };
 
+    console.log('[RoomSlice] Creating WebSocket client for room:', roomId);
     const wsClient = new WebSocketClient({
       url: `ws://localhost:8080/ws/hub/${roomId}`,
       token,
@@ -86,8 +104,10 @@ export const createRoomSlice: StateCreator<
       reconnectInterval: 3000,
       maxReconnectAttempts: 5,
     });
+    console.log('[RoomSlice] WebSocket client created');
 
     // Setup all WebSocket event handlers here
+    console.log('[RoomSlice] Registering WebSocket event handlers');
     wsClient.on('add_chat', (message) => {
       const chatPayload = message.payload as AddChatPayload;
       const chatMessage: ChatMessage = {
@@ -103,6 +123,12 @@ export const createRoomSlice: StateCreator<
 
     wsClient.on('room_state', (message) => {
       const payload = message.payload as RoomStatePayload;
+      console.log('[RoomSlice] room_state received:', {
+        hostsCount: payload.hosts?.length || 0,
+        participantsCount: payload.participants?.length || 0,
+        waitingCount: payload.waitingUsers?.length || 0,
+        payload
+      });
       const newParticipants = new Map<string, Participant>();
       const newHosts = new Map<string, Participant>();
       const newWaiting = new Map<string, Participant>();
@@ -135,6 +161,11 @@ export const createRoomSlice: StateCreator<
         newWaiting.set(user.clientId, participant);
       });
 
+      console.log('[RoomSlice] Setting participants state:', {
+        participantsCount: newParticipants.size,
+        hostsCount: newHosts.size,
+        waitingCount: newWaiting.size
+      });
       set({
         participants: newParticipants,
         hosts: newHosts,
@@ -172,8 +203,10 @@ export const createRoomSlice: StateCreator<
       get().handleError(`Connection error: ${error.message}`);
     });
 
+    console.log('[RoomSlice] All event handlers registered, calling connect()');
     try {
       await wsClient.connect();
+      console.log('[RoomSlice] WebSocket connected successfully');
       const webrtcManager = new WebRTCManager(clientInfo, wsClient);
 
       set({

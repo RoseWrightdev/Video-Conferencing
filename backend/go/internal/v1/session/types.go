@@ -90,6 +90,7 @@ const (
 	EventConnect    Event = "connect"    // Client establishes connection to room
 	EventDisconnect Event = "disconnect" // Client leaves the room
 	EventPing       Event = "ping"       // Heartbeat to keep connection alive
+	EventRoomState  Event = "room_state" // Full room state broadcast to clients
 
 	// Screen sharing events
 	EventRequestScreenshare Event = "request_screenshare" // Request permission to share screen

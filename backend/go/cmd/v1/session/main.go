@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,11 +24,50 @@ import (
 type MockValidator struct{}
 
 func (m *MockValidator) ValidateToken(tokenString string) (*auth.CustomClaims, error) {
-	// For development, return a mock user
-	return &auth.CustomClaims{
-		Name:  "Dev User",
-		Email: "dev@example.com",
-	}, nil
+	// For development, parse the JWT token to extract the real 'sub' claim
+	// This ensures the clientId matches between frontend and backend
+	var subject, name, email string
+
+	// Parse JWT token (format: header.payload.signature)
+	parts := strings.Split(tokenString, ".")
+	if len(parts) == 3 {
+		// Decode the payload (base64 URL encoded)
+		payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+		if err == nil {
+			var claims map[string]interface{}
+			if json.Unmarshal(payload, &claims) == nil {
+				if sub, ok := claims["sub"].(string); ok {
+					subject = sub
+				}
+				if n, ok := claims["name"].(string); ok {
+					name = n
+				}
+				if e, ok := claims["email"].(string); ok {
+					email = e
+				}
+				// Debug: log what we found
+				slog.Info("MockValidator parsed JWT", "subject", subject, "name", name, "email", email)
+			}
+		}
+	}
+
+	// Fallback to default if parsing failed
+	if subject == "" {
+		subject = "dev-user-123"
+	}
+	if name == "" {
+		name = "Dev User"
+	}
+	if email == "" {
+		email = "dev@example.com"
+	}
+
+	claims := &auth.CustomClaims{
+		Name:  name,
+		Email: email,
+	}
+	claims.Subject = subject
+	return claims, nil
 }
 
 func main() {

@@ -1,0 +1,225 @@
+'use client';
+
+import { cn } from '@/lib/utils';
+import ParticipantTile from './ParticipantTile';
+import type { Participant } from '@/store/types';
+
+export type GridLayout = 'gallery' | 'speaker' | 'sidebar';
+
+export interface ParticipantGridProps {
+  participants: Participant[];
+  currentUserId?: string;
+  pinnedParticipantId?: string | null;
+  layout?: GridLayout;
+  onPinParticipant?: (participantId: string) => void;
+  className?: string;
+  // Participant state maps (matches backend architecture)
+  unmutedParticipants?: Set<string>;
+  cameraOnParticipants?: Set<string>;
+  sharingScreenParticipants?: Set<string>;
+  raisingHandParticipants?: Set<string>;
+  speakingParticipants?: Set<string>;
+}
+
+/**
+ * Responsive grid layout for displaying multiple video participants.
+ * 
+ * Features:
+ * - Multiple layout modes (gallery, speaker, sidebar)
+ * - Responsive grid breakpoints
+ * - Automatic layout based on participant count
+ * - Pin functionality for spotlighting participants
+ * - Screen share prioritization
+ * 
+ * Layout Modes:
+ * - gallery: Equal-sized tiles in responsive grid
+ * - speaker: Large featured participant with small thumbnails
+ * - sidebar: Featured view with vertical sidebar
+ * 
+ * @example
+ * ```tsx
+ * <ParticipantGrid
+ *   participants={participants}
+ *   currentUserId="user-123"
+ *   layout="gallery"
+ *   unmutedParticipants={unmutedSet}
+ *   cameraOnParticipants={cameraOnSet}
+ *   onPinParticipant={(id) => console.log('Pin', id)}
+ * />
+ * ```
+ */
+export default function ParticipantGrid({
+  participants,
+  currentUserId,
+  pinnedParticipantId,
+  layout = 'gallery',
+  onPinParticipant,
+  className,
+  unmutedParticipants = new Set(),
+  cameraOnParticipants = new Set(),
+  sharingScreenParticipants = new Set(),
+  raisingHandParticipants = new Set(),
+  speakingParticipants = new Set(),
+}: ParticipantGridProps) {
+  // Determine featured participant for speaker/sidebar layouts
+  const getFeaturedParticipant = (): Participant | null => {
+    // Priority: pinned > screen sharing > speaking > first participant
+    if (pinnedParticipantId) {
+      return participants.find(p => p.id === pinnedParticipantId) || null;
+    }
+    
+    const screenSharer = participants.find(p => sharingScreenParticipants.has(p.id));
+    if (screenSharer) return screenSharer;
+    
+    const speaker = participants.find(p => speakingParticipants.has(p.id));
+    if (speaker) return speaker;
+    
+    return participants[0] || null;
+  };
+
+  // Get grid column classes based on participant count
+  const getGridColumns = (count: number): string => {
+    if (count === 1) return 'grid-cols-1';
+    if (count === 2) return 'grid-cols-1 md:grid-cols-2';
+    if (count <= 4) return 'grid-cols-1 sm:grid-cols-2';
+    if (count <= 6) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+    if (count <= 9) return 'grid-cols-2 lg:grid-cols-3';
+    if (count <= 12) return 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+    return 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5';
+  };
+
+  if (participants.length === 0) {
+    return (
+      <div className={cn('flex items-center justify-center h-full', className)}>
+        <div className="text-center">
+          <p className="text-muted-foreground">No participants yet</p>
+          <p className="text-sm text-muted-foreground/70 mt-2">
+            Waiting for others to join...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Gallery layout - equal-sized grid
+  if (layout === 'gallery') {
+    return (
+      <div className={cn('w-full h-full p-4', className)}>
+        <div className={cn('grid gap-4 h-full', getGridColumns(participants.length))}>
+          {participants.map(participant => (
+            <ParticipantTile
+              key={participant.id}
+              participant={participant}
+              isAudioEnabled={unmutedParticipants.has(participant.id)}
+              isVideoEnabled={cameraOnParticipants.has(participant.id)}
+              isScreenSharing={sharingScreenParticipants.has(participant.id)}
+              isHandRaised={raisingHandParticipants.has(participant.id)}
+              isSpeaking={speakingParticipants.has(participant.id)}
+              isLocal={participant.id === currentUserId}
+              isPinned={participant.id === pinnedParticipantId}
+              onPin={onPinParticipant}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Speaker layout - featured participant with thumbnails below
+  if (layout === 'speaker') {
+    const featured = getFeaturedParticipant();
+    const thumbnails = participants.filter(p => p.id !== featured?.id);
+
+    return (
+      <div className={cn('w-full h-full flex flex-col gap-4 p-4', className)}>
+        {/* Featured participant */}
+        {featured && (
+          <div className="flex-1 min-h-0">
+            <ParticipantTile
+              participant={featured}
+              isAudioEnabled={unmutedParticipants.has(featured.id)}
+              isVideoEnabled={cameraOnParticipants.has(featured.id)}
+              isScreenSharing={sharingScreenParticipants.has(featured.id)}
+              isHandRaised={raisingHandParticipants.has(featured.id)}
+              isSpeaking={speakingParticipants.has(featured.id)}
+              isLocal={featured.id === currentUserId}
+              isPinned={featured.id === pinnedParticipantId}
+              onPin={onPinParticipant}
+              className="h-full"
+            />
+          </div>
+        )}
+
+        {/* Thumbnails */}
+        {thumbnails.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 h-32">
+            {thumbnails.map(participant => (
+              <ParticipantTile
+                key={participant.id}
+                participant={participant}
+                isAudioEnabled={unmutedParticipants.has(participant.id)}
+                isVideoEnabled={cameraOnParticipants.has(participant.id)}
+                isScreenSharing={sharingScreenParticipants.has(participant.id)}
+                isHandRaised={raisingHandParticipants.has(participant.id)}
+                isSpeaking={speakingParticipants.has(participant.id)}
+                isLocal={participant.id === currentUserId}
+                isPinned={participant.id === pinnedParticipantId}
+                onPin={onPinParticipant}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Sidebar layout - featured with vertical sidebar
+  if (layout === 'sidebar') {
+    const featured = getFeaturedParticipant();
+    const sidebar = participants.filter(p => p.id !== featured?.id);
+
+    return (
+      <div className={cn('w-full h-full flex gap-4 p-4', className)}>
+        {/* Featured participant */}
+        {featured && (
+          <div className="flex-1 min-w-0">
+            <ParticipantTile
+              participant={featured}
+              isAudioEnabled={unmutedParticipants.has(featured.id)}
+              isVideoEnabled={cameraOnParticipants.has(featured.id)}
+              isScreenSharing={sharingScreenParticipants.has(featured.id)}
+              isHandRaised={raisingHandParticipants.has(featured.id)}
+              isSpeaking={speakingParticipants.has(featured.id)}
+              isLocal={featured.id === currentUserId}
+              isPinned={featured.id === pinnedParticipantId}
+              onPin={onPinParticipant}
+              className="h-full"
+            />
+          </div>
+        )}
+
+        {/* Sidebar thumbnails */}
+        {sidebar.length > 0 && (
+          <div className="w-48 flex flex-col gap-2 overflow-y-auto">
+            {sidebar.map(participant => (
+              <ParticipantTile
+                key={participant.id}
+                participant={participant}
+                isAudioEnabled={unmutedParticipants.has(participant.id)}
+                isVideoEnabled={cameraOnParticipants.has(participant.id)}
+                isScreenSharing={sharingScreenParticipants.has(participant.id)}
+                isHandRaised={raisingHandParticipants.has(participant.id)}
+                isSpeaking={speakingParticipants.has(participant.id)}
+                isLocal={participant.id === currentUserId}
+                isPinned={participant.id === pinnedParticipantId}
+                onPin={onPinParticipant}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}

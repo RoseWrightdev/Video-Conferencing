@@ -248,7 +248,7 @@ export interface RoomSlice {
   clientInfo: ClientInfo | null;
   wsClient: WebSocketClient | null;
   webrtcManager: WebRTCManager | null;
-  initializeRoom: (roomId: string, username: string, token?: string) => Promise<void>;
+  initializeRoom: (roomId: string, username: string, token: string) => Promise<void>;
   joinRoom: (approvalToken?: string) => Promise<void>;
   leaveRoom: () => void;
   updateRoomSettings: (settings: Partial<RoomSettings>) => void;
