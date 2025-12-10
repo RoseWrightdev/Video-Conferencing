@@ -1,3 +1,4 @@
+import { createLogger } from './logger';
 import type {
     EventType,
     AnyPayload,
@@ -180,6 +181,7 @@ export class WebSocketClient {
   private reconnectAttempts = 0;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private logger = createLogger('WebSocket');
 
   /**
    * Initialize WebSocket client with configuration.
@@ -238,12 +240,14 @@ export class WebSocketClient {
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        this.logger.info(`Connecting to WebSocket: ${this.config.url}`);
         this.setConnectionState('connecting');
         
         // Construct WebSocket URL with JWT token
         const wsUrl = new URL(this.config.url);
         wsUrl.searchParams.set('token', this.config.token);
         
+        this.logger.debug('Creating WebSocket connection');
         this.ws = new WebSocket(wsUrl.toString());
         
         this.ws.onopen = () => {
@@ -683,11 +687,11 @@ export class WebSocketClient {
   private handleMessage(event: MessageEvent): void {
     try {
       const message: WebSocketMessage = JSON.parse(event.data);
-      console.log('[WebSocketClient] Message received:', { event: message.event, payload: message.payload });
+      this.logger.debug('Message received', { event: message.event, payload: message.payload });
       
       // Notify specific event handlers
       const handlers = this.messageHandlers.get(message.event);
-      console.log('[WebSocketClient] Handlers found:', { event: message.event, handlerCount: handlers?.length || 0 });
+      this.logger.debug('Handlers found', { event: message.event, handlerCount: handlers?.length || 0 });
       if (handlers) {
         handlers.forEach(handler => {
           try {

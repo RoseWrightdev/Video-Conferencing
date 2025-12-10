@@ -1,3 +1,7 @@
+import { createLogger } from './logger';
+
+const logger = createLogger('WebRTC');
+
 /**
  * WebRTC peer-to-peer connection management for video conferencing.
  * 
@@ -157,15 +161,30 @@ export class PeerConnection {
 
   async addLocalStream(stream: MediaStream, streamType: StreamType = 'camera'): Promise<void> {
     try {
+      logger.debug(`Adding ${streamType} stream to peer ${this.peerId}`);
+      
+      // Remove existing stream of same type to avoid duplicates
       if (this.localStreams.has(streamType)) {
+        logger.debug(`Removing existing ${streamType} stream before adding new one`);
         await this.removeLocalStream(streamType);
       }
 
+      // Get existing senders to avoid duplicates
+      const existingSenders = this.pc.getSenders();
+      const existingTrackIds = new Set(existingSenders.map(s => s.track?.id).filter(Boolean));
+
       stream.getTracks().forEach(track => {
-        this.pc.addTrack(track, stream);
+        // Only add tracks that aren't already in the peer connection
+        if (!existingTrackIds.has(track.id)) {
+          this.pc.addTrack(track, stream);
+          logger.debug(`Added ${track.kind} track (enabled: ${track.enabled}) to peer ${this.peerId}`);
+        } else {
+          logger.debug(`Skipped duplicate ${track.kind} track for peer ${this.peerId}`);
+        }
       });
 
       this.localStreams.set(streamType, stream);
+      logger.info(`Successfully added ${streamType} stream with ${stream.getTracks().length} tracks to peer ${this.peerId}`);
     } catch (error) {
       throw new Error(`Failed to add local ${streamType} stream: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -281,6 +300,10 @@ export class PeerConnection {
     return this.pc.connectionState;
   }
 
+  getSignalingState(): RTCSignalingState {
+    return this.pc.signalingState;
+  }
+
   async getStats(): Promise<RTCStatsReport> {
     return await this.pc.getStats();
   }
@@ -336,7 +359,7 @@ export class PeerConnection {
           try {
             handler(event.candidate!, this.peerId);
           } catch (error) {
-            throw new Error(`Error in ICE candidate handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
+            logger.error(`Error in ICE candidate handler for peer ${this.peerId}`, error);
           }
         });
       }
@@ -361,7 +384,7 @@ export class PeerConnection {
           try {
             handler(stream, this.peerId, streamType);
           } catch (error) {
-            throw new Error(`Error in stream added handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
+            logger.error(`Error in stream added handler for peer ${this.peerId}`, error);
           }
         });
       }
@@ -374,14 +397,14 @@ export class PeerConnection {
         try {
           handler(state, this.peerId);
         } catch (error) {
-          throw new Error(`Error in connection state handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
+          logger.error(`Error in connection state handler for peer ${this.peerId}`, error);
         }
       });
     };
 
     this.pc.oniceconnectionstatechange = () => {
       if (this.pc.iceConnectionState === 'failed') {
-        throw new Error(`ICE connection failed for peer ${this.peerId}`);
+        console.warn(`ICE connection failed for peer ${this.peerId} - connection may be unstable`);
       }
     };
 
@@ -390,7 +413,7 @@ export class PeerConnection {
         try {
           handler(this.peerId);
         } catch (error) {
-          throw new Error(`Error in negotiation needed handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
+          logger.error(`Error in negotiation needed handler for peer ${this.peerId}`, error);
         }
       });
     };
@@ -430,16 +453,17 @@ export class PeerConnection {
           try {
             handler(data, this.peerId);
           } catch (error) {
-            throw new Error(`Error in data channel message handler for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
+            logger.error(`Error in data channel message handler for peer ${this.peerId}`, error);
           }
         });
       } catch (error) {
-        throw new Error(`Failed to parse data channel message from peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
+        logger.error(`Failed to parse data channel message from peer ${this.peerId}`, error);
       }
     };
 
     channel.onerror = (error) => {
-      throw new Error(`Data channel error with peer ${this.peerId}: ${String(error)}`);
+      // Data channel errors are common during disconnection and non-fatal
+      console.warn(`Data channel error with peer ${this.peerId}:`, error);
     };
   }
 }
@@ -504,6 +528,10 @@ export class WebRTCManager {
     // to avoid duplicate event processing
   }
 
+  setLocalMediaStream(stream: MediaStream): void {
+    this.localMediaStream = stream;
+  }
+
   async initializeLocalMedia(): Promise<MediaStream> {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -525,22 +553,31 @@ export class WebRTCManager {
 
   async startScreenShare(): Promise<MediaStream> {
     try {
+      logger.info('Starting screen share');
+      // Request screen capture from browser
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true,
       });
 
       this.localScreenStream = stream;
+      logger.debug(`Screen share stream obtained with ${stream.getTracks().length} tracks`);
       
-      for (const peer of this.peers.values()) {
+      // Add screen share to all existing peer connections
+      for (const [peerId, peer] of this.peers) {
+        logger.debug(`Adding screen share to peer ${peerId}`);
         await peer.addLocalStream(stream, 'screen');
+        // Trigger renegotiation to update connection with new stream
         await peer.requestRenegotiation('screen sharing started');
       }
 
+      // Auto-stop screen share when user stops sharing via browser UI
       stream.getVideoTracks()[0].onended = () => {
+        logger.info('Screen share ended by user');
         this.stopScreenShare();
       };
 
+      logger.info('Screen share started successfully');
       return stream;
     } catch (error) {
       throw new Error(`Failed to start screen sharing: ${error instanceof Error ? error.message : String(error)}`);
@@ -548,26 +585,38 @@ export class WebRTCManager {
   }
 
   async stopScreenShare(): Promise<void> {
-    if (!this.localScreenStream) return;
+    if (!this.localScreenStream) {
+      logger.debug('No screen share to stop');
+      return;
+    }
 
     try {
-      for (const peer of this.peers.values()) {
+      logger.info('Stopping screen share');
+      // Remove screen share from all peer connections
+      for (const [peerId, peer] of this.peers) {
+        logger.debug(`Removing screen share from peer ${peerId}`);
         await peer.removeLocalStream('screen');
+        // Trigger renegotiation to update connection without screen stream
         await peer.requestRenegotiation('screen sharing stopped');
       }
 
+      // Stop all tracks to release screen capture
       this.localScreenStream.getTracks().forEach(track => track.stop());
       this.localScreenStream = null;
+      logger.info('Screen share stopped successfully');
     } catch (error) {
       throw new Error(`Failed to stop screen sharing: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   async addPeer(peerId: string, initiateConnection = false): Promise<PeerConnection> {
+    // Return existing peer if already connected
     if (this.peers.has(peerId)) {
+      logger.debug(`Peer ${peerId} already exists, returning existing connection`);
       return this.peers.get(peerId)!;
     }
 
+    logger.info(`Adding new peer ${peerId}, initiateConnection: ${initiateConnection}`);
     const peer = new PeerConnection(
       peerId,
       this.localClientInfo,
@@ -588,37 +637,57 @@ export class WebRTCManager {
     });
 
     peer.onNegotiationNeeded(async (peerId) => {
-      // Only create new offer if we're in stable state to avoid conflicts
-      if (peer.getConnectionState() === 'connected' || peer.getConnectionState() === 'new') {
+      // Only auto-create offer if:
+      // 1. We're in stable signaling state (not already negotiating)
+      // 2. Connection is established (for renegotiation scenarios like adding screen share)
+      // Don't auto-negotiate during initial setup - let manual createOffer handle it
+      const signalingState = peer.getSignalingState();
+      const connectionState = peer.getConnectionState();
+      
+      if (signalingState === 'stable' && connectionState === 'connected') {
         try {
+          logger.debug(`Auto-renegotiating with peer ${peerId} (connection: ${connectionState}, signaling: ${signalingState})`);
           await peer.createOffer();
         } catch (error) {
-          // Ignore negotiation errors - they happen during normal connection flow
+          logger.warn(`Auto-renegotiation failed for peer ${peerId}`, error);
         }
+      } else {
+        logger.debug(`Skipping auto-negotiation for peer ${peerId} (connection: ${connectionState}, signaling: ${signalingState})`);
       }
     });
 
     this.peers.set(peerId, peer);
 
+    // Add local media streams to new peer if they exist
     if (this.localMediaStream) {
+      logger.debug(`Adding local media stream to peer ${peerId}`);
       await peer.addLocalStream(this.localMediaStream, 'camera');
     }
     if (this.localScreenStream) {
+      logger.debug(`Adding screen share stream to peer ${peerId}`);
       await peer.addLocalStream(this.localScreenStream, 'screen');
     }
 
+    // If we're the initiator, create and send offer AFTER streams are added
     if (initiateConnection) {
+      logger.debug(`Initiating connection with peer ${peerId}`);
       await peer.createOffer();
     }
 
+    logger.info(`Successfully added peer ${peerId}`);
     return peer;
   }
 
   removePeer(peerId: string): void {
     const peer = this.peers.get(peerId);
     if (peer) {
+      logger.info(`Removing peer ${peerId}`);
+      // Close peer connection and clean up resources
       peer.close();
       this.peers.delete(peerId);
+      logger.debug(`Peer ${peerId} removed, ${this.peers.size} peers remaining`);
+    } else {
+      logger.warn(`Attempted to remove non-existent peer ${peerId}`);
     }
   }
 
@@ -632,17 +701,27 @@ export class WebRTCManager {
 
   toggleAudio(enabled: boolean): void {
     if (this.localMediaStream) {
+      logger.info(`Toggling audio: ${enabled}`);
+      // Enable/disable all audio tracks without removing them from peer connection
       this.localMediaStream.getAudioTracks().forEach(track => {
         track.enabled = enabled;
+        logger.debug(`Audio track ${track.id} enabled: ${enabled}`);
       });
+    } else {
+      logger.warn('Cannot toggle audio - no local media stream');
     }
   }
 
   toggleVideo(enabled: boolean): void {
     if (this.localMediaStream) {
+      logger.info(`Toggling video: ${enabled}`);
+      // Enable/disable all video tracks without removing them from peer connection
       this.localMediaStream.getVideoTracks().forEach(track => {
         track.enabled = enabled;
+        logger.debug(`Video track ${track.id} enabled: ${enabled}`);
       });
+    } else {
+      logger.warn('Cannot toggle video - no local media stream');
     }
   }
 

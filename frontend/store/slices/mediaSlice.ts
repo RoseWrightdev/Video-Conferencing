@@ -62,28 +62,17 @@ export const createMediaSlice: StateCreator<
         isVideoEnabled: videoEnabled
       });
       
-      // Notify backend of initial media state AND update local participant state
-      const { wsClient, clientInfo, setAudioEnabled, setVideoEnabled, updateParticipant, participants } = get();
-      if (wsClient && clientInfo) {
-        wsClient.toggleAudio(clientInfo, audioEnabled);
-        wsClient.toggleVideo(clientInfo, videoEnabled);
-        
-        // Immediately update local participant state so UI reflects correct status
-        // The broadcast from backend will also trigger this, but doing it now prevents flicker
+      // Update local participant state so UI reflects correct status
+      const { clientInfo, setAudioEnabled, setVideoEnabled, updateParticipant, webrtcManager } = get();
+      if (clientInfo) {
         setAudioEnabled(clientInfo.clientId, audioEnabled);
         setVideoEnabled(clientInfo.clientId, videoEnabled);
         
         // Attach stream to local participant so video displays
-        // Try immediately, and if participant doesn't exist yet, retry after a short delay
         const attachStream = () => {
           const currentParticipants = get().participants;
           if (currentParticipants.has(clientInfo.clientId)) {
-            try {
-              updateParticipant(clientInfo.clientId, { stream });
-            } catch (error) {
-              // Participant might not exist yet, retry
-              setTimeout(attachStream, 100);
-            }
+            updateParticipant(clientInfo.clientId, { stream });
           } else {
             // Participant not in map yet, retry
             setTimeout(attachStream, 100);
@@ -91,37 +80,96 @@ export const createMediaSlice: StateCreator<
         };
         attachStream();
       }
+      
+      // CRITICAL: Add stream to all existing peers and update WebRTCManager
+      if (webrtcManager) {
+        // Store stream in WebRTCManager so it's added to future peers automatically
+        webrtcManager.setLocalMediaStream(stream);
+        
+        // Add stream to all existing peers
+        const allPeers = webrtcManager.getAllPeers();
+        for (const [peerId, peer] of allPeers) {
+          const localStreams = peer.getLocalStreams();
+          if (!localStreams.has('camera')) {
+            peer.addLocalStream(stream, 'camera').catch(() => {
+              // Failed to add stream, will retry on renegotiation
+            });
+          }
+        }
+      }
     }
   },
 
   toggleAudio: async () => {
-    const { localStream, isAudioEnabled, wsClient, clientInfo, setAudioEnabled } = get();
+    const { localStream, isAudioEnabled, isVideoEnabled, wsClient, clientInfo, setAudioEnabled, webrtcManager } = get();
     if (localStream) {
       const audioTracks = localStream.getAudioTracks();
-      const newState = !isAudioEnabled;
-      audioTracks.forEach(track => {
-        track.enabled = newState;
-      });
-      set({ isAudioEnabled: newState });
       
-      // Notify backend and other participants of the state change
-      if (wsClient && clientInfo) {
-        wsClient.toggleAudio(clientInfo, newState);
-        // Immediately update local participant state for instant UI feedback
-        setAudioEnabled(clientInfo.clientId, newState);
+      // If no audio tracks exist, need to add audio to the stream
+      if (audioTracks.length === 0 && !isAudioEnabled) {
+        try {
+          // Request only audio (preserve existing video state)
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          const audioTrack = audioStream.getAudioTracks()[0];
+          
+          // Add audio track to existing stream
+          localStream.addTrack(audioTrack);
+          
+          // Enable it since we just requested it
+          audioTrack.enabled = true;
+          set({ isAudioEnabled: true });
+          
+          // Update peers with new audio track
+          if (webrtcManager) {
+            const peers = webrtcManager.getAllPeers();
+            for (const peer of peers.values()) {
+              await peer.addLocalStream(localStream, 'camera');
+            }
+          }
+          
+          // Notify backend
+          if (wsClient && clientInfo) {
+            wsClient.toggleAudio(clientInfo, true);
+            setAudioEnabled(clientInfo.clientId, true);
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Microphone permission denied';
+          get().handleError(errorMessage);
+        }
+      } else {
+        // Audio tracks exist, just toggle enabled state
+        const newState = !isAudioEnabled;
+        audioTracks.forEach(track => {
+          track.enabled = newState;
+        });
+        
+        set({ isAudioEnabled: newState });
+        
+        // Notify backend and other participants of the state change
+        if (wsClient && clientInfo) {
+          wsClient.toggleAudio(clientInfo, newState);
+          setAudioEnabled(clientInfo.clientId, newState);
+        }
       }
     } else {
-      // No stream - try to request permissions and initialize
+      // No stream at all - request both audio and video but only enable audio
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        get().setLocalStream(stream);
-        set({ isAudioEnabled: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         
-        // Notify backend that audio is now enabled
-        const { wsClient: client, clientInfo: info, setAudioEnabled } = get();
+        // Enable audio track but disable video
+        stream.getAudioTracks().forEach(track => track.enabled = true);
+        stream.getVideoTracks().forEach(track => track.enabled = false);
+        
+        get().setLocalStream(stream);
+        set({ isAudioEnabled: true, isVideoEnabled: false });
+        
+        // Notify backend
+        const { wsClient: client, clientInfo: info, setAudioEnabled, setVideoEnabled } = get();
         if (client && info) {
           client.toggleAudio(info, true);
+          client.toggleVideo(info, false);
           setAudioEnabled(info.clientId, true);
+          setVideoEnabled(info.clientId, false);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Microphone permission denied';
@@ -131,35 +179,90 @@ export const createMediaSlice: StateCreator<
   },
 
   toggleVideo: async () => {
-    const { localStream, isVideoEnabled, wsClient, clientInfo, setVideoEnabled } = get();
+    const { localStream, isVideoEnabled, isAudioEnabled, wsClient, clientInfo, setVideoEnabled, webrtcManager } = get();
     
     if (localStream) {
       const videoTracks = localStream.getVideoTracks();
-      const newState = !isVideoEnabled;
+      const audioTracks = localStream.getAudioTracks();
       
-      videoTracks.forEach(track => {
-        track.enabled = newState;
-      });
-      set({ isVideoEnabled: newState });
-      
-      // Notify backend and other participants of the state change
-      if (wsClient && clientInfo) {
-        wsClient.toggleVideo(clientInfo, newState);
-        // Immediately update local participant state for instant UI feedback
-        setVideoEnabled(clientInfo.clientId, newState);
+      // If no video tracks exist, need to add video to the stream
+      if (videoTracks.length === 0 && !isVideoEnabled) {
+        try {
+          // Request only video (preserve existing audio state)
+          const videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          const videoTrack = videoStream.getVideoTracks()[0];
+          
+          // Add video track to existing stream
+          localStream.addTrack(videoTrack);
+          
+          // Enable it since we just requested it
+          videoTrack.enabled = true;
+          set({ isVideoEnabled: true });
+          
+          // CRITICAL: Ensure audio tracks remain disabled if they were disabled
+          if (!isAudioEnabled && audioTracks.length > 0) {
+            audioTracks.forEach(track => {
+              track.enabled = false;
+            });
+          }
+          
+          // Update peers with new video track
+          if (webrtcManager) {
+            const peers = webrtcManager.getAllPeers();
+            for (const peer of peers.values()) {
+              await peer.addLocalStream(localStream, 'camera');
+            }
+          }
+          
+          // Notify backend
+          if (wsClient && clientInfo) {
+            wsClient.toggleVideo(clientInfo, true);
+            setVideoEnabled(clientInfo.clientId, true);
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Camera permission denied';
+          get().handleError(errorMessage);
+        }
+      } else {
+        // Video tracks exist, just toggle enabled state
+        const newState = !isVideoEnabled;
+        videoTracks.forEach(track => {
+          track.enabled = newState;
+        });
+        set({ isVideoEnabled: newState });
+        
+        // CRITICAL: Ensure audio tracks remain in their current state
+        if (!isAudioEnabled && audioTracks.length > 0) {
+          audioTracks.forEach(track => {
+            track.enabled = false;
+          });
+        }
+        
+        // Notify backend and other participants of the state change
+        if (wsClient && clientInfo) {
+          wsClient.toggleVideo(clientInfo, newState);
+          setVideoEnabled(clientInfo.clientId, newState);
+        }
       }
     } else {
-      // No stream - try to request permissions and initialize
+      // No stream at all - request both audio and video but only enable video
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        get().setLocalStream(stream);
-        set({ isVideoEnabled: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         
-        // Notify backend that video is now enabled
-        const { wsClient: client, clientInfo: info, setVideoEnabled } = get();
+        // Disable audio track but enable video
+        stream.getAudioTracks().forEach(track => track.enabled = false);
+        stream.getVideoTracks().forEach(track => track.enabled = true);
+        
+        get().setLocalStream(stream);
+        set({ isVideoEnabled: true, isAudioEnabled: false });
+        
+        // Notify backend
+        const { wsClient: client, clientInfo: info, setVideoEnabled, setAudioEnabled } = get();
         if (client && info) {
           client.toggleVideo(info, true);
+          client.toggleAudio(info, false);
           setVideoEnabled(info.clientId, true);
+          setAudioEnabled(info.clientId, false);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Camera permission denied';

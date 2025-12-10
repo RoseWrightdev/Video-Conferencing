@@ -153,13 +153,9 @@ export class RoomService {
         webrtcManager: this.webrtcManager,
       });
 
-      // Initialize local media stream (will be added to peer connections when they're created)
-      try {
-        const localStream = await this.webrtcManager.initializeLocalMedia();
-        useRoomStore.getState().setLocalStream(localStream);
-      } catch (error) {
-        // Continue without local media - user can enable it later
-      }
+      // Media initialization is handled by useMediaStream hook in the UI
+      // This allows proper permission handling and track state management
+      // The stream will be added to peer connections via setLocalStream callback
 
       // Refresh available devices
       await useRoomStore.getState().refreshDevices();
@@ -340,8 +336,9 @@ export class RoomService {
     });
 
     this.wsClient.on('recents_chat', (message) => {
-      const payload = message.payload as unknown as { chats: AddChatPayload[] };
-      const chatMessages: ChatMessage[] = (payload.chats || []).map((chat) => ({
+      // Backend sends array directly, not wrapped in object
+      const chats = message.payload as unknown as AddChatPayload[];
+      const chatMessages: ChatMessage[] = (chats || []).map((chat) => ({
         id: chat.chatId,
         participantId: chat.clientId,
         username: chat.displayName,
@@ -349,6 +346,7 @@ export class RoomService {
         timestamp: new Date(chat.timestamp),
         type: 'text' as const,
       }));
+      console.log(`[RoomService] Loaded ${chatMessages.length} recent chat messages`);
       useRoomStore.setState({ messages: chatMessages });
     });
 
@@ -428,21 +426,8 @@ export class RoomService {
       // Establish peer connections with all other participants
       this.setupPeerConnections(newParticipants, newHosts);
 
-      // Ensure local stream is added to all peers (handles race condition where peers created before media ready)
-      if (this.webrtcManager && localStream) {
-        const allPeers = this.webrtcManager.getAllPeers();
-        for (const [peerId, peer] of allPeers) {
-          const localStreams = peer.getLocalStreams();
-          // Only add if peer doesn't have our camera stream yet
-          if (!localStreams.has('camera')) {
-            try {
-              await peer.addLocalStream(localStream, 'camera');
-            } catch (error) {
-              // Stream add failed, will retry on next room_state or renegotiation
-            }
-          }
-        }
-      }
+      // Note: localStream will be added to peers when setLocalStream is called
+      // This ensures tracks are properly disabled before being added to peer connections
 
       // Request chat history when room state is received (for hosts or approved participants)
       if (this.wsClient && this.clientInfo) {
