@@ -231,6 +231,16 @@ func (r *Room) router(client *Client, data any) {
 			r.handleLowerHand(client, msg.Event, msg.Payload)
 		}
 
+	case EventToggleAudio:
+		if isParticipant {
+			r.handleToggleAudio(client, msg.Event, msg.Payload)
+		}
+
+	case EventToggleVideo:
+		if isParticipant {
+			r.handleToggleVideo(client, msg.Event, msg.Payload)
+		}
+
 	case EventRequestWaiting:
 		if isWaiting {
 			r.handleRequestWaiting(client, msg.Event, msg.Payload)
@@ -301,38 +311,56 @@ func (r *Room) broadcast(event Event, payload any, roles set.Set[RoleType]) {
 		return
 	}
 
+	slog.Info("Broadcasting message",
+		"event", event,
+		"rolesCount", len(roles),
+		"hostsCount", len(r.hosts),
+		"participantsCount", len(r.participants),
+		"waitingCount", len(r.waiting),
+		"sharingScreenCount", len(r.sharingScreen))
+
 	if roles == nil {
 		// Send to all roles
+		slog.Info("Broadcasting to ALL roles")
 		for _, m := range []map[ClientIdType]*Client{r.hosts, r.sharingScreen, r.participants, r.waiting} {
 			for _, p := range m {
 				select {
 				case p.send <- rawMsg:
+					slog.Debug("Message sent to client", "clientId", p.ID)
 				default:
 					// Prevent a slow client from blocking the whole broadcast.
+					slog.Warn("Failed to send to client - channel full", "clientId", p.ID)
 				}
 			}
 		}
 
 	} else {
+		slog.Info("Broadcasting to specific roles", "rolesCount", len(roles))
 		for role := range roles {
 			var clients []*Client
 			switch role {
 			case RoleTypeHost:
 				clients = clientsMapToSlice(r.hosts)
+				slog.Debug("Broadcasting to hosts", "count", len(clients))
 			case RoleTypeScreenshare:
 				clients = clientsMapToSlice(r.sharingScreen)
+				slog.Debug("Broadcasting to screenshare", "count", len(clients))
 			case RoleTypeParticipant:
 				clients = clientsMapToSlice(r.participants)
+				slog.Debug("Broadcasting to participants", "count", len(clients))
 			case RoleTypeWaiting:
 				clients = clientsMapToSlice(r.waiting)
+				slog.Debug("Broadcasting to waiting", "count", len(clients))
 			default:
 				continue
 			}
 			for _, p := range clients {
 				select {
 				case p.send <- rawMsg:
+					slog.Debug("Message sent to client", "clientId", p.ID)
 				default:
 					// Prevent a slow client from blocking the whole broadcast.
+					slog.Warn("Failed to send to client - channel full", "clientId", p.ID)
 				}
 			}
 		}
@@ -403,6 +431,22 @@ func (r *Room) getRoomStateUnsafe() RoomStatePayload {
 		})
 	}
 
+	unmuted := make([]ClientInfo, 0, len(r.unmuted))
+	for _, client := range r.unmuted {
+		unmuted = append(unmuted, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
+	cameraOn := make([]ClientInfo, 0, len(r.cameraOn))
+	for _, client := range r.cameraOn {
+		cameraOn = append(cameraOn, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
 	return RoomStatePayload{
 		ClientInfo:    ClientInfo{}, // This will be set by the caller if needed
 		RoomID:        r.ID,
@@ -411,6 +455,8 @@ func (r *Room) getRoomStateUnsafe() RoomStatePayload {
 		HandsRaised:   handsRaised,
 		WaitingUsers:  waitingUsers,
 		SharingScreen: sharingScreen,
+		Unmuted:       unmuted,
+		CameraOn:      cameraOn,
 	}
 }
 

@@ -10,7 +10,7 @@ export function createMockChatDependencies({
 }: {
   messages?: ChatMessage[];
   currentUserId?: string;
-  participants?: Record<string, { role: "host" | "moderator" | "participant"; username?: string }>;
+  participants?: Record<string, { role: "host" | "participant" | "waiting"; username?: string }>;
 } = {}): ChatDependencies {
   return {
     chatService: {

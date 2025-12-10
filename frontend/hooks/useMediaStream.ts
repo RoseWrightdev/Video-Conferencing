@@ -132,12 +132,14 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       
-      // Store stream in Zustand store
-      setLocalStream(stream);
-      
-      // Check which tracks were actually obtained
+      // Disable all tracks by default - users join with media off
       const audioTracks = stream.getAudioTracks();
       const videoTracks = stream.getVideoTracks();
+      audioTracks.forEach(track => { track.enabled = false; });
+      videoTracks.forEach(track => { track.enabled = false; });
+      
+      // Store stream in Zustand store
+      setLocalStream(stream);
 
       setState(prev => ({
         ...prev,

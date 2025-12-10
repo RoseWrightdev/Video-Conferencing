@@ -23,6 +23,9 @@ export type EventType =
   // Reactions / Speaking
   | 'raise_hand'
   | 'lower_hand'
+  // Media Controls
+  | 'toggle_audio'
+  | 'toggle_video'
   // Waiting Room
   | 'waiting_request'
   | 'accept_waiting'
@@ -64,6 +67,15 @@ export type GetRecentChatsPayload = ClientInfo;
 
 // raise_hand / lower_hand
 export type HandStatePayload = ClientInfo;
+
+// toggle_audio / toggle_video
+export interface ToggleAudioPayload extends ClientInfo {
+  enabled: boolean;
+}
+
+export interface ToggleVideoPayload extends ClientInfo {
+  enabled: boolean;
+}
 
 // waiting_request
 export type RequestWaitingPayload = ClientInfo;
@@ -114,6 +126,8 @@ export interface RoomStatePayload {
     handsRaised: ClientInfo[];
     waitingUsers: ClientInfo[];
     sharingScreen: ClientInfo[];
+    unmuted: ClientInfo[];
+    cameraOn: ClientInfo[];
 }
 
 // ----------------
@@ -126,7 +140,8 @@ export type AnyPayload =
   | GetRecentChatsPayload
   | HandStatePayload
   | RequestWaitingPayload
-  | WaitingRoomDecisionPayload
+  | AcceptWaitingPayload
+  | DenyWaitingPayload
   | RequestScreensharePayload
   | ScreenshareDecisionPayload
   | WebRTCOfferPayload

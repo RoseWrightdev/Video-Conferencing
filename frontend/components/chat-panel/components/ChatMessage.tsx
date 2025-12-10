@@ -8,16 +8,17 @@ import { ChatDependencies } from "../types/ChatDependencies";
 export interface ChatMessageProps {
   chatMessage: ChatMessage;
   currentUserId: string;
-  isHost: boolean;
   dependencies: ChatDependencies;
 }
 
 const ChatMessage = React.memo(function ChatMessage({
   chatMessage,
   currentUserId,
-  isHost,
   dependencies,
 }: ChatMessageProps) {
+  // Check if the message author is a host
+  const isHost = dependencies.participantService.getParticipant(chatMessage.participantId)?.role === "host";
+
   if (chatMessage.type === "private") {
     return (
       <StandardChat chatMessage={chatMessage} currentUserId={currentUserId} isPriv={true} isHost={isHost} dependencies={dependencies} />
@@ -40,8 +41,7 @@ const ChatMessage = React.memo(function ChatMessage({
   return prevProps.chatMessage.id === nextProps.chatMessage.id &&
          prevProps.chatMessage.content === nextProps.chatMessage.content &&
          prevProps.chatMessage.timestamp === nextProps.chatMessage.timestamp &&
-         prevProps.currentUserId === nextProps.currentUserId &&
-         prevProps.isHost === nextProps.isHost;
+         prevProps.currentUserId === nextProps.currentUserId;
 });
 
 function StandardChat({ chatMessage, currentUserId, isPriv, isHost, dependencies }: { chatMessage: ChatMessage, currentUserId: string, isPriv: boolean, isHost: boolean, dependencies: ChatDependencies }) {

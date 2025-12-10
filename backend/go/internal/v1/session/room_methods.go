@@ -444,3 +444,107 @@ func (r *Room) lowerHand(payload LowerHandPayload) {
 		}
 	}
 }
+
+// toggleAudio updates a participant's audio (microphone) state in the room.
+// This method manages the unmuted map, adding the client when audio is enabled
+// and removing them when audio is disabled (muted).
+//
+// State Management:
+//   - enabled=true: Adds client to unmuted map (microphone on)
+//   - enabled=false: Removes client from unmuted map (microphone off/muted)
+//
+// The unmuted map is used to:
+//   - Track which participants have their microphone enabled
+//   - Display muted/unmuted indicators in the UI
+//   - Include in room_state broadcasts for state synchronization
+//
+// Use Cases:
+//   - Participant toggles their microphone on/off
+//   - Host remotely mutes a participant (future feature)
+//   - Initial media state setup when joining
+//
+// Thread Safety: This method is NOT thread-safe and must only be called when
+// the room's mutex lock is already held.
+//
+// Parameters:
+//   - payload: Contains the ClientId and enabled state for the audio toggle
+func (r *Room) toggleAudio(payload ToggleAudioPayload) {
+	// Find the client in participants map
+	var client *Client
+	for _, c := range r.participants {
+		if c.ID == payload.ClientId {
+			client = c
+			break
+		}
+	}
+
+	// Also check hosts map
+	if client == nil {
+		for _, c := range r.hosts {
+			if c.ID == payload.ClientId {
+				client = c
+				break
+			}
+		}
+	}
+
+	if client != nil {
+		if payload.Enabled {
+			r.unmuted[client.ID] = client
+		} else {
+			delete(r.unmuted, client.ID)
+		}
+	}
+}
+
+// toggleVideo updates a participant's video (camera) state in the room.
+// This method manages the cameraOn map, adding the client when video is enabled
+// and removing them when video is disabled (camera off).
+//
+// State Management:
+//   - enabled=true: Adds client to cameraOn map (camera on)
+//   - enabled=false: Removes client from cameraOn map (camera off)
+//
+// The cameraOn map is used to:
+//   - Track which participants have their camera enabled
+//   - Display camera on/off indicators in the UI
+//   - Include in room_state broadcasts for state synchronization
+//
+// Use Cases:
+//   - Participant toggles their camera on/off
+//   - Host remotely disables a participant's video (future feature)
+//   - Initial media state setup when joining
+//
+// Thread Safety: This method is NOT thread-safe and must only be called when
+// the room's mutex lock is already held.
+//
+// Parameters:
+//   - payload: Contains the ClientId and enabled state for the video toggle
+func (r *Room) toggleVideo(payload ToggleVideoPayload) {
+	// Find the client in participants map
+	var client *Client
+	for _, c := range r.participants {
+		if c.ID == payload.ClientId {
+			client = c
+			break
+		}
+	}
+
+	// Also check hosts map
+	if client == nil {
+		for _, c := range r.hosts {
+			if c.ID == payload.ClientId {
+				client = c
+				break
+			}
+		}
+	}
+
+	if client != nil {
+		if payload.Enabled {
+			r.cameraOn[client.ID] = client
+		} else {
+			delete(r.cameraOn, client.ID)
+		}
+	}
+}

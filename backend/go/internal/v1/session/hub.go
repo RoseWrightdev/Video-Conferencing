@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"Social-Media/backend/go/internal/v1/auth"
 
@@ -76,9 +77,10 @@ type TokenValidator interface {
 // All connections must provide valid JWT tokens which are validated through
 // the TokenValidator interface before WebSocket upgrade is permitted.
 type Hub struct {
-	rooms     map[RoomIdType]*Room // Registry of active rooms by room ID
-	mu        sync.Mutex           // Protects concurrent access to rooms map
-	validator TokenValidator       // JWT authentication service
+	rooms               map[RoomIdType]*Room       // Registry of active rooms by room ID
+	mu                  sync.Mutex                 // Protects concurrent access to rooms map
+	validator           TokenValidator             // JWT authentication service
+	pendingRoomCleanups map[RoomIdType]*time.Timer // Timers for delayed room cleanup
 }
 
 // ServeWs authenticates the user and hands them off to the room.
@@ -187,31 +189,65 @@ func (h *Hub) ServeWs(c *gin.Context) {
 // NewHub creates a new Hub and configures it with its dependencies.
 func NewHub(validator TokenValidator) *Hub {
 	return &Hub{
-		rooms:     make(map[RoomIdType]*Room),
-		validator: validator,
+		rooms:               make(map[RoomIdType]*Room),
+		validator:           validator,
+		pendingRoomCleanups: make(map[RoomIdType]*time.Timer),
 	}
 }
 
 // removeRoom is a private method for the Hub to clean up empty rooms.
+// It implements a grace period (5 seconds) before actually removing the room,
+// allowing clients to reconnect without losing the room state. This prevents
+// the race condition where a client refresh causes a new room to be created.
 func (h *Hub) removeRoom(roomId RoomIdType) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 
-	// Check if the room still exists and is empty before deleting.
-	if room, ok := h.rooms[roomId]; ok && len(room.participants) == 0 {
-		delete(h.rooms, roomId)
-		slog.Info("Removed empty room from hub", "roomId", roomId)
+	// Cancel any existing cleanup timer for this room
+	if existingTimer, exists := h.pendingRoomCleanups[roomId]; exists {
+		existingTimer.Stop()
+		delete(h.pendingRoomCleanups, roomId)
 	}
+
+	// Schedule room cleanup after grace period (5 seconds)
+	const cleanupGracePeriod = 5 * time.Second
+	timer := time.AfterFunc(cleanupGracePeriod, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		// Double-check room still exists and is empty before deleting
+		if room, ok := h.rooms[roomId]; ok && len(room.participants) == 0 && len(room.hosts) == 0 && len(room.sharingScreen) == 0 {
+			delete(h.rooms, roomId)
+			delete(h.pendingRoomCleanups, roomId)
+			slog.Info("Removed empty room from hub after grace period", "roomId", roomId)
+		} else {
+			// Room is no longer empty, cancel cleanup
+			delete(h.pendingRoomCleanups, roomId)
+			if ok {
+				slog.Info("Cancelled room cleanup - room is no longer empty", "roomId", roomId)
+			}
+		}
+	})
+
+	// Store the timer so we can cancel it if clients reconnect
+	h.pendingRoomCleanups[roomId] = timer
+	h.mu.Unlock()
 }
 
 // getOrCreateRoom retrieves the Room associated with the given RoomId from the Hub.
 // If the Room does not exist, it creates a new Room, stores it in the Hub, and returns it.
+// If a room cleanup is pending for this roomId, the cleanup is cancelled and the existing room is returned.
 // This method is safe for concurrent use.
 func (h *Hub) getOrCreateRoom(roomId RoomIdType) *Room {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if room, ok := h.rooms[roomId]; ok {
+		// Room exists, cancel any pending cleanup
+		if timer, hasPendingCleanup := h.pendingRoomCleanups[roomId]; hasPendingCleanup {
+			timer.Stop()
+			delete(h.pendingRoomCleanups, roomId)
+			slog.Info("Cancelled pending room cleanup due to reconnection", "roomId", roomId)
+		}
 		return room
 	}
 

@@ -7,6 +7,8 @@ import type {
     DeleteChatPayload,
     GetRecentChatsPayload,
     HandStatePayload,
+    ToggleAudioPayload,
+    ToggleVideoPayload,
     RequestWaitingPayload,
     AcceptWaitingPayload,
     DenyWaitingPayload,
@@ -458,6 +460,34 @@ export class WebSocketClient {
     this.send('lower_hand', payload);
   }
 
+  /**
+   * Toggle audio (microphone) state.
+   * 
+   * Notifies all participants of audio state change.
+   * Updates unmuted map on backend for participant tracking.
+   * 
+   * @param clientInfo - Client toggling audio
+   * @param enabled - true if audio is enabled (unmuted), false if disabled (muted)
+   */
+  toggleAudio(clientInfo: ClientInfo, enabled: boolean): void {
+    const payload = { ...clientInfo, enabled };
+    this.send('toggle_audio', payload);
+  }
+
+  /**
+   * Toggle video (camera) state.
+   * 
+   * Notifies all participants of video state change.
+   * Updates cameraOn map on backend for participant tracking.
+   * 
+   * @param clientInfo - Client toggling video
+   * @param enabled - true if video is enabled (camera on), false if disabled (camera off)
+   */
+  toggleVideo(clientInfo: ClientInfo, enabled: boolean): void {
+    const payload = { ...clientInfo, enabled };
+    this.send('toggle_video', payload);
+  }
+
   /** Request to join from waiting room */
   requestWaiting(clientInfo: ClientInfo): void {
     const payload: RequestWaitingPayload = clientInfo;
@@ -653,9 +683,11 @@ export class WebSocketClient {
   private handleMessage(event: MessageEvent): void {
     try {
       const message: WebSocketMessage = JSON.parse(event.data);
+      console.log('[WebSocketClient] Message received:', { event: message.event, payload: message.payload });
       
       // Notify specific event handlers
       const handlers = this.messageHandlers.get(message.event);
+      console.log('[WebSocketClient] Handlers found:', { event: message.event, handlerCount: handlers?.length || 0 });
       if (handlers) {
         handlers.forEach(handler => {
           try {

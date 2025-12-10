@@ -8,10 +8,10 @@ import ChatPanel from '@/components/chat-panel/components/ChatPanel';
 import ControlsPanel from '@/components/room/components/Controls';
 import PermissionsScreen from '@/components/room/components/PermissionsScreen';
 import { WaitingScreen } from '@/components/room/WaitingScreen';
-import ParticipantGrid, { type GridLayout } from '@/components/participants/components/ParticipantGrid';
+import ParticipantGrid from '@/components/participants/components/ParticipantGrid';
 import ParticipantsPanel from '@/components/participants/components/ParticipantsPanel';
 import { Button } from '@/components/ui/button';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRoomStore } from '@/store/useRoomStore';
 
 export default function RoomPage() {
@@ -20,11 +20,9 @@ export default function RoomPage() {
   const { data: session, status } = useSession();
   const roomId = params.roomid as string;
   const [permissionsGranted, setPermissionsGranted] = useState(false);
-  const [permissionError, setPermissionError] = useState<string | null>(null);
-  const [isParticipantsPanelOpen, setIsParticipantsPanelOpen] = useState(false);
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
-  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
-  const [layoutMode, setLayoutMode] = useState<GridLayout>('gallery');
+  const [showControls, setShowControls] = useState(true);
+  const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const { requestPermissions, initializeStream } = useMediaStream();
   const { 
@@ -43,6 +41,13 @@ export default function RoomPage() {
     roomName,
     approveParticipant,
     kickParticipant,
+    isParticipantsPanelOpen,
+    pinnedParticipantId,
+    gridLayout,
+    handleError,
+    toggleParticipantsPanel,
+    setGridLayout,
+    pinParticipant,
   } = useRoomStore();
 
   const { 
@@ -67,17 +72,15 @@ export default function RoomPage() {
     toggleScreenShare
   } = useMediaControls();
 
-  const isConnecting = status === 'authenticated' && !connectionState.wsConnected;
 
   const handleRequestPermissions = async () => {
     try {
-      setPermissionError(null);
       await requestPermissions();
       // Actually initialize the media stream after permissions granted
       await initializeStream();
       setPermissionsGranted(true);
     } catch (error) {
-      setPermissionError(error instanceof Error ? error.message : 'Failed to get permissions');
+      handleError(error instanceof Error ? error.message : 'Failed to get permissions');
     }
   };
 
@@ -104,8 +107,9 @@ export default function RoomPage() {
     const microphone = audioContext.createMediaStreamSource(localStream);
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     
-    analyser.smoothingTimeConstant = 0.8;
-    analyser.fftSize = 1024;
+    // More responsive settings for better speech detection
+    analyser.smoothingTimeConstant = 0.3; // Reduced from 0.8 for faster response
+    analyser.fftSize = 2048; // Increased for better frequency resolution
     microphone.connect(analyser);
 
     let animationFrame: number;
@@ -113,8 +117,8 @@ export default function RoomPage() {
       analyser.getByteFrequencyData(dataArray);
       const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
       
-      // Threshold for speaking detection (lower = more sensitive)
-      const isSpeaking = average > 3;
+      // More sensitive threshold for clearer audio detection
+      const isSpeaking = average > 2; // Lowered from 3 for higher sensitivity
       
       setSpeakingParticipants(prev => {
         const next = new Set(prev);
@@ -138,6 +142,41 @@ export default function RoomPage() {
       audioContext.close();
     };
   }, [localStream, isAudioEnabled, currentUserId]);
+
+  // Auto-hide controls on mouse inactivity
+  useEffect(() => {
+    const handleMouseMove = () => {
+      setShowControls(true);
+      
+      // Clear existing timeout
+      if (hideControlsTimeout.current) {
+        clearTimeout(hideControlsTimeout.current);
+      }
+      
+      // Set new timeout to hide controls after 3 seconds of inactivity
+      hideControlsTimeout.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000);
+    };
+
+    // Show controls initially
+    setShowControls(true);
+    
+    // Add mouse move listener
+    window.addEventListener('mousemove', handleMouseMove);
+    
+    // Initial timeout
+    hideControlsTimeout.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (hideControlsTimeout.current) {
+        clearTimeout(hideControlsTimeout.current);
+      }
+    };
+  }, []);
 
   const chatDependencies = {
     chatService: {
@@ -176,9 +215,7 @@ export default function RoomPage() {
         leaveRoom();
         router.push('/');
       },
-      toggleParticipantsPanel: () => {
-        setIsParticipantsPanelOpen(!isParticipantsPanelOpen);
-      },
+      toggleParticipantsPanel: toggleParticipantsPanel,
       toggleChatPanel: toggleChatPanel,
       toggleHand: () => {
         if (!wsClient || !clientInfo || !currentUserId) return;
@@ -217,7 +254,7 @@ export default function RoomPage() {
   if (!permissionsGranted) {
     return (
       <PermissionsScreen
-        permissionError={permissionError}
+        permissionError={null}
         onRequestPermissions={handleRequestPermissions}
         onSkipPermissions={() => setPermissionsGranted(true)}
       />
@@ -238,108 +275,84 @@ export default function RoomPage() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
-      {/* Header */}
-      <div className="px-6 py-4 border-b flex justify-between items-center shrink-0">
-        <div>
-          <h2 className="text-lg font-semibold">Room: {roomId}</h2>
-          <p className="text-sm text-muted-foreground">
-            {session?.user?.name || session?.user?.email}
-          </p>
-        </div>
-        <div>
-          {isConnecting && <span className="text-muted-foreground">Connecting...</span>}
-          {connectionState.wsConnected && <span className="text-green-600">✓ Connected</span>}
-          {!connectionState.wsConnected && !isConnecting && (
-            <span className="text-orange-500">⚠ Offline</span>
-          )}
-        </div>
-      </div>
-      
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Video Area */}
-        <div className="flex-1 flex flex-col">
-          <div className="flex-1 bg-[#1a1a1a] overflow-hidden relative">
-            {/* Layout Mode Selector */}
-            <div className="absolute top-4 right-4 z-10 flex gap-2">
-              <select
-                value={layoutMode}
-                onChange={(e) => setLayoutMode(e.target.value as typeof layoutMode)}
-                className="px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm text-white text-sm border border-white/10 hover:bg-black/70 transition-colors"
-              >
-                <option value="gallery">Gallery</option>
-                <option value="speaker">Speaker</option>
-                <option value="sidebar">Sidebar</option>
-              </select>
-            </div>
-
+        <div className="flex-1 flex flex-col relative">
+          <div className="flex-1 bg-[#1a1a1a] overflow-hidden relative pb-24">
             {/* Participant Grid */}
             <ParticipantGrid
               participants={Array.from(participants.values())}
               currentUserId={currentUserId || undefined}
               pinnedParticipantId={pinnedParticipantId}
-              layout={layoutMode}
+              layout={gridLayout}
+              onLayoutChange={(layout) => setGridLayout(layout)}
               unmutedParticipants={unmutedParticipants}
               cameraOnParticipants={cameraOnParticipants}
               sharingScreenParticipants={sharingScreenParticipants}
               raisingHandParticipants={raisingHandParticipants}
               speakingParticipants={speakingParticipants}
               onPinParticipant={(id) => {
-                setPinnedParticipantId(pinnedParticipantId === id ? null : id);
+                pinParticipant(pinnedParticipantId === id ? null : id);
               }}
             />
           </div>
           
-          {/* Controls at bottom of video */}
-          <div className="shrink-0 flex justify-center py-4 backdrop-blur bg-black">
+          {/* Controls at bottom of video - auto-hide on inactivity */}
+          <div 
+            className={`absolute bottom-0 left-0 right-0 z-30 flex justify-center py-4 transition-all duration-300 ${
+              showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+            }`}
+          >
             <ControlsPanel dependencies={controlDependencies} />
           </div>
         </div>
 
         {/* Chat Panel - Right Side */}
         {isChatPanelOpen && (
-          <div className="w-[400px] border-l shrink-0 flex flex-col bg-black">
             <ChatPanel dependencies={chatDependencies} />
-          </div>
         )}
 
-        {/* Participants Panel - Right Side */}
+        {/* Participants Panel - Left Side */}
         {isParticipantsPanelOpen && (
-          <ParticipantsPanel
-            participants={Array.from(participants.values())}
-            waitingParticipants={Array.from(waitingParticipants.values())}
-            currentUserId={currentUserId || undefined}
-            isHost={isHost || false}
-            onClose={() => setIsParticipantsPanelOpen(false)}
-            onMuteParticipant={(id) => {
-              // Host can mute participants via WebSocket
-              if (isHost && wsClient && clientInfo) {
-                // TODO: Implement mute participant event
-                console.log('Mute participant:', id);
-              }
-            }}
-            onRemoveParticipant={(id) => {
-              // Host can remove participants via WebSocket
-              if (isHost && wsClient && clientInfo) {
-                // TODO: Implement remove participant event
-                console.log('Remove participant:', id);
-              }
-            }}
-            onApproveWaiting={(id) => {
-              if (isHost) {
-                approveParticipant(id);
-              }
-            }}
-            onDenyWaiting={(id) => {
-              if (isHost) {
-                kickParticipant(id);
-              }
-            }}
-            unmutedParticipants={unmutedParticipants}
-            cameraOnParticipants={cameraOnParticipants}
-            sharingScreenParticipants={sharingScreenParticipants}
-            raisingHandParticipants={raisingHandParticipants}
-          />
+          <div className="absolute inset-0 pointer-events-none">
+            <ParticipantsPanel
+              participants={Array.from(participants.values())}
+              waitingParticipants={Array.from(waitingParticipants.values())}
+              currentUserId={currentUserId || undefined}
+              isHost={isHost || false}
+              onClose={() => toggleParticipantsPanel()}
+              onMuteParticipant={(id) => {
+                // Host can mute participants via WebSocket
+                if (isHost && wsClient && clientInfo) {
+                  // TODO: Implement mute participant event
+                  console.log('Mute participant:', id);
+                }
+              }}
+              onRemoveParticipant={(id) => {
+                // Host can remove participants via WebSocket
+                if (isHost && wsClient && clientInfo) {
+                  // TODO: Implement remove participant event
+                  console.log('Remove participant:', id);
+                }
+              }}
+              onApproveWaiting={(id) => {
+                if (isHost) {
+                  approveParticipant(id);
+                }
+              }}
+              onDenyWaiting={(id) => {
+                if (isHost) {
+                  kickParticipant(id);
+                }
+              }}
+              unmutedParticipants={unmutedParticipants}
+              cameraOnParticipants={cameraOnParticipants}
+              sharingScreenParticipants={sharingScreenParticipants}
+              raisingHandParticipants={raisingHandParticipants}
+              className="pointer-events-auto"
+            />
+          </div>
         )}
       </div>
     </div>

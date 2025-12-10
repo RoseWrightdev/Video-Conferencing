@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Users, Hand, Crown, Monitor, Check, Ban, Clock } from 'lucide-react';
+import { X, Users, Hand, Monitor, Check, Ban, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -84,7 +84,7 @@ export default function ParticipantsPanel({
   });
 
   return (
-    <div className={cn('w-80 bg-background border-l flex flex-col h-full', className)}>
+    <div className={cn('absolute left-4 top-4 bottom-6 h-[calc(100vh-7rem)] w-80 border-r rounded-2xl flex flex-col bg-white/80 frosted-2 z-50 overflow-hidden', className)}>
       {/* Header */}
       <div className="p-4 border-b flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -96,6 +96,7 @@ export default function ParticipantsPanel({
         <Button
           variant="ghost"
           size="icon"
+          className="rouneded-full"
           onClick={onClose}
           aria-label="Close participants panel"
         >
@@ -221,10 +222,9 @@ export default function ParticipantsPanel({
                         <div className="flex items-center gap-1 mt-1 flex-wrap">
                           {isParticipantHost && (
                             <Badge
-                              variant="secondary"
+                              variant="outline"
                               className="bg-black/50 text-white border-0 text-xs px-1.5 py-0"
                             >
-                              <Crown className="h-3 w-3 mr-1" />
                               Host
                             </Badge>
                           )}
@@ -259,7 +259,7 @@ export default function ParticipantsPanel({
                             <div
                               className={cn(
                                 'w-1.5 h-1.5 rounded-full',
-                                isVideoOn ? 'bg-green-500' : 'bg-red-500'
+                                isVideoOn ? 'bg-blue-500' : 'bg-red-500'
                               )}
                               title={isVideoOn ? 'Video on' : 'Video off'}
                             />

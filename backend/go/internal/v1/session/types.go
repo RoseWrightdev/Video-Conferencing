@@ -41,6 +41,18 @@ type ChatIndex int
 // Content is validated to ensure it meets length and content requirements.
 type ChatContent string
 
+// ToggleAudioPayload contains information about a client's audio state.
+type ToggleAudioPayload struct {
+	ClientInfo
+	Enabled bool `json:"enabled"` // true if audio is unmuted, false if muted
+}
+
+// ToggleVideoPayload contains information about a client's video state.
+type ToggleVideoPayload struct {
+	ClientInfo
+	Enabled bool `json:"enabled"` // true if camera is on, false if off
+}
+
 // DisplayNameType represents the human-readable name for a client.
 // This is typically extracted from the JWT token or user profile.
 type DisplayNameType string
@@ -97,6 +109,10 @@ const (
 	EventAcceptScreenshare  Event = "accept_screenshare"  // Host grants screen sharing permission
 	EventDenyScreenshare    Event = "deny_screenshare"    // Host denies screen sharing permission
 
+	// Media control events
+	EventToggleAudio Event = "toggle_audio" // Toggle microphone on/off
+	EventToggleVideo Event = "toggle_video" // Toggle camera on/off
+
 	// WebRTC signaling events for peer-to-peer connection establishment
 	EventOffer       Event = "offer"       // WebRTC offer for establishing peer connection
 	EventAnswer      Event = "answer"      // WebRTC answer responding to an offer
@@ -145,6 +161,8 @@ type RoomStatePayload struct {
 	HandsRaised   []ClientInfo `json:"handsRaised"`             // Participants currently requesting to speak
 	WaitingUsers  []ClientInfo `json:"waitingUsers"`            // Clients waiting for admission
 	SharingScreen []ClientInfo `json:"sharingScreen,omitempty"` // Clients currently sharing screen
+	Unmuted       []ClientInfo `json:"unmuted,omitempty"`       // Participants with audio enabled
+	CameraOn      []ClientInfo `json:"cameraOn,omitempty"`      // Participants with video enabled
 }
 
 // ChatInfo represents a complete chat message with all associated metadata.

@@ -2,7 +2,13 @@ import { StateCreator } from 'zustand';
 import { WebSocketClient } from '@/lib/websockets';
 import { WebRTCManager } from '@/lib/webrtc';
 import { type RoomSlice, type RoomStoreState, type Participant, type ChatMessage } from '../types';
-import type { AddChatPayload, RoomStatePayload, HandStatePayload } from '../../../shared/types/events';
+import type { 
+  AddChatPayload, 
+  RoomStatePayload, 
+  HandStatePayload, 
+  ToggleAudioPayload, 
+  ToggleVideoPayload 
+} from '../../../shared/types/events';
 
 /**
  * Room slice for managing room lifecycle and core connection infrastructure.
@@ -87,7 +93,6 @@ export const createRoomSlice: StateCreator<
         throw new Error('JWT token missing sub/subject claim');
       }
     } catch (error) {
-      console.error('[RoomSlice] Failed to extract clientId from token:', error);
       throw new Error('Invalid authentication token');
     }
 
@@ -96,7 +101,6 @@ export const createRoomSlice: StateCreator<
       displayName: username,
     };
 
-    console.log('[RoomSlice] Creating WebSocket client for room:', roomId);
     const wsClient = new WebSocketClient({
       url: `ws://localhost:8080/ws/hub/${roomId}`,
       token,
@@ -104,10 +108,8 @@ export const createRoomSlice: StateCreator<
       reconnectInterval: 3000,
       maxReconnectAttempts: 5,
     });
-    console.log('[RoomSlice] WebSocket client created');
 
     // Setup all WebSocket event handlers here
-    console.log('[RoomSlice] Registering WebSocket event handlers');
     wsClient.on('add_chat', (message) => {
       const chatPayload = message.payload as AddChatPayload;
       const chatMessage: ChatMessage = {
@@ -123,12 +125,6 @@ export const createRoomSlice: StateCreator<
 
     wsClient.on('room_state', (message) => {
       const payload = message.payload as RoomStatePayload;
-      console.log('[RoomSlice] room_state received:', {
-        hostsCount: payload.hosts?.length || 0,
-        participantsCount: payload.participants?.length || 0,
-        waitingCount: payload.waitingUsers?.length || 0,
-        payload
-      });
       const newParticipants = new Map<string, Participant>();
       const newHosts = new Map<string, Participant>();
       const newWaiting = new Map<string, Participant>();
@@ -161,15 +157,41 @@ export const createRoomSlice: StateCreator<
         newWaiting.set(user.clientId, participant);
       });
 
-      console.log('[RoomSlice] Setting participants state:', {
-        participantsCount: newParticipants.size,
-        hostsCount: newHosts.size,
-        waitingCount: newWaiting.size
+      // Initialize audio/video state from payload
+      const unmuted = new Set<string>();
+      payload.unmuted?.forEach((client) => {
+        unmuted.add(client.clientId);
       });
+
+      const cameraOn = new Set<string>();
+      payload.cameraOn?.forEach((client) => {
+        cameraOn.add(client.clientId);
+      });
+
+      // Ensure local participant is in the participants map
+      // This is critical for media state tracking to work correctly
+      const currentState = get();
+      const localClientId = currentState.currentUserId || clientInfo.clientId;
+      if (!newParticipants.has(localClientId) && !newWaiting.has(localClientId)) {
+        const localParticipant: Participant = {
+          id: localClientId,
+          username: currentState.currentUsername || clientInfo.displayName,
+          role: payload.hosts?.some((h) => h.clientId === localClientId) ? 'host' : 'participant',
+          stream: currentState.localStream || undefined, // Attach existing stream if available
+        };
+        newParticipants.set(localClientId, localParticipant);
+      } else if (newParticipants.has(localClientId) && currentState.localStream) {
+        // Update existing local participant with stream
+        const existing = newParticipants.get(localClientId)!;
+        newParticipants.set(localClientId, { ...existing, stream: currentState.localStream });
+      }
+
       set({
         participants: newParticipants,
         hosts: newHosts,
         waitingParticipants: newWaiting,
+        unmutedParticipants: unmuted,
+        cameraOnParticipants: cameraOn,
         isHost: payload.hosts?.some((h) => h.clientId === clientInfo.clientId) || false,
       });
     });
@@ -192,6 +214,16 @@ export const createRoomSlice: StateCreator<
       get().setHandRaised(payload.clientId, false);
     });
 
+    wsClient.on('toggle_audio', (message) => {
+      const payload = message.payload as ToggleAudioPayload;
+      get().setAudioEnabled(payload.clientId, payload.enabled);
+    });
+
+    wsClient.on('toggle_video', (message) => {
+      const payload = message.payload as ToggleVideoPayload;
+      get().setVideoEnabled(payload.clientId, payload.enabled);
+    });
+
     wsClient.onConnectionChange?.((connectionState) => {
       get().updateConnectionState({
         wsConnected: connectionState === 'connected',
@@ -203,11 +235,14 @@ export const createRoomSlice: StateCreator<
       get().handleError(`Connection error: ${error.message}`);
     });
 
-    console.log('[RoomSlice] All event handlers registered, calling connect()');
     try {
       await wsClient.connect();
-      console.log('[RoomSlice] WebSocket connected successfully');
       const webrtcManager = new WebRTCManager(clientInfo, wsClient);
+
+      // Register handler for remote streams from peer connections
+      webrtcManager.onStreamAdded((stream, peerId, streamType) => {
+        get().setParticipantStream(peerId, stream);
+      });
 
       set({
         roomId,

@@ -183,11 +183,11 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
               <Button
                 variant="destructive"
                 size="icon"
-                className="rounded-full w-16 bg-red-600 hover:bg-red-900"
+                className="rounded-full w-16 bg-red-500 hover:bg-red-700 hover:text-white"
                 onClick={() => roomControlService.leaveRoom()}
                 aria-label="Leave room"
               >
-                <PhoneOff className="size-5" />
+                <PhoneOff className="size-5 text-red-950" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>

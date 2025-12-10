@@ -3,6 +3,13 @@
 import { cn } from '@/lib/utils';
 import ParticipantTile from './ParticipantTile';
 import type { Participant } from '@/store/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type GridLayout = 'gallery' | 'speaker' | 'sidebar';
 
@@ -12,6 +19,7 @@ export interface ParticipantGridProps {
   pinnedParticipantId?: string | null;
   layout?: GridLayout;
   onPinParticipant?: (participantId: string) => void;
+  onLayoutChange?: (layout: GridLayout) => void;
   className?: string;
   // Participant state maps (matches backend architecture)
   unmutedParticipants?: Set<string>;
@@ -54,6 +62,7 @@ export default function ParticipantGrid({
   pinnedParticipantId,
   layout = 'gallery',
   onPinParticipant,
+  onLayoutChange,
   className,
   unmutedParticipants = new Set(),
   cameraOnParticipants = new Set(),
@@ -104,9 +113,9 @@ export default function ParticipantGrid({
   // Gallery layout - equal-sized grid
   if (layout === 'gallery') {
     return (
-      <div className={cn('w-full h-full p-4', className)}>
+      <div className={cn('w-full h-full p-4 relative', className)}>
         <div className={cn('grid gap-4 h-full', getGridColumns(participants.length))}>
-          {participants.map(participant => (
+          {participants.map((participant, index) => (
             <ParticipantTile
               key={participant.id}
               participant={participant}
@@ -118,6 +127,20 @@ export default function ParticipantGrid({
               isLocal={participant.id === currentUserId}
               isPinned={participant.id === pinnedParticipantId}
               onPin={onPinParticipant}
+              layoutSelector={
+                index === 0 && onLayoutChange ? (
+                  <Select value={layout} onValueChange={(value) => onLayoutChange(value as GridLayout)}>
+                    <SelectTrigger className="bg-black/70 backdrop-blur-sm text-white border-white/10 hover:bg-black/80">
+                      <SelectValue placeholder="Layout" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gallery">Gallery</SelectItem>
+                      <SelectItem value="speaker">Speaker</SelectItem>
+                      <SelectItem value="sidebar">Sidebar</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : undefined
+              }
             />
           ))}
         </div>

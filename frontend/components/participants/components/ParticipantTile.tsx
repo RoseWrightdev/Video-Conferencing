@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { MicOff, VideoOff, Hand, Monitor, Pin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ interface ParticipantTileProps {
   isLocal?: boolean;
   isPinned?: boolean;
   onPin?: (participantId: string) => void;
+  layoutSelector?: ReactNode;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export default function ParticipantTile({
   isLocal = false,
   isPinned = false,
   onPin,
+  layoutSelector,
   className,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -36,16 +38,27 @@ export default function ParticipantTile({
 
   // Connect video stream to video element
   useEffect(() => {
-    if (videoRef.current && participant.stream && isVideoEnabled) {
-      videoRef.current.srcObject = participant.stream;
+    const videoElement = videoRef.current;
+    
+    if (videoElement && participant.stream && isVideoEnabled) {
+      videoElement.srcObject = participant.stream;
+      
+      // Explicitly play the video to ensure it displays
+      const playPromise = videoElement.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Video play failed - browser might require user interaction
+        });
+      }
+      
       setHasVideo(true);
     } else {
       setHasVideo(false);
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
+      if (videoElement) {
+        videoElement.srcObject = null;
       }
     }
-  }, [participant.stream, isVideoEnabled]);
+  }, [participant.stream, isVideoEnabled, participant.id, isLocal]);
 
   const getInitials = (name: string) => {
     return name
@@ -65,21 +78,21 @@ export default function ParticipantTile({
         className
       )}
     >
-      {/* Video Stream */}
-      {hasVideo && isVideoEnabled ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal}
-          className={cn(
-            'w-full h-full object-cover',
-            isLocal && 'scale-x-[-1]' // Mirror local video
-          )}
-        />
-      ) : (
-        /* Avatar Placeholder */
-        // todo: I actually like this style, consider making it a separate Avatar component with dynamic colors and the cn(...) utility
+      {/* Video Stream - always rendered so ref is available */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={isLocal}
+        className={cn(
+          'w-full h-full object-cover',
+          isLocal && 'scale-x-[-1]', // Mirror local video
+          (!hasVideo || !isVideoEnabled) && 'hidden' // Hide when not active
+        )}
+      />
+      
+      {/* Avatar Placeholder */}
+      {(!hasVideo || !isVideoEnabled) && (
         <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-gray-700 to-gray-800">
           <div className="w-24 h-24 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
             {getInitials(participant.username)}
@@ -112,21 +125,34 @@ export default function ParticipantTile({
             )}
           </div>
 
-          {/* Right side - Pin button */}
-          {onPin && (
-            <button
-              onClick={() => onPin(participant.id)}
-              className={cn(
-                'p-1.5 rounded bg-black/50 hover:bg-black/70 backdrop-blur-sm transition-all pointer-events-auto',
-                !isPinned && 'opacity-0 group-hover:opacity-100'
-              )}
-            >
-              <Pin
-                className={cn('h-3 w-3', isPinned ? 'text-blue-400' : 'text-white')}
-                fill={isPinned ? 'currentColor' : 'none'}
-              />
-            </button>
-          )}
+          {/* Right side - Layout selector and Pin button */}
+          <div className="flex items-center gap-1 pointer-events-auto">
+            {/* Layout Selector - shown on hover */}
+            {layoutSelector && (
+              <div className={cn(
+                'transition-opacity',
+                'opacity-0 group-hover:opacity-100'
+              )}>
+                {layoutSelector}
+              </div>
+            )}
+            
+            {/* Pin button */}
+            {onPin && (
+              <button
+                onClick={() => onPin(participant.id)}
+                className={cn(
+                  'p-1.5 rounded bg-black/50 hover:bg-black/70 backdrop-blur-sm transition-all',
+                  !isPinned && 'opacity-0 group-hover:opacity-100'
+                )}
+              >
+                <Pin
+                  className={cn('h-3 w-3', isPinned ? 'text-blue-400' : 'text-white')}
+                  fill={isPinned ? 'currentColor' : 'none'}
+                />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Bottom Bar - Name and Audio Status */}
@@ -140,14 +166,14 @@ export default function ParticipantTile({
             
             <div className="flex items-center gap-1 shrink-0">
               {!isVideoEnabled && (
-                <div className="p-1 rounded bg-red-500/90">
-                  <VideoOff className="h-3 w-3 text-white" />
+                <div className="p-1 rounded-full bg-red-500/80">
+                  <VideoOff className="h-3 w-3 text-white black" />
                 </div>
               )}
               
               {!isAudioEnabled && (
-                <div className="p-1 rounded bg-red-500/90">
-                  <MicOff className="h-3 w-3 text-white" />
+                <div className="p-1 rounded-full bg-red-500/80">
+                  <MicOff className="h-3 w-3 text-white black" />
                 </div>
               )}
             </div>

@@ -947,3 +947,95 @@ func (r *Room) handleWebRTCRenegotiate(client *Client, event Event, payload any)
 		slog.Error("Failed to marshal WebRTC renegotiation", "error", err, "ClientId", client.ID, "RoomId", r.ID)
 	}
 }
+
+// handleToggleAudio processes audio toggle events from clients.
+// Orchestrates audio state changes by delegating to toggleAudio and broadcasting updates.
+//
+// Operation Flow:
+//  1. Validate payload structure
+//  2. Update room's unmuted map via toggleAudio method
+//  3. Broadcast the event to all participants
+//
+// State Synchronization:
+// The broadcast ensures all clients receive the audio state change so they can
+// update their UI to display the correct muted/unmuted indicator for this participant.
+//
+// Permissions:
+// Only participants and hosts can toggle audio. This handler assumes the caller
+// (router) has already verified the client has appropriate permissions.
+//
+// Parameters:
+//   - client: The client toggling their audio
+//   - event: The event type (EventToggleAudio)
+//   - payload: ToggleAudioPayload containing the enabled state
+func (r *Room) handleToggleAudio(client *Client, event Event, payload any) {
+	p, ok := assertPayload[ToggleAudioPayload](payload)
+	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	if !ok {
+		return
+	}
+
+	slog.Info("handleToggleAudio called",
+		"ClientId", client.ID,
+		"Enabled", p.Enabled,
+		"RoomId", r.ID,
+		"PayloadClientId", p.ClientId)
+
+	// Delegate state mutation to room_methods.go
+	r.toggleAudio(p)
+
+	slog.Info("Client toggled audio",
+		"ClientId", client.ID,
+		"Enabled", p.Enabled,
+		"RoomId", r.ID,
+		"UnmutedCount", len(r.unmuted))
+
+	// Broadcast to all clients (hosts, participants, screenshare) so they can update their UI
+	r.broadcast(event, p, nil)
+}
+
+// handleToggleVideo processes video toggle events from clients.
+// Orchestrates video state changes by delegating to toggleVideo and broadcasting updates.
+//
+// Operation Flow:
+//  1. Validate payload structure
+//  2. Update room's cameraOn map via toggleVideo method
+//  3. Broadcast the event to all participants
+//
+// State Synchronization:
+// The broadcast ensures all clients receive the video state change so they can
+// update their UI to display the correct camera on/off indicator for this participant.
+//
+// Permissions:
+// Only participants and hosts can toggle video. This handler assumes the caller
+// (router) has already verified the client has appropriate permissions.
+//
+// Parameters:
+//   - client: The client toggling their video
+//   - event: The event type (EventToggleVideo)
+//   - payload: ToggleVideoPayload containing the enabled state
+func (r *Room) handleToggleVideo(client *Client, event Event, payload any) {
+	p, ok := assertPayload[ToggleVideoPayload](payload)
+	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	if !ok {
+		return
+	}
+
+	slog.Info("handleToggleVideo called",
+		"ClientId", client.ID,
+		"Enabled", p.Enabled,
+		"RoomId", r.ID,
+		"PayloadClientId", p.ClientId)
+
+	// Delegate state mutation to room_methods.go
+	r.toggleVideo(p)
+
+	slog.Info("Client toggled video",
+		"ClientId", client.ID,
+		"Enabled", p.Enabled,
+		"RoomId", r.ID,
+		"CameraOnCount", len(r.cameraOn))
+
+	// Broadcast to all clients (hosts, participants, screenshare) so they can update their UI
+	r.broadcast(event, p, nil)
+}

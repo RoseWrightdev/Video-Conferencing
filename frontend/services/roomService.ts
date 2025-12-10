@@ -10,6 +10,10 @@ import type {
   RoomStatePayload,
   HandStatePayload,
   ClientInfo,
+  WebRTCOfferPayload,
+  WebRTCAnswerPayload,
+  WebRTCCandidatePayload,
+  WebRTCRenegotiatePayload,
 } from '../../shared/types/events';
 
 /**
@@ -146,9 +150,18 @@ export class RoomService {
         currentUsername: username,
         clientInfo: this.clientInfo,
         wsClient: this.wsClient,
+        webrtcManager: this.webrtcManager,
       });
 
-      // Assuming refreshDevices is a method in the store
+      // Initialize local media stream (will be added to peer connections when they're created)
+      try {
+        const localStream = await this.webrtcManager.initializeLocalMedia();
+        useRoomStore.getState().setLocalStream(localStream);
+      } catch (error) {
+        // Continue without local media - user can enable it later
+      }
+
+      // Refresh available devices
       await useRoomStore.getState().refreshDevices();
     } catch (error) {
       useRoomStore.getState().handleError(
@@ -257,6 +270,42 @@ export class RoomService {
   }
 
   /**
+   * Establishes WebRTC peer connections with all participants in the room.
+   * Creates peer connections for participants we don't already have connections with.
+   * The first participant (alphabetically by clientId) initiates the connection.
+   * 
+   * @private
+   */
+  private async setupPeerConnections(participants: Map<string, Participant>, hosts: Map<string, Participant>) {
+    if (!this.webrtcManager || !this.clientInfo) return;
+
+    // Combine all participants (hosts and regular participants)
+    const allParticipants = new Map([...hosts, ...participants]);
+    
+    // Remove self from the list
+    allParticipants.delete(this.clientInfo.clientId);
+
+    // Establish peer connections with each participant
+    for (const [peerId, participant] of allParticipants) {
+      try {
+        // Check if we already have a peer connection
+        const existingPeer = this.webrtcManager.getPeer(peerId);
+        if (existingPeer) {
+          continue;
+        }
+
+        // Determine who initiates the connection (to avoid both sides creating offers)
+        // The participant with the lexicographically smaller clientId initiates
+        const shouldInitiate = this.clientInfo!.clientId < peerId;
+        
+        await this.webrtcManager.addPeer(peerId, shouldInitiate);
+      } catch (error) {
+        // Peer connection failed, will retry on next room_state update
+      }
+    }
+  }
+
+  /**
    * Registers WebSocket event handlers for room-level events.
    * 
    * Event handlers:
@@ -344,6 +393,17 @@ export class RoomService {
         newWaiting.set(user.clientId, participant);
       });
 
+      // Initialize audio/video state from payload
+      const unmuted = new Set<string>();
+      payload.unmuted?.forEach((client) => {
+        unmuted.add(client.clientId);
+      });
+
+      const cameraOn = new Set<string>();
+      payload.cameraOn?.forEach((client) => {
+        cameraOn.add(client.clientId);
+      });
+
       const isHost = payload.hosts?.some((h) => h.clientId === this.clientInfo?.clientId) || false;
       const isWaiting = payload.waitingUsers?.some((w) => w.clientId === this.clientInfo?.clientId) || false;
       const isParticipant = payload.participants?.some((p) => p.clientId === this.clientInfo?.clientId) || false;
@@ -352,10 +412,15 @@ export class RoomService {
         participants: newParticipants,
         hosts: newHosts,
         waitingParticipants: newWaiting,
+        unmutedParticipants: unmuted,
+        cameraOnParticipants: cameraOn,
         isHost,
         isJoined: isHost || isParticipant, // Only truly joined if host or participant
         isWaitingRoom: isWaiting, // Show waiting screen if in waiting list
       });
+
+      // Establish peer connections with all other participants
+      this.setupPeerConnections(newParticipants, newHosts);
 
       // Request chat history when room state is received (for hosts or approved participants)
       if (this.wsClient && this.clientInfo) {
@@ -386,6 +451,110 @@ export class RoomService {
       useRoomStore.getState().setHandRaised(payload.clientId, false);
     });
 
+    this.wsClient.on('toggle_audio', (message) => {
+      const payload = message.payload as { clientId: string; displayName: string; enabled: boolean };
+      useRoomStore.getState().setAudioEnabled(payload.clientId, payload.enabled);
+    });
+
+    this.wsClient.on('toggle_video', (message) => {
+      const payload = message.payload as { clientId: string; displayName: string; enabled: boolean };
+      useRoomStore.getState().setVideoEnabled(payload.clientId, payload.enabled);
+    });
+
+    // WebRTC Signaling Handlers
+    this.wsClient.on('offer', async (message) => {
+      const payload = message.payload as WebRTCOfferPayload;
+      
+      if (!this.webrtcManager) {
+        useRoomStore.getState().handleError('WebRTC not initialized for incoming call');
+        return;
+      }
+
+      try {
+        // Get or create peer connection
+        let peer = this.webrtcManager.getPeer(payload.clientId);
+        if (!peer) {
+          peer = await this.webrtcManager.addPeer(payload.clientId, false);
+        }
+
+        // Handle the offer and send answer
+        const answer = await peer.handleOffer({ type: 'offer', sdp: payload.sdp });
+        if (this.clientInfo) {
+          this.wsClient!.sendWebRTCAnswer(answer, payload.clientId, this.clientInfo);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        useRoomStore.getState().handleError(`Failed to establish video connection: ${message}`);
+      }
+    });
+
+    this.wsClient.on('answer', async (message) => {
+      const payload = message.payload as WebRTCAnswerPayload;
+      
+      if (!this.webrtcManager) {
+        useRoomStore.getState().handleError('WebRTC not initialized for call response');
+        return;
+      }
+
+      try {
+        const peer = this.webrtcManager.getPeer(payload.clientId);
+        if (peer) {
+          await peer.handleAnswer({ type: 'answer', sdp: payload.sdp });
+        } else {
+          throw new Error(`Peer connection not found for ${payload.clientId}`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        useRoomStore.getState().handleError(`Failed to complete video connection: ${message}`);
+      }
+    });
+
+    this.wsClient.on('candidate', async (message) => {
+      const payload = message.payload as WebRTCCandidatePayload;
+      
+      if (!this.webrtcManager) {
+        useRoomStore.getState().handleError('WebRTC not initialized for network negotiation');
+        return;
+      }
+
+      try {
+        const peer = this.webrtcManager.getPeer(payload.clientId);
+        if (peer) {
+          await peer.handleICECandidate({
+            candidate: payload.candidate,
+            sdpMid: payload.sdpMid,
+            sdpMLineIndex: payload.sdpMLineIndex
+          });
+        } else {
+          throw new Error(`Peer connection not found for ${payload.clientId}`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        useRoomStore.getState().handleError(`Failed to negotiate network connection: ${message}`);
+      }
+    });
+
+    this.wsClient.on('renegotiate', async (message) => {
+      const payload = message.payload as WebRTCRenegotiatePayload;
+      
+      if (!this.webrtcManager) {
+        useRoomStore.getState().handleError('WebRTC not initialized for connection update');
+        return;
+      }
+
+      try {
+        const peer = this.webrtcManager.getPeer(payload.clientId);
+        if (peer) {
+          await peer.requestRenegotiation(payload.reason || 'Connection update required');
+        } else {
+          throw new Error(`Peer connection not found for ${payload.clientId}`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        useRoomStore.getState().handleError(`Failed to update connection: ${message}`);
+      }
+    });
+
     // Handle waiting room requests (host only receives these)
     this.wsClient.on('waiting_request', (message) => {
       const payload = message.payload as ClientInfo;
@@ -407,14 +576,12 @@ export class RoomService {
       const payload = message.payload as ClientInfo;
       // Store screen share request for host to approve/deny
       // TODO: Add UI notification for hosts about pending screen share request
-      console.log('Screen share request from:', payload.displayName);
     });
 
     // Handle screen share approval (participant receives this)
     this.wsClient.on('accept_screenshare', () => {
       // Participant was approved to share screen
       // This signals the participant can now start screen sharing
-      console.log('Screen share approved by host');
       // TODO: Automatically trigger screen share or show success notification
     });
 
