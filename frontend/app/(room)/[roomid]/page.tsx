@@ -249,14 +249,14 @@ export default function RoomPage() {
           </div>
           
           {/* Controls at bottom of video */}
-          <div className="shrink-0 flex justify-center py-4 bg-background/95 backdrop-blur">
+          <div className="shrink-0 flex justify-center py-4 backdrop-blur bg-black">
             <ControlsPanel dependencies={controlDependencies} />
           </div>
         </div>
 
         {/* Chat Panel - Right Side */}
         {isChatPanelOpen && (
-          <div className="w-[400px] border-l shrink-0 flex flex-col">
+          <div className="w-[400px] border-l shrink-0 flex flex-col bg-black">
             <ChatPanel dependencies={chatDependencies} />
           </div>
         )}
