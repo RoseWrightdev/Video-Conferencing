@@ -41,60 +41,54 @@ export function WaitingScreen({
   isReconnecting = false,
 }: WaitingScreenProps) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-gray-900 via-gray-800 to-gray-900 p-4">
-      <div className="w-full max-w-md space-y-8 rounded-2xl border border-white/10 bg-white/5 p-8 text-center shadow-2xl backdrop-blur-xl">
-        {/* Header */}
-        <div className="space-y-2">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
-            <Clock className="h-8 w-8" />
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-md space-y-8 p-8">
+        <div className="text-center space-y-4">
+          <div className="flex justify-center">
+            <Clock className="h-12 w-12 text-muted-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Waiting Room</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Waiting Room</h1>
           {roomName && (
-            <p className="text-sm text-gray-400">
-              Room: <span className="font-medium text-gray-300">{roomName}</span>
+            <p className="text-sm text-muted-foreground">
+              Room: <span className="font-medium">{roomName}</span>
             </p>
           )}
         </div>
 
-        {/* Status */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
-            <span className="text-gray-300">
-              Waiting for host approval...
-            </span>
+        <div className="space-y-6">
+          <div className="flex items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>Waiting for host approval...</span>
           </div>
 
-          <p className="text-sm text-gray-400">
-            Joined as <span className="font-medium text-gray-300">{username || 'Guest'}</span>
+          <p className="text-center text-sm text-muted-foreground">
+            Joined as <span className="font-medium">{username || 'Guest'}</span>
           </p>
-        </div>
 
-        {/* Connection Status Badge */}
-        <div className="flex items-center justify-center gap-2 rounded-lg bg-black/20 px-4 py-2">
-          {isReconnecting ? (
-            <>
-              <WifiOff className="h-4 w-4 text-orange-400" />
-              <span className="text-sm text-orange-400">Reconnecting...</span>
-            </>
-          ) : isConnected ? (
-            <>
-              <Wifi className="h-4 w-4 text-green-400" />
-              <span className="text-sm text-green-400">Connected</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-4 w-4 text-red-400" />
-              <span className="text-sm text-red-400">Disconnected</span>
-            </>
-          )}
-        </div>
+          <div className="flex items-center justify-center gap-2 text-sm">
+            {isReconnecting ? (
+              <>
+                <WifiOff className="h-4 w-4 text-orange-500" />
+                <span className="text-orange-500">Reconnecting...</span>
+              </>
+            ) : isConnected ? (
+              <>
+                <Wifi className="h-4 w-4 text-green-500" />
+                <span className="text-green-500">Connected</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4 text-red-500" />
+                <span className="text-red-500">Disconnected</span>
+              </>
+            )}
+          </div>
 
-        {/* Info Message */}
-        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
-          <p className="text-sm text-gray-300">
-            The host will be notified of your request. You&apos;ll be admitted to the room shortly.
-          </p>
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              The host will be notified of your request. You&apos;ll be admitted to the room shortly.
+            </p>
+          </div>
         </div>
       </div>
     </div>
