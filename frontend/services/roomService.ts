@@ -359,7 +359,7 @@ export class RoomService {
       }));
     });
 
-    this.wsClient.on('room_state', (message) => {
+    this.wsClient.on('room_state', async (message) => {
       const payload = message.payload as RoomStatePayload;
       const newParticipants = new Map<string, Participant>();
       const newHosts = new Map<string, Participant>();
@@ -419,8 +419,30 @@ export class RoomService {
         isWaitingRoom: isWaiting, // Show waiting screen if in waiting list
       });
 
+      // Attach local stream to local participant for local video display
+      const { localStream, updateParticipant } = useRoomStore.getState();
+      if (localStream && this.clientInfo && newParticipants.has(this.clientInfo.clientId)) {
+        updateParticipant(this.clientInfo.clientId, { stream: localStream });
+      }
+
       // Establish peer connections with all other participants
       this.setupPeerConnections(newParticipants, newHosts);
+
+      // Ensure local stream is added to all peers (handles race condition where peers created before media ready)
+      if (this.webrtcManager && localStream) {
+        const allPeers = this.webrtcManager.getAllPeers();
+        for (const [peerId, peer] of allPeers) {
+          const localStreams = peer.getLocalStreams();
+          // Only add if peer doesn't have our camera stream yet
+          if (!localStreams.has('camera')) {
+            try {
+              await peer.addLocalStream(localStream, 'camera');
+            } catch (error) {
+              // Stream add failed, will retry on next room_state or renegotiation
+            }
+          }
+        }
+      }
 
       // Request chat history when room state is received (for hosts or approved participants)
       if (this.wsClient && this.clientInfo) {

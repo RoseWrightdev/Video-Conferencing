@@ -34,13 +34,12 @@ export default function ParticipantTile({
   className,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [hasVideo, setHasVideo] = useState(false);
 
   // Connect video stream to video element
   useEffect(() => {
     const videoElement = videoRef.current;
     
-    if (videoElement && participant.stream && isVideoEnabled) {
+    if (videoElement && participant.stream) {
       videoElement.srcObject = participant.stream;
       
       // Explicitly play the video to ensure it displays
@@ -50,15 +49,8 @@ export default function ParticipantTile({
           // Video play failed - browser might require user interaction
         });
       }
-      
-      setHasVideo(true);
-    } else {
-      setHasVideo(false);
-      if (videoElement) {
-        videoElement.srcObject = null;
-      }
     }
-  }, [participant.stream, isVideoEnabled, participant.id, isLocal]);
+  }, [participant.stream, participant.id]);
 
   const getInitials = (name: string) => {
     return name
@@ -78,27 +70,28 @@ export default function ParticipantTile({
         className
       )}
     >
-      {/* Video Stream - always rendered so ref is available */}
+      {/* Video Stream - always rendered, visibility controlled by CSS */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted={isLocal}
         className={cn(
-          'w-full h-full object-cover',
+          'absolute inset-0 w-full h-full object-cover',
           isLocal && 'scale-x-[-1]', // Mirror local video
-          (!hasVideo || !isVideoEnabled) && 'hidden' // Hide when not active
+          (!participant.stream || !isVideoEnabled) && 'invisible' // Hide when not active but keep in DOM
         )}
       />
       
-      {/* Avatar Placeholder */}
-      {(!hasVideo || !isVideoEnabled) && (
-        <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-gray-700 to-gray-800">
-          <div className="w-24 h-24 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
-            {getInitials(participant.username)}
-          </div>
+      {/* Avatar Placeholder - shown when video is not visible */}
+      <div className={cn(
+        'absolute inset-0 w-full h-full flex items-center justify-center bg-linear-to-br from-gray-700 to-gray-800',
+        (participant.stream && isVideoEnabled) && 'invisible' // Hide when video is active
+      )}>
+        <div className="w-24 h-24 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
+          {getInitials(participant.username)}
         </div>
-      )}
+      </div>
 
       {/* Overlay Container */}
       <div className="absolute inset-0 pointer-events-none">

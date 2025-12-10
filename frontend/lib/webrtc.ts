@@ -222,6 +222,13 @@ export class PeerConnection {
 
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
     try {
+      // Only set remote description if we're in the correct state
+      // 'have-local-offer' means we created an offer and are waiting for an answer
+      if (this.pc.signalingState !== 'have-local-offer') {
+        console.warn(`[WebRTC] Ignoring answer from ${this.peerId} - wrong signaling state: ${this.pc.signalingState}`);
+        return;
+      }
+      
       await this.pc.setRemoteDescription(answer);
     } catch (error) {
       throw new Error(`Failed to handle answer from peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
@@ -493,7 +500,8 @@ export class WebRTCManager {
       ...config,
     };
 
-    this.setupWebSocketHandlers();
+    // Note: WebSocket handlers for offer/answer/candidate are managed by roomService
+    // to avoid duplicate event processing
   }
 
   async initializeLocalMedia(): Promise<MediaStream> {
@@ -579,6 +587,17 @@ export class WebRTCManager {
       this.connectionStateHandlers.forEach(handler => handler(state, peerId));
     });
 
+    peer.onNegotiationNeeded(async (peerId) => {
+      // Only create new offer if we're in stable state to avoid conflicts
+      if (peer.getConnectionState() === 'connected' || peer.getConnectionState() === 'new') {
+        try {
+          await peer.createOffer();
+        } catch (error) {
+          // Ignore negotiation errors - they happen during normal connection flow
+        }
+      }
+    });
+
     this.peers.set(peerId, peer);
 
     if (this.localMediaStream) {
@@ -659,50 +678,6 @@ export class WebRTCManager {
 
   onConnectionStateChanged(handler: ConnectionStateHandler): void {
     this.connectionStateHandlers.push(handler);
-  }
-
-  private setupWebSocketHandlers(): void {
-    this.websocketClient.on('offer', async (message) => {
-      const payload = message.payload as WebRTCOfferPayload;
-      if (payload.targetClientId === this.localClientInfo.clientId) {
-        const peer = await this.addPeer(payload.clientId, false);
-        await peer.handleOffer({ type: 'offer', sdp: payload.sdp });
-      }
-    });
-
-    this.websocketClient.on('answer', async (message) => {
-      const payload = message.payload as WebRTCAnswerPayload;
-      if (payload.targetClientId === this.localClientInfo.clientId) {
-        const peer = this.getPeer(payload.clientId);
-        if (peer) {
-          await peer.handleAnswer({ type: 'answer', sdp: payload.sdp });
-        }
-      }
-    });
-
-    this.websocketClient.on('candidate', async (message) => {
-      const payload = message.payload as WebRTCCandidatePayload;
-      if (payload.targetClientId === this.localClientInfo.clientId) {
-        const peer = this.getPeer(payload.clientId);
-        if (peer) {
-          await peer.handleICECandidate({
-            candidate: payload.candidate,
-            sdpMid: payload.sdpMid,
-            sdpMLineIndex: payload.sdpMLineIndex,
-          });
-        }
-      }
-    });
-
-    this.websocketClient.on('renegotiate', async (message) => {
-      const payload = message.payload as WebRTCRenegotiatePayload;
-      if (payload.targetClientId === this.localClientInfo.clientId) {
-        const peer = this.getPeer(payload.clientId);
-        if (peer) {
-          await peer.createOffer();
-        }
-      }
-    });
   }
 }
 
