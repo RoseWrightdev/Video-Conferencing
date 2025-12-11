@@ -1,6 +1,15 @@
 'use client';
 
 import { Clock, Loader2, Wifi, WifiOff } from 'lucide-react';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import { Badge } from '@/components/ui/badge';
 
 interface WaitingScreenProps {
   roomName?: string | null;
@@ -19,7 +28,7 @@ interface WaitingScreenProps {
  * - Reconnection state when network issues occur
  * 
  * Design:
- * - Centered layout with frosted glass effect
+ * - Uses shadcn Empty component for consistent empty state design
  * - Animated loading spinner
  * - Connection status badge with icon
  * - Responsive text sizing
@@ -41,56 +50,57 @@ export function WaitingScreen({
   isReconnecting = false,
 }: WaitingScreenProps) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-md space-y-8 p-8">
-        <div className="text-center space-y-4">
-          <div className="flex justify-center">
-            <Clock className="h-12 w-12 text-muted-foreground" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Waiting Room</h1>
-          {roomName && (
-            <p className="text-sm text-muted-foreground">
-              Room: <span className="font-medium">{roomName}</span>
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <div className="flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Waiting for host approval...</span>
-          </div>
-
-          <p className="text-center text-sm text-muted-foreground">
-            Joined as <span className="font-medium">{username || 'Guest'}</span>
-          </p>
-
-          <div className="flex items-center justify-center gap-2 text-sm">
-            {isReconnecting ? (
-              <>
-                <WifiOff className="h-4 w-4 text-orange-500" />
-                <span className="text-orange-500">Reconnecting...</span>
-              </>
-            ) : isConnected ? (
-              <>
-                <Wifi className="h-4 w-4 text-green-500" />
-                <span className="text-green-500">Connected</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="h-4 w-4 text-red-500" />
-                <span className="text-red-500">Disconnected</span>
-              </>
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Empty className="max-w-md">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Clock className="h-12 w-12" />
+          </EmptyMedia>
+          <EmptyTitle>Waiting Room</EmptyTitle>
+          <EmptyDescription>
+            {roomName && (
+              <span className="block mb-2">
+                Room: <span className="font-medium">{roomName}</span>
+              </span>
             )}
-          </div>
-
-          <div className="text-center">
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Waiting for host approval...
+            </span>
+          </EmptyDescription>
+        </EmptyHeader>
+        
+        <EmptyContent>
+          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
+              Joined as <span className="font-medium">{username || 'Guest'}</span>
+            </p>
+
+            <Badge variant={isReconnecting ? "outline" : isConnected ? "default" : "destructive"} className="gap-2">
+              {isReconnecting ? (
+                <>
+                  <WifiOff className="h-3 w-3" />
+                  <span>Reconnecting...</span>
+                </>
+              ) : isConnected ? (
+                <>
+                  <Wifi className="h-3 w-3" />
+                  <span>Connected</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-3 w-3" />
+                  <span>Disconnected</span>
+                </>
+              )}
+            </Badge>
+
+            <p className="text-xs text-muted-foreground">
               The host will be notified of your request. You&apos;ll be admitted to the room shortly.
             </p>
           </div>
-        </div>
-      </div>
+        </EmptyContent>
+      </Empty>
     </div>
   );
 }
