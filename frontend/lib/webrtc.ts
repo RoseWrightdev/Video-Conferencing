@@ -244,7 +244,7 @@ export class PeerConnection {
       // Only set remote description if we're in the correct state
       // 'have-local-offer' means we created an offer and are waiting for an answer
       if (this.pc.signalingState !== 'have-local-offer') {
-        console.warn(`[WebRTC] Ignoring answer from ${this.peerId} - wrong signaling state: ${this.pc.signalingState}`);
+        logger.warn(`Ignoring answer from ${this.peerId} - wrong signaling state: ${this.pc.signalingState}`);
         return;
       }
       
@@ -404,7 +404,7 @@ export class PeerConnection {
 
     this.pc.oniceconnectionstatechange = () => {
       if (this.pc.iceConnectionState === 'failed') {
-        console.warn(`ICE connection failed for peer ${this.peerId} - connection may be unstable`);
+        logger.warn(`ICE connection failed for peer ${this.peerId} - connection may be unstable`);
       }
     };
 
@@ -463,7 +463,7 @@ export class PeerConnection {
 
     channel.onerror = (error) => {
       // Data channel errors are common during disconnection and non-fatal
-      console.warn(`Data channel error with peer ${this.peerId}:`, error);
+      logger.warn(`Data channel error with peer ${this.peerId}`, error);
     };
   }
 }
