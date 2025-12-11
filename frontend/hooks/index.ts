@@ -1,3 +1,4 @@
+export * from './useAudioDetection';
 export * from './useChat';
 export * from './useDeviceCapabilities';
 export * from './useMediaControls';

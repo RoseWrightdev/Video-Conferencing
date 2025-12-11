@@ -89,59 +89,109 @@ export default function RoomPage() {
     if (status === 'authenticated' && !localStream && !permissionsGranted) {
       handleRequestPermissions();
     }
-  }, [status]);
+  }, [status, localStream, permissionsGranted]);
 
-  // Audio level detection for speaking indicator
+  // Audio level detection for speaking indicator (Local + Remote)
   useEffect(() => {
-    if (!localStream || !isAudioEnabled || !currentUserId) {
-      setSpeakingParticipants(prev => {
-        const next = new Set(prev);
-        if (currentUserId) next.delete(currentUserId);
-        return next;
-      });
-      return;
+    if (!currentUserId) return;
+
+    // Single AudioContext for all participants to avoid browser limits
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const analysers = new Map<string, AnalyserNode>();
+    const sources = new Map<string, MediaStreamAudioSourceNode>();
+    const clonedTracks = new Map<string, MediaStreamTrack>();
+
+    // Helper to setup detection for a stream
+    const setupAudioDetection = (id: string, stream: MediaStream) => {
+      if (analysers.has(id)) return; // Already setup
+
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) return;
+
+      try {
+        // Clone track to avoid interfering with video playback
+        const track = audioTracks[0];
+        const clonedTrack = track.clone();
+        clonedTracks.set(id, clonedTrack);
+
+        const sourceStream = new MediaStream([clonedTrack]);
+        const source = audioContext.createMediaStreamSource(sourceStream);
+        const analyser = audioContext.createAnalyser();
+        
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.5;
+        source.connect(analyser);
+
+        sources.set(id, source);
+        analysers.set(id, analyser);
+      } catch (err) {
+        console.error(`Error setting up audio detection for ${id}:`, err);
+      }
+    };
+
+    // 1. Setup Local Stream
+    if (localStream && isAudioEnabled) {
+      setupAudioDetection(currentUserId, localStream);
     }
 
-    const audioContext = new AudioContext();
-    const analyser = audioContext.createAnalyser();
-    const microphone = audioContext.createMediaStreamSource(localStream);
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    
-    // More responsive settings for better speech detection
-    analyser.smoothingTimeConstant = 0.3; // Reduced from 0.8 for faster response
-    analyser.fftSize = 2048; // Increased for better frequency resolution
-    microphone.connect(analyser);
+    // 2. Setup Remote Streams
+    participants.forEach((p) => {
+      if (p.id !== currentUserId && p.stream && unmutedParticipants.has(p.id)) {
+        setupAudioDetection(p.id, p.stream);
+      }
+    });
 
-    let animationFrame: number;
-    const detectSpeaking = () => {
-      analyser.getByteFrequencyData(dataArray);
-      const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-      
-      // More sensitive threshold for clearer audio detection
-      const isSpeaking = average > 2; // Lowered from 3 for higher sensitivity
-      
-      setSpeakingParticipants(prev => {
-        const next = new Set(prev);
-        if (isSpeaking) {
-          next.add(currentUserId);
-        } else {
-          next.delete(currentUserId);
+    // Detection Loop
+    const dataArray = new Uint8Array(256);
+    const threshold = 0.02; // Sensitivity threshold
+    let animationFrameId: number;
+
+    const checkAudioLevels = () => {
+      const speakingNow = new Set<string>();
+
+      analysers.forEach((analyser, id) => {
+        analyser.getByteFrequencyData(dataArray);
+        const sum = dataArray.reduce((a, b) => a + b, 0);
+        const average = sum / dataArray.length / 255;
+        
+        if (average > threshold) {
+          speakingNow.add(id);
         }
-        return next;
       });
-      
-      animationFrame = requestAnimationFrame(detectSpeaking);
+
+      setSpeakingParticipants(prev => {
+        // Only update if changed to avoid re-renders
+        let changed = false;
+        if (prev.size !== speakingNow.size) changed = true;
+        else {
+          for (const id of speakingNow) {
+            if (!prev.has(id)) {
+              changed = true;
+              break;
+            }
+          }
+        }
+        return changed ? speakingNow : prev;
+      });
+
+      animationFrameId = requestAnimationFrame(checkAudioLevels);
     };
 
-    detectSpeaking();
+    checkAudioLevels();
 
+    // Cleanup
     return () => {
-      cancelAnimationFrame(animationFrame);
-      microphone.disconnect();
-      analyser.disconnect();
-      audioContext.close();
+      cancelAnimationFrame(animationFrameId);
+      
+      sources.forEach(source => source.disconnect());
+      analysers.forEach(analyser => analyser.disconnect());
+      clonedTracks.forEach(track => track.stop());
+      
+      if (audioContext.state !== 'closed') {
+        audioContext.close();
+      }
     };
-  }, [localStream, isAudioEnabled, currentUserId]);
+  }, [localStream, isAudioEnabled, currentUserId, participants, unmutedParticipants]);
 
   // Auto-hide controls on mouse inactivity
   useEffect(() => {
@@ -326,14 +376,12 @@ export default function RoomPage() {
                 // Host can mute participants via WebSocket
                 if (isHost && wsClient && clientInfo) {
                   // TODO: Implement mute participant event
-                  console.log('Mute participant:', id);
                 }
               }}
               onRemoveParticipant={(id) => {
                 // Host can remove participants via WebSocket
                 if (isHost && wsClient && clientInfo) {
                   // TODO: Implement remove participant event
-                  console.log('Remove participant:', id);
                 }
               }}
               onApproveWaiting={(id) => {
