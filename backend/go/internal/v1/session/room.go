@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"time"
 
 	"k8s.io/utils/set"
 )
@@ -107,6 +108,10 @@ func (r *Room) handleClientConnect(client *Client) {
 	if len(r.participants) == 0 && len(r.hosts) == 0 {
 		slog.Info("First user joined, making them host.", "room", r.ID, "ClientId", client.ID)
 		r.addHost(client)
+
+		// Metrics: Update participant count (hosts count as participants)
+		roomParticipants.WithLabelValues(string(r.ID)).Set(float64(len(r.hosts) + len(r.participants)))
+
 		// Broadcast initial room state to the new host
 		r.sendRoomStateToClient(client)
 		return
@@ -126,6 +131,14 @@ func (r *Room) handleClientDisconnect(client *Client) {
 
 	r.disconnectClient(client)
 	slog.Info("Client disconnected and removed from room", "room", r.ID, "ClientId", client.ID)
+
+	// Metrics: Update participant count after disconnect
+	totalParticipants := len(r.hosts) + len(r.participants)
+	if totalParticipants > 0 {
+		roomParticipants.WithLabelValues(string(r.ID)).Set(float64(totalParticipants))
+	} else {
+		// Room is empty, will be cleaned up - don't set gauge
+	}
 
 	payload := ClientDisconnectPayload{
 		ClientId:    client.ID,
@@ -198,8 +211,17 @@ func (r *Room) router(client *Client, data any) {
 	msg, ok := data.(Message)
 	if !ok {
 		slog.Error("router failed to marshal incoming message to type Message", "msg", msg, "id", client.ID)
+		websocketEvents.WithLabelValues("unknown", "error").Inc()
 		return
 	}
+
+	// Metrics: Track event processing duration
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start).Seconds()
+		messageProcessingDuration.WithLabelValues(string(msg.Event)).Observe(duration)
+		websocketEvents.WithLabelValues(string(msg.Event), "success").Inc()
+	}()
 
 	role := client.Role
 	isHost := HasPermission(role, HasHostPermission())
@@ -326,10 +348,8 @@ func (r *Room) broadcast(event Event, payload any, roles set.Set[RoleType]) {
 			for _, p := range m {
 				select {
 				case p.send <- rawMsg:
-					slog.Debug("Message sent to client", "clientId", p.ID)
 				default:
 					// Prevent a slow client from blocking the whole broadcast.
-					slog.Warn("Failed to send to client - channel full", "clientId", p.ID)
 				}
 			}
 		}
@@ -378,18 +398,10 @@ func clientsMapToSlice(m map[ClientIdType]*Client) []*Client {
 	return clients
 }
 
-// getRoomState returns the current state of the room including all participants, hosts, etc.
-// This method is thread-safe and can be called concurrently.
-func (r *Room) getRoomState() RoomStatePayload {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getRoomStateUnsafe()
-}
-
 // getRoomStateUnsafe returns the current room state without acquiring any locks.
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
-func (r *Room) getRoomStateUnsafe() RoomStatePayload {
+func (r *Room) getRoomState() RoomStatePayload {
 	// Convert client maps to slices of ClientInfo
 	hosts := make([]ClientInfo, 0, len(r.hosts))
 	for _, client := range r.hosts {
@@ -465,7 +477,7 @@ func (r *Room) getRoomStateUnsafe() RoomStatePayload {
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 func (r *Room) sendRoomStateToClient(client *Client) {
-	roomState := r.getRoomStateUnsafe()
+	roomState := r.getRoomState()
 
 	if msg, err := json.Marshal(Message{Event: EventRoomState, Payload: roomState}); err == nil {
 		select {
@@ -484,6 +496,6 @@ func (r *Room) sendRoomStateToClient(client *Client) {
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 func (r *Room) broadcastRoomState() {
-	roomState := r.getRoomStateUnsafe()
+	roomState := r.getRoomState()
 	r.broadcast(EventRoomState, roomState, nil)
 }

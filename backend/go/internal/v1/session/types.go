@@ -185,7 +185,7 @@ type ChatInfo struct {
 //   - Display name must be present and non-empty
 //
 // Returns an error if any validation rule is violated.
-func (c ChatInfo) Validate() error {
+func (c ChatInfo) ValidateChat() error {
 	if len(string(c.ChatContent)) == 0 {
 		return errors.New("chat content cannot be empty")
 	}

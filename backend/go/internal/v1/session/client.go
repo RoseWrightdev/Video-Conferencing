@@ -134,6 +134,9 @@ func (c *Client) readPump() {
 	defer func() {
 		c.room.handleClientDisconnect(c)
 		c.conn.Close()
+
+		// Metrics: Track WebSocket disconnection
+		activeWebSocketConnections.Dec()
 	}()
 
 	for {

@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"Social-Media/backend/go/internal/v1/auth"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,7 +89,24 @@ func TestRemoveHub(t *testing.T) {
 	hub := NewTestHub(nil)
 	var testID RoomIdType = "test_room"
 	hub.rooms[testID] = NewTestRoom(testID, nil)
+
+	// removeRoom schedules async deletion after 5 seconds grace period
 	hub.removeRoom(testID)
-	assert.Empty(t, hub.rooms)
-	assert.Empty(t, hub.rooms[testID])
+
+	// Room should still exist immediately (not yet deleted)
+	assert.NotEmpty(t, hub.rooms, "Room should not be deleted immediately")
+	assert.NotNil(t, hub.rooms[testID], "Room should still exist during grace period")
+
+	// Timer should be registered
+	assert.NotNil(t, hub.pendingRoomCleanups[testID], "Cleanup timer should be registered")
+
+	// Wait for the async cleanup to complete (grace period is 5 seconds)
+	time.Sleep(6 * time.Second)
+
+	// Now the room should be deleted
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	assert.Empty(t, hub.rooms, "Room should be deleted after grace period")
+	assert.Nil(t, hub.rooms[testID], "Room map entry should be nil")
+	assert.Empty(t, hub.pendingRoomCleanups, "Cleanup timer should be removed")
 }

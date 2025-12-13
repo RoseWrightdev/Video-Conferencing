@@ -382,13 +382,7 @@ func (r *Room) isRoomEmpty() bool {
 //   - payload: Contains the ClientId of the participant raising their hand
 func (r *Room) raiseHand(payload RaiseHandPayload) {
 	// Find the client who wants to raise their hand
-	var client *Client
-	for _, c := range r.participants {
-		if c.ID == payload.ClientId {
-			client = c
-			break
-		}
-	}
+	client := r.participants[payload.ClientId]
 
 	if client != nil {
 		// Add to raising hand map
@@ -425,13 +419,7 @@ func (r *Room) raiseHand(payload RaiseHandPayload) {
 //   - payload: Contains the ClientId of the participant lowering their hand
 func (r *Room) lowerHand(payload LowerHandPayload) {
 	// Find the client who wants to lower their hand
-	var client *Client
-	for _, c := range r.participants {
-		if c.ID == payload.ClientId {
-			client = c
-			break
-		}
-	}
+	client := r.participants[payload.ClientId]
 
 	if client != nil {
 		// Remove from raising hand map
@@ -470,22 +458,11 @@ func (r *Room) lowerHand(payload LowerHandPayload) {
 //   - payload: Contains the ClientId and enabled state for the audio toggle
 func (r *Room) toggleAudio(payload ToggleAudioPayload) {
 	// Find the client in participants map
-	var client *Client
-	for _, c := range r.participants {
-		if c.ID == payload.ClientId {
-			client = c
-			break
-		}
-	}
+	client := r.participants[payload.ClientId]
 
 	// Also check hosts map
 	if client == nil {
-		for _, c := range r.hosts {
-			if c.ID == payload.ClientId {
-				client = c
-				break
-			}
-		}
+		client = r.hosts[payload.ClientId]
 	}
 
 	if client != nil {
@@ -522,22 +499,11 @@ func (r *Room) toggleAudio(payload ToggleAudioPayload) {
 //   - payload: Contains the ClientId and enabled state for the video toggle
 func (r *Room) toggleVideo(payload ToggleVideoPayload) {
 	// Find the client in participants map
-	var client *Client
-	for _, c := range r.participants {
-		if c.ID == payload.ClientId {
-			client = c
-			break
-		}
-	}
+	client := r.participants[payload.ClientId]
 
 	// Also check hosts map
 	if client == nil {
-		for _, c := range r.hosts {
-			if c.ID == payload.ClientId {
-				client = c
-				break
-			}
-		}
+		client = r.hosts[payload.ClientId]
 	}
 
 	if client != nil {

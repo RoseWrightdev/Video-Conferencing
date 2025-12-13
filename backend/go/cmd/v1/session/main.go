@@ -15,6 +15,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"Social-Media/backend/go/internal/v1/auth"
 	"Social-Media/backend/go/internal/v1/session"
@@ -145,6 +146,14 @@ func main() {
 	{
 		wsGroup.GET("/hub/:roomId", hub.ServeWs)
 	}
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Health check endpoint
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
+	})
 
 	// Start the server.
 	srv := &http.Server{

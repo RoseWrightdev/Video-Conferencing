@@ -179,6 +179,9 @@ func (h *Hub) ServeWs(c *gin.Context) {
 		Role:        RoleTypeHost, // Default role, should be derived from token scopes
 	}
 
+	// Metrics: Track WebSocket connection (defer ensures cleanup on disconnect)
+	activeWebSocketConnections.Inc()
+
 	room.handleClientConnect(client)
 
 	// Start the client's goroutines.
@@ -218,6 +221,11 @@ func (h *Hub) removeRoom(roomId RoomIdType) {
 		if room, ok := h.rooms[roomId]; ok && len(room.participants) == 0 && len(room.hosts) == 0 && len(room.sharingScreen) == 0 {
 			delete(h.rooms, roomId)
 			delete(h.pendingRoomCleanups, roomId)
+
+			// Metrics: Track room deletion and cleanup participant gauge
+			activeRooms.Dec()
+			roomParticipants.DeleteLabelValues(string(roomId))
+
 			slog.Info("Removed empty room from hub after grace period", "roomId", roomId)
 		} else {
 			// Room is no longer empty, cancel cleanup
@@ -254,5 +262,8 @@ func (h *Hub) getOrCreateRoom(roomId RoomIdType) *Room {
 	slog.Info("Creating new session room", "roomroomId", roomId)
 	room := NewRoom(roomId, h.removeRoom)
 	h.rooms[roomId] = room
+
+	// Metrics: Track room creation
+	activeRooms.Inc()
 	return room
 }
