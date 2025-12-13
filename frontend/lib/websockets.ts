@@ -390,20 +390,30 @@ export class WebSocketClient {
    * ```
    */
   sendChat(content: string, clientInfo: ClientInfo): void {
+    console.log('[WebSocket] sendChat called with:', { content, clientInfo });
+    
+    if (!clientInfo || !clientInfo.clientId || !clientInfo.displayName) {
+      console.error('[WebSocket] Invalid clientInfo:', clientInfo);
+      throw new Error('ClientInfo is invalid or missing required fields');
+    }
+    
     const payload: AddChatPayload = {
-      ...clientInfo,
+      clientId: clientInfo.clientId,
+      displayName: clientInfo.displayName,
       chatId: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: Date.now(),
       chatContent: content,
     };
     
+    console.log('[WebSocket] Sending chat payload:', payload);
     this.send('add_chat', payload);
   }
 
   /** Delete chat message from room */
   deleteChat(chatId: string, clientInfo: ClientInfo): void {
     const payload: DeleteChatPayload = {
-      ...clientInfo,
+      clientId: clientInfo.clientId,
+      displayName: clientInfo.displayName,
       chatId,
     };
     

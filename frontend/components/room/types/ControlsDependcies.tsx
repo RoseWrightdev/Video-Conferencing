@@ -16,6 +16,7 @@ export interface RoomControlService {
   canScreenShare: boolean;
   leaveRoom: () => void;
   toggleParticipantsPanel: () => void;
+  toggleSettingsPanel: () => void;
   toggleChatPanel: () => void;
   toggleHand: () => void;
 }

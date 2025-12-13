@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
+import Loading from './loading'
 
 export const metadata: Metadata = {
   title: 'Video Room',
@@ -10,5 +12,9 @@ export default function RoomLayout({
 }: {
   children: React.ReactNode
 }) {
-  return children
+  return (
+    <Suspense fallback={<Loading />}>
+      {children}
+    </Suspense>
+  )
 }

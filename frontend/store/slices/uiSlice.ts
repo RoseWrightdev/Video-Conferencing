@@ -50,12 +50,17 @@ export const createUISlice: StateCreator<
   UiSlice
 > = (set) => ({
   isParticipantsPanelOpen: false,
+  isSettingsPanelOpen: false,
   gridLayout: 'gallery',
   isPinned: false,
   pinnedParticipantId: null,
 
   toggleParticipantsPanel: () => {
     set((state) => ({ isParticipantsPanelOpen: !state.isParticipantsPanelOpen }));
+  },
+
+  toggleSettingsPanel: () => {
+    set((state) => ({ isSettingsPanelOpen: !state.isSettingsPanelOpen }));
   },
 
   setGridLayout: (layout) => {

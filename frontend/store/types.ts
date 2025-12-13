@@ -109,6 +109,7 @@ export interface ConnectionState {
   wsConnected: boolean;
   wsReconnecting: boolean;
   webrtcConnected: boolean;
+  isInitializing: boolean;
   lastError?: string;
 }
 
@@ -261,10 +262,12 @@ export interface RoomSlice {
  */
 export interface UiSlice {
   isParticipantsPanelOpen: boolean;
+  isSettingsPanelOpen: boolean;
   gridLayout: GridLayout;
   isPinned: boolean;
   pinnedParticipantId: string | null;
   toggleParticipantsPanel: () => void;
+  toggleSettingsPanel: () => void;
   setGridLayout: (layout: GridLayout) => void;
   pinParticipant: (participantId: string | null) => void;
 }

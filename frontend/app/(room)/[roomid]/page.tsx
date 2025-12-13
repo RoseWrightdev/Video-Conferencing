@@ -4,27 +4,38 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { useRoom, useParticipants, useChat, useMediaControls } from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
+import { createLogger } from '@/lib/logger';
 import ChatPanel from '@/components/chat-panel/components/ChatPanel';
 import ControlsPanel from '@/components/room/components/Controls';
 import PermissionsScreen from '@/components/room/components/PermissionsScreen';
 import { WaitingScreen } from '@/components/room/WaitingScreen';
+import { LoadingScreen } from '@/components/room/LoadingScreen';
 import ParticipantGrid from '@/components/participants/components/ParticipantGrid';
 import ParticipantsPanel from '@/components/participants/components/ParticipantsPanel';
+import SettingsPanel from '@/components/settings/components/SettingsPanel';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect, useRef } from 'react';
 import { useRoomStore } from '@/store/useRoomStore';
+
+const logger = createLogger('Room');
 
 export default function RoomPage() {
   const params = useParams();
   const router = useRouter();
   const { data: session, status } = useSession();
   const roomId = params.roomid as string;
-  const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [permissionsGranted, setPermissionsGranted] = useState(() => {
+    // Check localStorage for previously granted permissions
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('media-permissions-granted') === 'true';
+    }
+    return false;
+  });
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  const { requestPermissions, initializeStream } = useMediaStream();
+  const { requestPermissions, initializeStream, refreshDevices } = useMediaStream();
   const { 
     localStream, 
     leaveRoom, 
@@ -42,10 +53,12 @@ export default function RoomPage() {
     approveParticipant,
     kickParticipant,
     isParticipantsPanelOpen,
+    isSettingsPanelOpen,
     pinnedParticipantId,
     gridLayout,
     handleError,
     toggleParticipantsPanel,
+    toggleSettingsPanel,
     setGridLayout,
     pinParticipant,
   } = useRoomStore();
@@ -76,20 +89,39 @@ export default function RoomPage() {
   const handleRequestPermissions = async () => {
     try {
       await requestPermissions();
-      // Actually initialize the media stream after permissions granted
-      await initializeStream();
+      // Don't initialize stream yet - only when user enables audio/video
       setPermissionsGranted(true);
+      // Store permissions grant in localStorage
+      localStorage.setItem('media-permissions-granted', 'true');
     } catch (error) {
       handleError(error instanceof Error ? error.message : 'Failed to get permissions');
     }
   };
 
-  // Auto-initialize stream when authenticated
+  // Check browser permissions on mount - don't auto-initialize stream
   useEffect(() => {
-    if (status === 'authenticated' && !localStream && !permissionsGranted) {
-      handleRequestPermissions();
+    const checkBrowserPermissions = async () => {
+      if (typeof navigator === 'undefined' || !navigator.permissions) return;
+      
+      try {
+        const cameraPermission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        const microphonePermission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+        
+        // If both are granted, just set permissions flag (don't create stream yet)
+        if (cameraPermission.state === 'granted' && microphonePermission.state === 'granted') {
+          setPermissionsGranted(true);
+          localStorage.setItem('media-permissions-granted', 'true');
+        }
+      } catch (error) {
+        // Permissions API might not be fully supported, fall back to localStorage check
+        logger.debug('Permissions API not available', { error });
+      }
+    };
+
+    if (!permissionsGranted && status === 'authenticated' && !isWaitingRoom) {
+      checkBrowserPermissions();
     }
-  }, [status, localStream, permissionsGranted]);
+  }, [status, permissionsGranted, isWaitingRoom]);
 
   // Audio level detection for speaking indicator (Local + Remote)
   useEffect(() => {
@@ -125,7 +157,7 @@ export default function RoomPage() {
         sources.set(id, source);
         analysers.set(id, analyser);
       } catch (err) {
-        console.error(`Error setting up audio detection for ${id}:`, err);
+        logger.error('Failed to setup audio detection', { participantId: id, error: err });
       }
     };
 
@@ -193,10 +225,13 @@ export default function RoomPage() {
     };
   }, [localStream, isAudioEnabled, currentUserId, participants, unmutedParticipants]);
 
-  // Auto-hide controls on mouse inactivity
+  // Auto-hide controls on mouse inactivity (freeze when settings panel is open)
   useEffect(() => {
     const handleMouseMove = () => {
       setShowControls(true);
+      
+      // Don't set hide timeout if settings panel is open
+      if (isSettingsPanelOpen) return;
       
       // Clear existing timeout
       if (hideControlsTimeout.current) {
@@ -209,16 +244,24 @@ export default function RoomPage() {
       }, 3000);
     };
 
-    // Show controls initially
+    // Show controls initially or when settings panel opens
     setShowControls(true);
+    
+    // Clear timeout when settings panel opens
+    if (isSettingsPanelOpen && hideControlsTimeout.current) {
+      clearTimeout(hideControlsTimeout.current);
+      hideControlsTimeout.current = null;
+    }
     
     // Add mouse move listener
     window.addEventListener('mousemove', handleMouseMove);
     
-    // Initial timeout
-    hideControlsTimeout.current = setTimeout(() => {
-      setShowControls(false);
-    }, 3000);
+    // Initial timeout (only if settings panel is closed)
+    if (!isSettingsPanelOpen) {
+      hideControlsTimeout.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000);
+    }
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
@@ -226,7 +269,7 @@ export default function RoomPage() {
         clearTimeout(hideControlsTimeout.current);
       }
     };
-  }, []);
+  }, [isSettingsPanelOpen]);
 
   const chatDependencies = {
     chatService: {
@@ -266,6 +309,7 @@ export default function RoomPage() {
         router.push('/');
       },
       toggleParticipantsPanel: toggleParticipantsPanel,
+      toggleSettingsPanel: toggleSettingsPanel,
       toggleChatPanel: toggleChatPanel,
       toggleHand: () => {
         if (!wsClient || !clientInfo || !currentUserId) return;
@@ -287,8 +331,15 @@ export default function RoomPage() {
     },
   };
 
+  // Show loading screen during authentication or initial connection
   if (status === 'loading') {
-    return <div className="p-10 text-center">Loading...</div>;
+    return <LoadingScreen status="authenticating" />;
+  }
+
+  // Show loading screen while initializing room connection (prevents waiting room flash)
+  // Also show loading if we're authenticated but haven't received room state yet (currentUserId not set)
+  if (status === 'authenticated' && (connectionState.isInitializing || !currentUserId)) {
+    return <LoadingScreen status="connecting" />;
   }
 
   if (status === 'unauthenticated') {
@@ -301,18 +352,9 @@ export default function RoomPage() {
     );
   }
 
-  if (!permissionsGranted) {
-    return (
-      <PermissionsScreen
-        permissionError={null}
-        onRequestPermissions={handleRequestPermissions}
-        onSkipPermissions={() => setPermissionsGranted(true)}
-      />
-    );
-  }
-
-  // Show waiting screen if user is in waiting room
-  if (isWaitingRoom) {
+  // Show waiting screen ONLY if user is in waiting room AND initialization is complete
+  // This prevents the flash of waiting room during the initial connection
+  if (isWaitingRoom && !connectionState.isInitializing) {
     return (
       <WaitingScreen
         roomName={roomName}
@@ -323,13 +365,33 @@ export default function RoomPage() {
     );
   }
 
+  // Show permissions screen ONLY after initialization AND when not in waiting room
+  // This prevents the flash of permissions screen during initial load
+  if (!permissionsGranted && !isWaitingRoom && !connectionState.isInitializing) {
+    return (
+      <PermissionsScreen
+        permissionError={null}
+        onRequestPermissions={handleRequestPermissions}
+        onSkipPermissions={() => {
+          setPermissionsGranted(true);
+          localStorage.setItem('media-permissions-granted', 'true');
+        }}
+      />
+    );
+  }
+
+  // If permissions not granted yet but still initializing, show loading (catch-all)
+  if (!permissionsGranted) {
+    return <LoadingScreen status="loading" />;
+  }
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Video Area */}
-        <div className="flex-1 flex flex-col relative">
-          <div className="flex-1 bg-[#1a1a1a] overflow-hidden relative pb-24">
+        <div className={`flex-1 flex flex-col relative ${!showControls ? 'cursor-none' : ''}`}>
+          <div className="flex-1 bg-[#1a1a1a] overflow-hidden relative">
             {/* Participant Grid */}
             <ParticipantGrid
               participants={Array.from(participants.values())}
@@ -401,6 +463,16 @@ export default function RoomPage() {
               className="pointer-events-auto"
             />
           </div>
+        )}
+
+        {/* Settings Panel - Centered Modal */}
+        {isSettingsPanelOpen && (
+          <SettingsPanel
+            gridLayout={gridLayout}
+            setGridLayout={setGridLayout}
+            refreshDevices={refreshDevices}
+            onClose={() => toggleSettingsPanel()}
+          />
         )}
       </div>
     </div>

@@ -16,7 +16,6 @@ interface ParticipantTileProps {
   isLocal?: boolean;
   isPinned?: boolean;
   onPin?: (participantId: string) => void;
-  layoutSelector?: ReactNode;
   className?: string;
 }
 
@@ -30,7 +29,6 @@ export default function ParticipantTile({
   isLocal = false,
   isPinned = false,
   onPin,
-  layoutSelector,
   className,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -64,9 +62,9 @@ export default function ParticipantTile({
   return (
     <div
       className={cn(
-        'group relative rounded-lg overflow-hidden bg-[#1a1a1a] aspect-video',
+        'group relative rounded-2xl overflow-hidden aspect-video',
         'transition-all duration-200',
-        isSpeaking && 'ring-4 ring-green-500 shadow-lg shadow-green-500/50',
+        isSpeaking && isVideoEnabled && 'ring-4 ring-green-500 shadow-lg shadow-green-500/50',
         className
       )}
     >
@@ -88,7 +86,11 @@ export default function ParticipantTile({
         'absolute inset-0 w-full h-full flex items-center justify-center bg-linear-to-br from-gray-700 to-gray-800',
         (participant.stream && isVideoEnabled) && 'invisible' // Hide when video is active
       )}>
-        <div className="w-24 h-24 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
+        <div className={cn(
+          'w-24 h-24 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg',
+          'transition-all duration-200',
+          isSpeaking && !isVideoEnabled && 'ring-4 ring-green-500 shadow-xl shadow-green-500/50'
+        )}>
           {getInitials(participant.username)}
         </div>
       </div>
@@ -118,18 +120,8 @@ export default function ParticipantTile({
             )}
           </div>
 
-          {/* Right side - Layout selector and Pin button */}
+          {/* Right side - Pin button */}
           <div className="flex items-center gap-1 pointer-events-auto">
-            {/* Layout Selector - shown on hover */}
-            {layoutSelector && (
-              <div className={cn(
-                'transition-opacity',
-                'opacity-0 group-hover:opacity-100'
-              )}>
-                {layoutSelector}
-              </div>
-            )}
-            
             {/* Pin button */}
             {onPin && (
               <button
@@ -149,7 +141,7 @@ export default function ParticipantTile({
         </div>
 
         {/* Bottom Bar - Name and Audio Status */}
-        <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/90 via-black/60 to-transparent p-2">
+        <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/60 to-transparent p-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <span className="text-sm font-medium text-white truncate">

@@ -8,6 +8,7 @@ import { type ConnectionSlice, type RoomStoreState } from '../types';
  * - connectionState.wsConnected: WebSocket connection established
  * - connectionState.wsReconnecting: WebSocket attempting reconnect
  * - connectionState.webrtcConnected: WebRTC peer connections active
+ * - connectionState.isInitializing: Initial room connection in progress
  * - connectionState.lastError: Most recent error message for display
  * 
  * Actions:
@@ -45,6 +46,7 @@ export const createConnectionSlice: StateCreator<
     wsConnected: false,
     wsReconnecting: false,
     webrtcConnected: false,
+    isInitializing: false,
   },
   
   updateConnectionState: (updates) => {

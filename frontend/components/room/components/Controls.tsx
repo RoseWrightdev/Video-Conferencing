@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Users,
   Hand,
+  Settings,
 } from "lucide-react";
 import { useState, memo } from "react";
 import { Button } from "@/components/ui/button";
@@ -35,22 +36,40 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
   return (
     <div className="flex items-center justify-between gap-4 p-4 w-full">
       {/* Left side controls */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="default"
-            size="icon"
-            className="rounded-full frosted-2 bg-white/10 hover:bg-white/50 text-white hover:text-black"
-            onClick={() => roomControlService.toggleParticipantsPanel()}
-            aria-label="Toggle participants"
-          >
-            <Users className="size-5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <Typo.P>Participants</Typo.P>
-        </TooltipContent>
-      </Tooltip>
+      <div className="flex items-center gap-3">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="default"
+              size="icon"
+              className="rounded-full frosted-2 bg-white/10 hover:bg-white/50 text-white hover:text-black"
+              onClick={() => roomControlService.toggleSettingsPanel()}
+              aria-label="Toggle settings"
+            >
+              <Settings className="size-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <Typo.P>Settings</Typo.P>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="default"
+              size="icon"
+              className="rounded-full frosted-2 bg-white/10 hover:bg-white/50 text-white hover:text-black"
+              onClick={() => roomControlService.toggleParticipantsPanel()}
+              aria-label="Toggle participants"
+            >
+              <Users className="size-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <Typo.P>Participants</Typo.P>
+          </TooltipContent>
+        </Tooltip>
+      </div>
       <div className="m-3 bg-white-/20 frosted-2 rounded-full p-1 flex items-center justify-center">
         {/* Center controls */}
         <div className="flex items-center gap-3">

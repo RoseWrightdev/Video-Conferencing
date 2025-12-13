@@ -139,9 +139,22 @@ export const createMediaSlice: StateCreator<
       } else {
         // Audio tracks exist, just toggle enabled state
         const newState = !isAudioEnabled;
-        audioTracks.forEach(track => {
-          track.enabled = newState;
-        });
+        
+        if (newState) {
+          // Enabling audio - just enable the tracks
+          audioTracks.forEach(track => {
+            track.enabled = true;
+          });
+        } else {
+          // Disabling audio - STOP the tracks to turn off microphone light
+          audioTracks.forEach(track => {
+            track.stop();
+          });
+          // Remove stopped tracks from stream
+          audioTracks.forEach(track => {
+            localStream.removeTrack(track);
+          });
+        }
         
         set({ isAudioEnabled: newState });
         
@@ -152,24 +165,21 @@ export const createMediaSlice: StateCreator<
         }
       }
     } else {
-      // No stream at all - request both audio and video but only enable audio
+      // No stream at all - request ONLY audio (don't turn on camera)
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         
-        // Enable audio track but disable video
+        // Audio track is already enabled
         stream.getAudioTracks().forEach(track => track.enabled = true);
-        stream.getVideoTracks().forEach(track => track.enabled = false);
         
         get().setLocalStream(stream);
-        set({ isAudioEnabled: true, isVideoEnabled: false });
+        set({ isAudioEnabled: true });
         
         // Notify backend
-        const { wsClient: client, clientInfo: info, setAudioEnabled, setVideoEnabled } = get();
+        const { wsClient: client, clientInfo: info, setAudioEnabled } = get();
         if (client && info) {
           client.toggleAudio(info, true);
-          client.toggleVideo(info, false);
           setAudioEnabled(info.clientId, true);
-          setVideoEnabled(info.clientId, false);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Microphone permission denied';
@@ -226,9 +236,23 @@ export const createMediaSlice: StateCreator<
       } else {
         // Video tracks exist, just toggle enabled state
         const newState = !isVideoEnabled;
-        videoTracks.forEach(track => {
-          track.enabled = newState;
-        });
+        
+        if (newState) {
+          // Enabling video - just enable the tracks
+          videoTracks.forEach(track => {
+            track.enabled = true;
+          });
+        } else {
+          // Disabling video - STOP the tracks to turn off camera light
+          videoTracks.forEach(track => {
+            track.stop();
+          });
+          // Remove stopped tracks from stream
+          videoTracks.forEach(track => {
+            localStream.removeTrack(track);
+          });
+        }
+        
         set({ isVideoEnabled: newState });
         
         // CRITICAL: Ensure audio tracks remain in their current state
@@ -245,24 +269,21 @@ export const createMediaSlice: StateCreator<
         }
       }
     } else {
-      // No stream at all - request both audio and video but only enable video
+      // No stream at all - request ONLY video (don't turn on microphone)
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         
-        // Disable audio track but enable video
-        stream.getAudioTracks().forEach(track => track.enabled = false);
+        // Video track is already enabled
         stream.getVideoTracks().forEach(track => track.enabled = true);
         
         get().setLocalStream(stream);
-        set({ isVideoEnabled: true, isAudioEnabled: false });
+        set({ isVideoEnabled: true });
         
         // Notify backend
-        const { wsClient: client, clientInfo: info, setVideoEnabled, setAudioEnabled } = get();
+        const { wsClient: client, clientInfo: info, setVideoEnabled } = get();
         if (client && info) {
           client.toggleVideo(info, true);
-          client.toggleAudio(info, false);
           setVideoEnabled(info.clientId, true);
-          setAudioEnabled(info.clientId, false);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Camera permission denied';

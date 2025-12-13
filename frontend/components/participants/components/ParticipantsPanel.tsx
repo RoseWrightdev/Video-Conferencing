@@ -1,9 +1,15 @@
 'use client';
 
-import { X, Users, Hand, Monitor, Check, Ban, Clock } from 'lucide-react';
+import { X as XIcon, Users, Hand, Monitor, Check, Ban, Clock, MoreVertical, UserX, Mic, MicOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from '@/components/ui/select';
 import type { Participant } from '@/store/types';
 
 export interface ParticipantsPanelProps {
@@ -74,40 +80,38 @@ export default function ParticipantsPanel({
   const sortedParticipants = [...participants].sort((a, b) => {
     if (a.role === 'host' && b.role !== 'host') return -1;
     if (a.role !== 'host' && b.role === 'host') return 1;
-    
+
     const aHandRaised = raisingHandParticipants.has(a.id);
     const bHandRaised = raisingHandParticipants.has(b.id);
     if (aHandRaised && !bHandRaised) return -1;
     if (!aHandRaised && bHandRaised) return 1;
-    
+
     return a.username.localeCompare(b.username);
   });
 
   return (
-    <div className={cn('absolute left-4 top-4 bottom-6 h-[calc(100vh-7rem)] w-80 border-r rounded-2xl flex flex-col bg-white/80 frosted-2 z-50 overflow-hidden', className)}>
+    <div className={cn('absolute left-4 top-4 bottom-6 h-[calc(100vh-7rem)] w-80 border-r rounded-2xl flex flex-col bg-white/60 frosted-2 z-50 overflow-hidden', className)}>
       {/* Header */}
-      <div className="p-4 border-b flex items-center justify-between shrink-0">
+      <div className="p-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5" />
-          <h3 className="font-semibold">
-            Participants ({participants.length})
-          </h3>
+          <h3 className="font-semibold">Participants</h3>
         </div>
         <Button
           variant="ghost"
           size="icon"
-          className="rouneded-full"
           onClick={onClose}
-          aria-label="Close participants panel"
+          className="rounded-full -m-2"
+          aria-label="Close chat panel"
         >
-          <X className="h-4 w-4" />
+          <XIcon className="h-5 w-5 text-black" />
         </Button>
       </div>
 
       {/* Waiting Room Section */}
       {isHost && waitingParticipants.length > 0 && (
-        <div className="border-b bg-yellow-500/5">
-          <div className="p-3 border-b bg-yellow-500/10">
+        <div>
+          <div className="p-3">
             <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
               <Clock className="h-4 w-4" />
               <h4 className="font-semibold text-sm">
@@ -194,105 +198,116 @@ export default function ParticipantsPanel({
                     isCurrentUser && 'bg-accent/30'
                   )}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    {/* Left: Avatar + Info */}
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                        {participant.username
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .toUpperCase()
-                          .slice(0, 2)}
+                  <div className="flex items-start gap-3">
+                    {/* Left: Avatar */}
+                    <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                      {participant.username
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .toUpperCase()
+                        .slice(0, 2)}
+                    </div>
+
+                    {/* Middle: Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">
+                          {participant.username}
+                          {isCurrentUser && (
+                            <span className="text-muted-foreground ml-1">(You)</span>
+                          )}
+                        </p>
                       </div>
 
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium truncate">
-                            {participant.username}
-                            {isCurrentUser && (
-                              <span className="text-muted-foreground ml-1">(You)</span>
-                            )}
-                          </p>
-                        </div>
+                      {/* Status badges */}
+                      <div className="flex items-center gap-1 mt-1 flex-wrap">
+                        {isParticipantHost && (
+                          <Badge
+                            variant="secondary"
+                            className=" text-xs px-1.5 py-0"
+                          >
+                            Host
+                          </Badge>
+                        )}
 
-                        {/* Status badges */}
-                        <div className="flex items-center gap-1 mt-1 flex-wrap">
-                          {isParticipantHost && (
-                            <Badge
-                              variant="outline"
-                              className="bg-black/50 text-white border-0 text-xs px-1.5 py-0"
-                            >
-                              Host
-                            </Badge>
-                          )}
-                          
-                          {isScreenSharing && (
-                            <Badge
-                              variant="secondary"
-                              className="bg-purple-500/90 text-white border-0 text-xs px-1.5 py-0"
-                            >
-                              <Monitor className="h-3 w-3" />
-                            </Badge>
-                          )}
+                        {isScreenSharing && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-purple-500/90 text-white text-xs px-1.5 py-0"
+                          >
+                            <Monitor className="h-3 w-3" />
+                          </Badge>
+                        )}
 
-                          {hasHandRaised && (
-                            <Badge
-                              variant="secondary"
-                              className="bg-yellow-500/90 text-yellow-950 border-0 text-xs px-1.5 py-0 animate-pulse"
-                            >
-                              <Hand className="h-3 w-3" />
-                            </Badge>
-                          )}
-
-                          {/* Audio/Video status */}
-                          <div className="flex items-center gap-1 ml-auto">
-                            <div
-                              className={cn(
-                                'w-1.5 h-1.5 rounded-full',
-                                isAudioOn ? 'bg-green-500' : 'bg-red-500'
-                              )}
-                              title={isAudioOn ? 'Audio on' : 'Audio off'}
-                            />
-                            <div
-                              className={cn(
-                                'w-1.5 h-1.5 rounded-full',
-                                isVideoOn ? 'bg-blue-500' : 'bg-red-500'
-                              )}
-                              title={isVideoOn ? 'Video on' : 'Video off'}
-                            />
-                          </div>
-                        </div>
+                        {hasHandRaised && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-yellow-500/90 text-yellow-950 text-xs animate-pulse"
+                          >
+                            <Hand className="h-3 w-3" />
+                          </Badge>
+                        )}
                       </div>
                     </div>
 
-                    {/* Right: Host controls */}
-                    {isHost && !isCurrentUser && (
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                        {onMuteParticipant && isAudioOn && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onMuteParticipant(participant.id)}
-                            className="h-7 px-2 text-xs"
-                          >
-                            Mute
-                          </Button>
-                        )}
-                        {onRemoveParticipant && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onRemoveParticipant(participant.id)}
-                            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                          >
-                            Remove
-                          </Button>
-                        )}
+                    {/* Right: Host controls + Audio/Video status */}
+                    <div className="flex items-start gap-2 shrink-0">
+                      {/* Host controls */}
+                      {isHost && !isCurrentUser && (
+                        <div>
+                          <Select onValueChange={(value) => {
+                            if (value === 'mute' && onMuteParticipant && isAudioOn) {
+                              onMuteParticipant(participant.id);
+                            } else if (value === 'remove' && onRemoveParticipant) {
+                              onRemoveParticipant(participant.id);
+                            }
+                          }}>
+                            <SelectTrigger>
+                              <MoreVertical />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {onMuteParticipant && isAudioOn && (
+                                <SelectItem value="mute">
+                                  <div className="flex items-center gap-2">
+                                    <MicOff className="h-3 w-3" />
+                                    <span>Mute</span>
+                                  </div>
+                                </SelectItem>
+                              )}
+                              {onRemoveParticipant && (
+                                <SelectItem value="remove" className="text-destructive focus:text-destructive">
+                                  <div className="flex items-center gap-2">
+                                    <UserX className="h-3 w-3" />
+                                    <span>Remove</span>
+                                  </div>
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {/* Audio/Video status indicators */}
+                      <div className="flex items-center gap-1 pt-1">
+                        <div
+                          className={cn(
+                            'w-2 h-2 rounded-full',
+                            isAudioOn ? 'bg-green-500' : 'bg-red-500'
+                          )}
+                          title={isAudioOn ? 'Audio on' : 'Audio off'}
+                          aria-label={isAudioOn ? 'Audio on' : 'Audio off'}
+                        />
+                        <div
+                          className={cn(
+                            'w-2 h-2 rounded-full',
+                            isVideoOn ? 'bg-blue-500' : 'bg-red-500'
+                          )}
+                          title={isVideoOn ? 'Video on' : 'Video off'}
+                          aria-label={isVideoOn ? 'Video on' : 'Video off'}
+                        />
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               );
@@ -300,15 +315,6 @@ export default function ParticipantsPanel({
           )}
         </div>
       </div>
-
-      {/* Footer */}
-      {isHost && (
-        <div className="p-4 border-t shrink-0 bg-muted/30">
-          <p className="text-xs text-muted-foreground">
-            Host controls: Hover over participants to mute or remove
-          </p>
-        </div>
-      )}
     </div>
   );
 }

@@ -190,6 +190,7 @@ export class RoomService {
   public async joinRoom() {
     if (!this.wsClient || !this.clientInfo) {
       useRoomStore.getState().handleError('Connection not ready. Please try again.');
+      useRoomStore.getState().updateConnectionState({ isInitializing: false });
       return;
     }
     try {
@@ -261,6 +262,7 @@ export class RoomService {
         wsConnected: false,
         wsReconnecting: false,
         webrtcConnected: false,
+        isInitializing: false,
       },
     });
   }
@@ -406,7 +408,8 @@ export class RoomService {
       const isWaiting = payload.waitingUsers?.some((w) => w.clientId === this.clientInfo?.clientId) || false;
       const isParticipant = payload.participants?.some((p) => p.clientId === this.clientInfo?.clientId) || false;
 
-      useRoomStore.setState({
+      // Update room state and clear initialization atomically to prevent flash
+      useRoomStore.setState((state) => ({
         participants: newParticipants,
         hosts: newHosts,
         waitingParticipants: newWaiting,
@@ -415,7 +418,11 @@ export class RoomService {
         isHost,
         isJoined: isHost || isParticipant, // Only truly joined if host or participant
         isWaitingRoom: isWaiting, // Show waiting screen if in waiting list
-      });
+        connectionState: {
+          ...state.connectionState,
+          isInitializing: false, // Clear initialization now that we know our room status
+        },
+      }));
 
       // Attach local stream to local participant for local video display
       const { localStream, updateParticipant } = useRoomStore.getState();
@@ -436,7 +443,14 @@ export class RoomService {
     });
 
     this.wsClient.on('accept_waiting', () => {
-      useRoomStore.setState({ isWaitingRoom: false, isJoined: true });
+      useRoomStore.setState((state) => ({
+        isWaitingRoom: false,
+        isJoined: true,
+        connectionState: {
+          ...state.connectionState,
+          isInitializing: false,
+        },
+      }));
       
       // Request chat history when accepted into room
       if (this.wsClient && this.clientInfo) {
@@ -445,7 +459,13 @@ export class RoomService {
     });
 
     this.wsClient.on('deny_waiting', () => {
-      useRoomStore.getState().handleError('Access to room denied by host');
+      useRoomStore.setState((state) => ({
+        connectionState: {
+          ...state.connectionState,
+          isInitializing: false,
+          lastError: 'Access to room denied by host',
+        },
+      }));
     });
 
     this.wsClient.on('raise_hand', (message) => {

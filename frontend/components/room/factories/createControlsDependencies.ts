@@ -85,6 +85,7 @@ export function createMockControlDependencies({
       isHandRaised,
       leaveRoom: () => console.log("Mock leaveRoom"),
       toggleParticipantsPanel: () => console.log("Mock toggleParticipantsPanel"),
+      toggleSettingsPanel: () => console.log("Mock toggleSettingsPanel"),
       toggleChatPanel: () => console.log("Mock toggleChatPanel"),
       toggleHand: () => console.log("Mock toggleHand"),
     },

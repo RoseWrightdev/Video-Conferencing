@@ -1,7 +1,7 @@
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { useState, useRef, useEffect, memo, useCallback } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { ChatDependencies } from "../types/ChatDependencies";
 
 export interface ChatInputProps {
@@ -56,7 +56,7 @@ const ChatInput = memo(function ChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className={`font-extralight bg-black/5! resize-none min-h-10 max-h-[200px] overflow-y-auto text-black placeholder-black/40 border-black/10! rounded-lg shadow-none! ${message.trim() ? "pr-12" : ""}`}
+          className={`font-medium bg-black/5! resize-none min-h-10 max-h-[200px] overflow-y-auto text-black placeholder-black/40 border-black/10! rounded-lg shadow-none! ${message.trim() ? "pr-12" : ""}`}
           rows={1}
           aria-label="Chat message input"
         />

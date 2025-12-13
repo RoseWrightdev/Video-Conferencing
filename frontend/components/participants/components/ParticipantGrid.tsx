@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 export type GridLayout = 'gallery' | 'speaker' | 'sidebar';
 
@@ -112,9 +113,34 @@ export default function ParticipantGrid({
 
   // Gallery layout - equal-sized grid
   if (layout === 'gallery') {
+    // Single participant - use centered aspect ratio
+    if (participants.length === 1) {
+      return (
+        <div className={cn('w-full h-full p-8 flex items-center justify-center', className)}>
+          <div className="w-full max-w-7xl">
+            <AspectRatio ratio={16 / 9}>
+              <ParticipantTile
+                key={participants[0].id}
+                participant={participants[0]}
+                isAudioEnabled={unmutedParticipants.has(participants[0].id)}
+                isVideoEnabled={cameraOnParticipants.has(participants[0].id)}
+                isScreenSharing={sharingScreenParticipants.has(participants[0].id)}
+                isHandRaised={raisingHandParticipants.has(participants[0].id)}
+                isSpeaking={speakingParticipants.has(participants[0].id)}
+                isLocal={participants[0].id === currentUserId}
+                isPinned={participants[0].id === pinnedParticipantId}
+                onPin={onPinParticipant}
+              />
+            </AspectRatio>
+          </div>
+        </div>
+      );
+    }
+
+    // Multiple participants - use grid
     return (
       <div className={cn('w-full h-full p-4 relative', className)}>
-        <div className={cn('grid gap-4 h-full', getGridColumns(participants.length))}>
+        <div className={cn('grid gap-4 w-full h-full', getGridColumns(participants.length))}>
           {participants.map((participant, index) => (
             <ParticipantTile
               key={participant.id}
@@ -127,20 +153,6 @@ export default function ParticipantGrid({
               isLocal={participant.id === currentUserId}
               isPinned={participant.id === pinnedParticipantId}
               onPin={onPinParticipant}
-              layoutSelector={
-                index === 0 && onLayoutChange ? (
-                  <Select value={layout} onValueChange={(value) => onLayoutChange(value as GridLayout)}>
-                    <SelectTrigger className="bg-black/70 backdrop-blur-sm text-white border-white/10 hover:bg-black/80">
-                      <SelectValue placeholder="Layout" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="gallery">Gallery</SelectItem>
-                      <SelectItem value="speaker">Speaker</SelectItem>
-                      <SelectItem value="sidebar">Sidebar</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : undefined
-              }
             />
           ))}
         </div>

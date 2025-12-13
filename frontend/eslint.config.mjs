@@ -14,7 +14,14 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
-  ...storybook.configs["flat/recommended"]
+  ...storybook.configs["flat/recommended"],
+  {
+  'import/order': ['error', {
+    'groups': ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+    'newlines-between': 'always',
+    'alphabetize': { order: 'asc' }
+  }]
+}
 ];
 
 export default eslintConfig;
