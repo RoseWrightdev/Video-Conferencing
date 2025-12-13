@@ -1,110 +1,70 @@
 ---
-# ServiceMonitor for Prometheus scraping (including logging metrics)
+# ServiceMonitor for Backend Metrics
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: social-media-metrics
+  name: backend-metrics
   namespace: social-media
   labels:
-    app.kubernetes.io/name: social-media-metrics
+    app.kubernetes.io/name: backend-metrics
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/part-of: social-media-platform
+      app.kubernetes.io/name: backend
+      app.kubernetes.io/component: api
   endpoints:
-  - port: http
-    path: /metrics
-    interval: 30s
-    scrapeTimeout: 10s
   - port: websocket
     path: /metrics
     interval: 30s
     scrapeTimeout: 10s
-  # Fluent Bit metrics
-  - port: fluent-bit-metrics
-    path: /metrics
-    interval: 30s
-    scrapeTimeout: 10s
-  # Vector metrics
-  - port: vector-metrics
-    path: /metrics
-    interval: 30s
-    scrapeTimeout: 10s
 ---
-# ServiceMonitor for Logging Infrastructure
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: logging-infrastructure-metrics
-  namespace: logging
-  labels:
-    app.kubernetes.io/name: logging-metrics
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: elasticsearch
-  endpoints:
-  - port: http
-    path: /_prometheus/metrics
-    interval: 30s
-    scrapeTimeout: 10s
----
-# PrometheusRule for Logging Alerts
+# PrometheusRule for WebRTC Alerts
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: logging-alerts
+  name: webrtc-alerts
   namespace: social-media
   labels:
-    app.kubernetes.io/name: logging-alerts
+    app.kubernetes.io/name: webrtc-alerts
 spec:
   groups:
-  - name: logging.rules
+  - name: webrtc.rules
     rules:
-    - alert: HighLogErrorRate
-      expr: rate(fluentbit_input_records_total{name="tail.0"}[5m]) > 10
+    - alert: HighWebSocketConnectionFailures
+      expr: rate(websocket_events_total{status="error"}[5m]) / rate(websocket_events_total[5m]) > 0.1
       for: 2m
       labels:
         severity: warning
       annotations:
-        summary: "High log error rate detected"
-        description: "Error log rate is {{ $value }} errors per second"
+        summary: "High WebSocket connection failure rate"
+        description: "WebSocket connection failure rate is {{ $value | humanizePercentage }}"
     
-    - alert: FluentBitDown
-      expr: up{job="fluent-bit"} == 0
+    - alert: BackendDown
+      expr: up{job="backend"} == 0
       for: 1m
       labels:
         severity: critical
       annotations:
-        summary: "Fluent Bit is down"
-        description: "Fluent Bit logging sidecar is not responding"
+        summary: "Backend service is down"
+        description: "Backend API is not responding"
     
-    - alert: VectorDown
-      expr: up{job="vector"} == 0
-      for: 1m
-      labels:
-        severity: critical
-      annotations:
-        summary: "Vector is down"
-        description: "Vector log aggregator is not responding"
-    
-    - alert: ElasticsearchDown
-      expr: elasticsearch_cluster_health_status != 1
-      for: 5m
-      labels:
-        severity: critical
-      annotations:
-        summary: "Elasticsearch cluster is unhealthy"
-        description: "Elasticsearch cluster status is {{ $value }}"
-    
-    - alert: HighLogVolume
-      expr: rate(vector_events_processed_total[5m]) > 1000
+    - alert: HighRoomCount
+      expr: webrtc_rooms_active > 100
       for: 5m
       labels:
         severity: warning
       annotations:
-        summary: "High log volume detected"
-        description: "Log processing rate is {{ $value }} events per second"
+        summary: "High number of active rooms"
+        description: "Active rooms count is {{ $value }}"
+    
+    - alert: HighMessageProcessingLatency
+      expr: histogram_quantile(0.95, rate(message_processing_duration_seconds_bucket[5m])) > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High message processing latency"
+        description: "95th percentile message processing latency is {{ $value }}s"
 ---
 # HorizontalPodAutoscaler for frontend
 apiVersion: autoscaling/v2

@@ -102,12 +102,9 @@ deploy_platform() {
         kubectl config use-context "$KUBECTL_CONTEXT"
     fi
     
-    # Deploy in order
+    # Deploy in order (minimal stack - no ELK logging infrastructure)
     deploy "devops/kubernetes/security-policies.yaml" "Security Policies and RBAC"
-    deploy "devops/kubernetes/logging-infrastructure.yaml" "Logging Infrastructure (ELK Stack)"
-    deploy "devops/kubernetes/log-retention.yaml" "Log Retention Policies"
-    deploy "devops/kubernetes/logging-dashboard.yaml" "Logging Dashboards and Alerts"
-    deploy "devops/kubernetes/backend-deployment.yaml" "Backend Services with Logging Sidecars"
+    deploy "devops/kubernetes/backend-deployment.yaml" "Backend Services"
     deploy "devops/kubernetes/frontend-deployment.yaml" "Frontend Services"
     deploy "devops/kubernetes/gateway/gateway.yaml" "Gateway Configuration"
     deploy "devops/kubernetes/gateway/envoy-config.yaml" "Envoy Configuration"
@@ -115,21 +112,15 @@ deploy_platform() {
     deploy "devops/kubernetes/monitoring.yaml" "Monitoring and Autoscaling"
     
     if [ "$DRY_RUN" = "false" ]; then
-        # Wait for logging infrastructure
-        log_info "Waiting for logging infrastructure to be ready..."
-        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=elasticsearch -n logging
-        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=kibana -n logging
+        # Wait for backend and frontend to be ready
+        log_info "Waiting for services to be ready..."
+        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=backend -n social-media
+        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=frontend -n social-media
         
         # Wait for deployments
         log_info "Waiting for deployments to be ready..."
         kubectl wait --for=condition=available --timeout=300s deployment/frontend-deployment -n $NAMESPACE
         kubectl wait --for=condition=available --timeout=300s deployment/backend-deployment -n $NAMESPACE
-        
-        # Setup Elasticsearch indices and policies
-        log_info "Setting up Elasticsearch indices and policies..."
-        kubectl exec -n logging deployment/elasticsearch -- curl -X PUT "localhost:9200/_ilm/policy/social-media-logs-policy" \
-            -H 'Content-Type: application/json' \
-            -d '{"policy":{"phases":{"hot":{"actions":{"rollover":{"max_size":"5GB","max_age":"1d"}}},"warm":{"min_age":"7d","actions":{"allocate":{"number_of_replicas":1}}},"cold":{"min_age":"30d","actions":{"allocate":{"number_of_replicas":0}}},"delete":{"min_age":"90d"}}}}'
         
         # Check Gateway status
         log_info "Checking Gateway status..."

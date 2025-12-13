@@ -15,216 +15,7 @@ data:
   LOG_FORMAT: "json"
   LOG_OUTPUT: "stdout"
 ---
-# ConfigMap for logging sidecar configuration
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: logging-config
-  namespace: social-media
-  labels:
-    app.kubernetes.io/name: logging
-    app.kubernetes.io/component: config
-data:
-  fluent-bit.conf: |
-    [SERVICE]
-        Flush         1
-        Log_Level     info
-        Daemon        off
-        Parsers_File  parsers.conf
-        HTTP_Server   On
-        HTTP_Listen   0.0.0.0
-        HTTP_Port     2020
-        Health_Check  On
-
-    [INPUT]
-        Name              tail
-        Path              /var/log/backend/*.log
-        Parser            json
-        Tag               backend.*
-        Refresh_Interval  5
-        Mem_Buf_Limit     50MB
-        Skip_Long_Lines   On
-        Skip_Empty_Lines  On
-
-    [INPUT]
-        Name              tail
-        Path              /var/log/backend/access.log
-        Parser            nginx
-        Tag               backend.access
-        Refresh_Interval  5
-        Mem_Buf_Limit     50MB
-
-    [INPUT]
-        Name              tail
-        Path              /var/log/backend/error.log
-        Parser            json
-        Tag               backend.error
-        Refresh_Interval  5
-        Mem_Buf_Limit     50MB
-
-    [FILTER]
-        Name                kubernetes
-        Match               backend.*
-        Kube_URL            https://kubernetes.default.svc:443
-        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
-        Kube_Tag_Prefix     backend.
-        Merge_Log           On
-        Merge_Log_Key       log_processed
-        K8S-Logging.Parser  On
-        K8S-Logging.Exclude Off
-        Annotations         Off
-        Labels              On
-
-    [FILTER]
-        Name          nest
-        Match         backend.*
-        Operation     lift
-        Nested_under  kubernetes
-        Add_prefix    k8s_
-
-    [FILTER]
-        Name          modify
-        Match         backend.*
-        Add           service backend
-        Add           environment ${GO_ENV}
-        Add           cluster social-media
-
-    [OUTPUT]
-        Name          stdout
-        Match         backend.*
-        Format        json_lines
-
-    [OUTPUT]
-        Name          forward
-        Match         backend.*
-        Host          logging-aggregator.logging.svc.cluster.local
-        Port          24224
-        Require_ack_response  true
-        tls           on
-        tls.verify    off
-
-    [OUTPUT]
-        Name          prometheus_exporter
-        Match         backend.*
-        Host          0.0.0.0
-        Port          2021
-        Metrics_Path  /metrics
-
-  parsers.conf: |
-    [PARSER]
-        Name        json
-        Format      json
-        Time_Key    timestamp
-        Time_Format %Y-%m-%dT%H:%M:%S.%L
-        Time_Keep   On
-
-    [PARSER]
-        Name        nginx
-        Format      regex
-        Regex       ^(?<remote>[^ ]*) (?<host>[^ ]*) (?<user>[^ ]*) \[(?<time>[^\]]*)\] "(?<method>\S+)(?: +(?<path>[^\"]*?)(?: +\S*)?)?" (?<code>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)")?$
-        Time_Key    time
-        Time_Format %d/%b/%Y:%H:%M:%S %z
-
-    [PARSER]
-        Name        go_error
-        Format      regex
-        Regex       ^(?<time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) (?<level>\w+): (?<message>.*)$
-        Time_Key    time
-        Time_Format %Y/%m/%d %H:%M:%S
----
-# ConfigMap for log aggregator configuration
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: log-aggregator-config
-  namespace: social-media
-  labels:
-    app.kubernetes.io/name: log-aggregator
-    app.kubernetes.io/component: config
-data:
-  vector.toml: |
-    [api]
-    enabled = true
-    address = "0.0.0.0:8686"
-
-    [sources.fluent_bit]
-    type = "fluent"
-    address = "0.0.0.0:24224"
-    mode = "tcp"
-
-    [sources.kubernetes_logs]
-    type = "kubernetes_logs"
-    glob_minimum_cooldown_ms = 60000
-
-    [transforms.backend_filter]
-    type = "filter"
-    inputs = ["fluent_bit"]
-    condition = '.service == "backend"'
-
-    [transforms.parse_json]
-    type = "remap"
-    inputs = ["backend_filter"]
-    source = '''
-      if is_string(.message) {
-        .parsed = parse_json(.message) ?? {}
-        .level = .parsed.level ?? "info"
-        .component = .parsed.component ?? "backend"
-        .request_id = .parsed.request_id ?? null
-        .user_id = .parsed.user_id ?? null
-        .room_id = .parsed.room_id ?? null
-        .websocket_event = .parsed.websocket_event ?? null
-        .error = .parsed.error ?? null
-        .duration_ms = .parsed.duration_ms ?? null
-      }
-    '''
-
-    [transforms.enrich_logs]
-    type = "remap"
-    inputs = ["parse_json"]
-    source = '''
-      .environment = "production"
-      .application = "social-media-backend"
-      .version = env_var("APP_VERSION") ?? "unknown"
-      .node_name = .k8s_node_name ?? "unknown"
-      .pod_name = .k8s_pod_name ?? "unknown"
-      .namespace = .k8s_namespace_name ?? "social-media"
-    '''
-
-    [sinks.elasticsearch]
-    type = "elasticsearch"
-    inputs = ["enrich_logs"]
-    endpoint = "http://elasticsearch.logging.svc.cluster.local:9200"
-    index = "social-media-backend-%Y.%m.%d"
-    compression = "gzip"
-
-    [sinks.prometheus_metrics]
-    type = "prometheus_exporter"
-    inputs = ["enrich_logs"]
-    address = "0.0.0.0:9090"
-
-    [sinks.console]
-    type = "console"
-    inputs = ["enrich_logs"]
-    encoding.codec = "json"
----
-# Secret for backend sensitive configuration
-apiVersion: v1
-kind: Secret
-metadata:
-  name: backend-secrets
-  namespace: social-media
-  labels:
-    app.kubernetes.io/name: backend
-    app.kubernetes.io/component: config
-type: Opaque
-data:
-  # Base64 encoded values - replace with actual values
-  JWT_SECRET: "your-jwt-secret-base64-encoded"
-  AUTH0_DOMAIN: "your-auth0-domain-base64-encoded"
-  AUTH0_CLIENT_ID: "your-auth0-client-id-base64-encoded"
----
-# Backend Deployment with Logging Sidecars
+# Deployment for backend service
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -235,7 +26,7 @@ metadata:
     app.kubernetes.io/component: api
     app.kubernetes.io/part-of: social-media-platform
 spec:
-  replicas: 3
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -253,25 +44,15 @@ spec:
         app.kubernetes.io/part-of: social-media-platform
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "2021"
+        prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
-        fluentbit.io/parser: "json"
     spec:
+      serviceAccountName: social-media-backend-sa
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
-      # Shared volume for logs
-      volumes:
-      - name: log-volume
-        emptyDir: {}
-      - name: fluent-bit-config
-        configMap:
-          name: logging-config
-      - name: log-aggregator-config
-        configMap:
-          name: log-aggregator-config
       containers:
       # Main backend container
       - name: backend
@@ -287,12 +68,6 @@ spec:
         env:
         - name: PORT
           value: "8080"
-        - name: LOG_FILE
-          value: "/var/log/backend/app.log"
-        - name: ACCESS_LOG_FILE
-          value: "/var/log/backend/access.log"
-        - name: ERROR_LOG_FILE
-          value: "/var/log/backend/error.log"
         - name: APP_VERSION
           value: "1.0.0"
         envFrom:
@@ -300,9 +75,6 @@ spec:
             name: backend-config
         - secretRef:
             name: backend-secrets
-        volumeMounts:
-        - name: log-volume
-          mountPath: /var/log/backend
         resources:
           requests:
             memory: "128Mi"
@@ -328,122 +100,12 @@ spec:
           failureThreshold: 3
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false  # Allow writing logs
-          capabilities:
-            drop:
-            - ALL
-      
-      # Fluent Bit sidecar for log collection
-      - name: fluent-bit
-        image: fluent/fluent-bit:3.0
-        imagePullPolicy: Always
-        ports:
-        - name: http
-          containerPort: 2020
-          protocol: TCP
-        - name: metrics
-          containerPort: 2021
-          protocol: TCP
-        env:
-        - name: GO_ENV
-          valueFrom:
-            configMapKeyRef:
-              name: backend-config
-              key: GO_ENV
-        volumeMounts:
-        - name: log-volume
-          mountPath: /var/log/backend
-          readOnly: true
-        - name: fluent-bit-config
-          mountPath: /fluent-bit/etc/fluent-bit.conf
-          subPath: fluent-bit.conf
-        - name: fluent-bit-config
-          mountPath: /fluent-bit/etc/parsers.conf
-          subPath: parsers.conf
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "128Mi"
-            cpu: "100m"
-        livenessProbe:
-          httpGet:
-            path: /api/v1/health
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 15
-          timeoutSeconds: 3
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /api/v1/health
-            port: http
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          timeoutSeconds: 3
-          failureThreshold: 2
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-            - ALL
-
-      # Vector sidecar for log aggregation and processing
-      - name: vector
-        image: timberio/vector:0.38.0-alpine
-        imagePullPolicy: Always
-        ports:
-        - name: api
-          containerPort: 8686
-          protocol: TCP
-        - name: fluent
-          containerPort: 24224
-          protocol: TCP
-        - name: metrics
-          containerPort: 9090
-          protocol: TCP
-        env:
-        - name: APP_VERSION
-          value: "1.0.0"
-        - name: VECTOR_CONFIG_PATH
-          value: "/etc/vector/vector.toml"
-        volumeMounts:
-        - name: log-aggregator-config
-          mountPath: /etc/vector/vector.toml
-          subPath: vector.toml
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "128Mi"
-            cpu: "100m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: api
-          initialDelaySeconds: 10
-          periodSeconds: 15
-          timeoutSeconds: 3
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: api
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          timeoutSeconds: 3
-          failureThreshold: 2
-        securityContext:
-          allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
 ---
-# Backend Service with Logging Metrics
+# Service for backend
 apiVersion: v1
 kind: Service
 metadata:
@@ -452,37 +114,22 @@ metadata:
   labels:
     app.kubernetes.io/name: backend
     app.kubernetes.io/component: api
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "2021"
-    prometheus.io/path: "/metrics"
+    app.kubernetes.io/part-of: social-media-platform
 spec:
   type: ClusterIP
+  selector:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: api
   ports:
   - name: http
-    port: 80
+    port: 8080
     targetPort: http
     protocol: TCP
   - name: websocket
     port: 8080
     targetPort: websocket
     protocol: TCP
-  - name: fluent-bit-http
-    port: 2020
-    targetPort: 2020
-    protocol: TCP
-  - name: fluent-bit-metrics
-    port: 2021
-    targetPort: 2021
-    protocol: TCP
-  - name: vector-api
-    port: 8686
-    targetPort: 8686
-    protocol: TCP
-  - name: vector-metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-  selector:
-    app.kubernetes.io/name: backend
-    app.kubernetes.io/component: api
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
