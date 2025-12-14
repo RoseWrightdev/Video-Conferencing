@@ -136,7 +136,7 @@ export default function DeviceSelector({ onDeviceChange, className }: DeviceSele
           value={selectedAudioInput}
           onValueChange={(value) => handleDeviceChange(value, 'audioinput')}
         >
-          <SelectTrigger id="audio-input" className="w-full">
+          <SelectTrigger id="audio-input" className="bg-white">
             <SelectValue placeholder="Select a microphone" />
           </SelectTrigger>
           <SelectContent>
@@ -165,7 +165,7 @@ export default function DeviceSelector({ onDeviceChange, className }: DeviceSele
           value={selectedAudioOutput}
           onValueChange={(value) => handleDeviceChange(value, 'audiooutput')}
         >
-          <SelectTrigger id="audio-output" className="w-full">
+          <SelectTrigger id="audio-output" className="bg-white">
             <SelectValue placeholder="Select a speaker" />
           </SelectTrigger>
           <SelectContent>
@@ -194,7 +194,7 @@ export default function DeviceSelector({ onDeviceChange, className }: DeviceSele
           value={selectedVideoInput}
           onValueChange={(value) => handleDeviceChange(value, 'videoinput')}
         >
-          <SelectTrigger id="video-input" className="w-full">
+          <SelectTrigger id="video-input" className="bg-white">
             <SelectValue placeholder="Select a camera" />
           </SelectTrigger>
           <SelectContent>
