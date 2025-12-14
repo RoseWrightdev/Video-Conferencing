@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { X as XIcon } from "lucide-react";
+import { X as XIcon, MessageSquare } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import ChatMessage from "@/components/chat-panel/components/ChatMessage";
@@ -82,7 +82,10 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
       <div className="h-full flex flex-col bg-white/60 frosted-2">
         {/* Header */}
         <div className="p-4 flex items-center justify-between shrink-0">
-          <H1 className="font-semibold text-black text-lg">Chat</H1>
+          <div className="flex items-center gap-2">
+            <MessageSquare className="size-5" />
+            <H1 className="font-semibold text-black text-lg">Chat</H1>
+          </div>
           <Button
             variant="ghost"
             size="icon"
