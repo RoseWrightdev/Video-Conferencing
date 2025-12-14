@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardAction, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
@@ -20,6 +21,7 @@ import type { GridLayout } from '@/store/types';
 import { cn } from '@/lib/utils';
 import * as Typo from '@/components/ui/typography';
 import { createLogger } from '@/lib/logger';
+import Link from 'next/link';
 
 export interface SettingsPanelProps {
   gridLayout: GridLayout;
@@ -53,20 +55,33 @@ export default function SettingsPanel({
   className,
 }: SettingsPanelProps) {
   const logger = createLogger('SettingsPanel');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Get active tab from URL or default to 'basic'
+  const activeTab = searchParams.get('tab') || 'basic';
+  
+  // Update URL when tab changes
+  const handleTabChange = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', value);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+  
   return (
     <div
       className={cn(
-        "absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm pointer-events-auto",
+        "absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xl pointer-events-auto",
         className
       )}
       onClick={onClose}
     >
       <div
-        className="w-full max-w-4xl max-h-[85vh] rounded-2xl flex flex-col bg-white/50 frosted-3 overflow-hidden shadow-2xl"
+        className="w-full max-w-4xl h-[85vh] rounded-2xl flex flex-col bg-white/50 overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 pb-0 flex items-center justify-between shrink-0 border-black/10">
+        <div className="p-4 pb-0 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Typo.H3 className="font-semibold text-black text-lg">Settings</Typo.H3>
           </div>
@@ -83,21 +98,18 @@ export default function SettingsPanel({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          <Tabs defaultValue="general" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3 bg-white/30">
-              <TabsTrigger value="general" className="data-[state=active]:bg-white/60">General</TabsTrigger>
-              <TabsTrigger value="media" className="data-[state=active]:bg-white/60">Media</TabsTrigger>
-              <TabsTrigger value="notifications" className="data-[state=active]:bg-white/60">Notifications</TabsTrigger>
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
+            <TabsList className="grid w-full grid-cols-3 bg-white/50 sticky top-0 z-10 border-b border-black/10 mb-4">
+              <TabsTrigger value="basic" className="data-[state=active]:bg-white black">Basic</TabsTrigger>
+              <TabsTrigger value="media" className="data-[state=active]:bg-white black">Advanced</TabsTrigger>
+              <TabsTrigger value="about" className="data-[state=active]:bg-white black">About</TabsTrigger>
             </TabsList>
 
-            {/* General Tab */}
-            <TabsContent value="general" className="space-y-4">
+            {/* Basic Tab */}
+            <TabsContent value="basic" className="space-y-4">
               <Card className="bg-white/40 border-black/10">
                 <CardHeader>
-                  <Typo.H4 className="text-black">Profile</Typo.H4>
-                  <Typo.Muted className="text-black/70">
-                    Customize your display name and avatar
-                  </Typo.Muted>
+                  <Typo.H4 className="text-black">Account</Typo.H4>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -105,21 +117,36 @@ export default function SettingsPanel({
                     <Input
                       id="display-name"
                       placeholder="Enter your name"
-                      className="bg-white/50 border-black/10"
-                      disabled
+                      className="bg-white border-black/10"
                     />
-                    <Typo.Small className="text-black/60">Coming soon - Change your display name</Typo.Small>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-black">Profile Picture</Label>
-                    <Button variant="outline" disabled className="w-full">
-                      Upload Avatar
-                    </Button>
-                    <Typo.Small className="text-black/60">Coming soon - Custom profile pictures</Typo.Small>
                   </div>
                 </CardContent>
               </Card>
-
+              <Card className="bg-white/40 border-black/10">
+                <CardHeader>
+                  <Typo.H4 className="text-black">Backgrounds</Typo.H4>
+                  <Typo.Muted className="text-black/70">
+                    Apply visual effects to your video
+                  </Typo.Muted>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-black">Background Blur</Label>
+                      <Typo.Small className="text-black/60">
+                        Blur your background without replacement
+                      </Typo.Small>
+                    </div>
+                    <Switch />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-black">Background Image</Label>
+                    <Button variant="outline">
+                      Choose Background
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
               <Card className="bg-white/40 border-black/10">
                 <CardHeader>
                   <Typo.H4 className="text-black">Grid Layout</Typo.H4>
@@ -130,11 +157,13 @@ export default function SettingsPanel({
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="grid-layout" className="text-black">
-                      <LayoutGrid className="w-4 h-4 text-black inline mr-2" />
-                      Grid Layout
+                      <div className="flex items-left gap-2">
+                        <LayoutGrid className="w-4 h-4 text-black inline mr-auto" />
+                        Grid Layout
+                      </div>
                     </Label>
                     <Select value={gridLayout} onValueChange={(value) => setGridLayout(value as GridLayout)}>
-                      <SelectTrigger id="grid-layout">
+                      <SelectTrigger id="grid-layout" className="bg-white border-black/10">
                         <SelectValue placeholder="Select layout" />
                       </SelectTrigger>
                       <SelectContent>
@@ -144,38 +173,6 @@ export default function SettingsPanel({
                       </SelectContent>
                     </Select>
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/40 border-black/10">
-                <CardHeader>
-                  <Typo.H4 className="text-black">Keyboard Shortcuts</Typo.H4>
-                  <Typo.Muted className="text-black/70">
-                    Quick actions with hotkeys
-                  </Typo.Muted>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-black">Enable Keyboard Shortcuts</Label>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        <div className="flex items-center gap-1">
-                          <Kbd>Ctrl</Kbd>/<Kbd>⌘</Kbd> + <Kbd>D</Kbd>
-                          <Typo.Small className="text-black/60">mute</Typo.Small>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Kbd>Ctrl</Kbd>/<Kbd>⌘</Kbd> + <Kbd>E</Kbd>
-                          <Typo.Small className="text-black/60">video</Typo.Small>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Kbd>Ctrl</Kbd>/<Kbd>⌘</Kbd> + <Kbd>S</Kbd>
-                          <Typo.Small className="text-black/60">share</Typo.Small>
-                        </div>
-                      </div>
-                    </div>
-                    <Switch disabled />
-                  </div>
-                  <Typo.Small className="text-black/60">Coming soon - Keyboard shortcuts</Typo.Small>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -207,74 +204,7 @@ export default function SettingsPanel({
                   />
                 </CardContent>
               </Card>
-
               <Card className="bg-white/40 border-black/10">
-                <CardHeader>
-                  <Typo.H4 className="text-black">Video Effects</Typo.H4>
-                  <Typo.Muted className="text-black/70">
-                    Apply visual effects to your video
-                  </Typo.Muted>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-black">Mirror my video</Label>
-                      <Typo.Small className="text-black/60">
-                        Show your video mirrored (flipped horizontally)
-                      </Typo.Small>
-                    </div>
-                    <Switch disabled />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-black">Background Blur</Label>
-                      <Typo.Small className="text-black/60">
-                        Blur your background without replacement
-                      </Typo.Small>
-                    </div>
-                    <Switch disabled />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-black">Virtual Background</Label>
-                    <Button variant="outline" disabled className="w-full">
-                      Choose Background
-                    </Button>
-                    <Typo.Small className="text-black/60">Coming soon - Virtual backgrounds and blur</Typo.Small>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/40 border-black/10">
-                <CardHeader>
-                  <Typo.H4 className="text-black">Ambient Effects</Typo.H4>
-                  <Typo.Muted className="text-black/70">
-                    Dynamic visual enhancements
-                  </Typo.Muted>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-black">Edge Glow Effect</Label>
-                      <Typo.Small className="text-black/60">
-                        YouTube-style ambient lighting around video tiles
-                      </Typo.Small>
-                    </div>
-                    <Switch disabled />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-black">Speaker Color Shift</Label>
-                      <Typo.Small className="text-black/60">
-                        Background shifts to speaker's color when talking
-                      </Typo.Small>
-                    </div>
-                    <Switch disabled />
-                  </div>
-                  <Typo.Small className="text-black/60">Coming soon - Dynamic ambient effects</Typo.Small>
-                </CardContent>
-              </Card>
-
-                            <Card className="bg-white/40 border-black/10">
                 <CardHeader>
                   <Typo.H4 className="text-black">Audio Enhancements</Typo.H4>
                   <Typo.Muted className="text-black/70">
@@ -289,7 +219,7 @@ export default function SettingsPanel({
                         Filter out background noise during calls
                       </Typo.Small>
                     </div>
-                    <Switch disabled />
+                    <Switch />
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
@@ -298,64 +228,99 @@ export default function SettingsPanel({
                         Reduce audio feedback and echo
                       </Typo.Small>
                     </div>
-                    <Switch disabled />
+                    <Switch />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-black">Audio Quality</Label>
-                    <Select disabled>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select quality" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="high">High - 128kbps</SelectItem>
-                        <SelectItem value="medium">Medium - 64kbps</SelectItem>
-                        <SelectItem value="low">Low - 32kbps</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Typo.Small className="text-black/60">Coming soon - Audio enhancements</Typo.Small>
-                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white/40 border-black/10">
+                <CardHeader>
+                  <Typo.H4 className="text-black">Keyboard Shortcuts</Typo.H4>
+                  <Typo.Muted className="text-black/70">
+                    Quick actions with hotkeys
+                  </Typo.Muted>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full table-auto border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="text-left p-4 text-black font-semibold">Shortcut</th>
+                        <th className="text-left p-4 text-black font-semibold">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t border-black/20">
+                        <td className="p-4">
+                          <div className="flex items-center gap-1">
+                            <Kbd>Ctrl</Kbd>/<Kbd>⌘</Kbd> + <Kbd>D</Kbd>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <Typo.Small>Toggle mute</Typo.Small>
+                        </td>
+                      </tr>
+                      <tr className="border-t border-black/20">
+                        <td className="p-4">
+                          <div className="flex items-center gap-1">
+                            <Kbd>Ctrl</Kbd>/<Kbd>⌘</Kbd> + <Kbd>E</Kbd>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <Typo.Small>Toggle video</Typo.Small>
+                        </td>
+                      </tr>
+                      <tr className="border-t border-black/20">
+                        <td className="p-4">
+                          <div className="flex items-center gap-1">
+                            <Kbd>Ctrl</Kbd>/<Kbd>⌘</Kbd> + <Kbd>S</Kbd>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <Typo.Small>Toggle screen share</Typo.Small>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* Notifications Tab */}
-            <TabsContent value="notifications" className="space-y-4">
+            {/* About Tab */}
+            <TabsContent value="about" className="space-y-4">
               <Card className="bg-white/40 border-black/10">
                 <CardHeader>
-                  <Typo.H4 className="text-black">Activity Notifications</Typo.H4>
+                  <Typo.H4 className="text-black">Resources</Typo.H4>
                   <Typo.Muted className="text-black/70">
-                    Control when you receive notifications
+                    Documentation and support links
                   </Typo.Muted>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-2">
+                  <Button variant="outline" className="justify-start" asChild>
+                    <Link href="https://github.com/RoseWrightdev/Video-Conferencing" target="_blank" rel="noopener noreferrer">
+                      <Typo.Small className="text-black">GitHub Repository</Typo.Small>
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card className="bg-white/40 border-black/10">
+                <CardHeader>
+                  <Typo.H4 className="text-black">Application Info</Typo.H4>
+                  <Typo.Muted className="text-black/70">
+                    Version and build information
+                  </Typo.Muted>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-black">Join/Leave Notifications</Label>
-                      <Typo.Small className="text-black/60">
-                        Show when participants join or leave
-                      </Typo.Small>
-                    </div>
-                    <Switch disabled />
+                    <Typo.Small className="text-black">Version</Typo.Small>
+                    <Typo.Small className="text-black/60 font-mono">1.0.0-beta</Typo.Small>
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-black">Hand Raise Alerts</Label>
-                      <Typo.Small className="text-black/60">
-                        Notify when someone raises their hand
-                      </Typo.Small>
-                    </div>
-                    <Switch disabled />
+                    <Typo.Small className="text-black">Build</Typo.Small>
+                    <Typo.Small className="text-black/60 font-mono">{new Date().toISOString().split('T')[0]}</Typo.Small>
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-black">Sound Notifications</Label>
-                      <Typo.Small className="text-black/60">
-                        Play sounds for notifications
-                      </Typo.Small>
-                    </div>
-                    <Switch disabled />
+                    <Typo.Small className="text-black">Environment</Typo.Small>
+                    <Typo.Small className="text-black/60">{process.env.NODE_ENV}</Typo.Small>
                   </div>
-                  <Typo.Small className="text-black/60">Coming soon - Notification preferences</Typo.Small>
                 </CardContent>
               </Card>
             </TabsContent>
