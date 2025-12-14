@@ -24,7 +24,10 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
+
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 
 	"github.com/mitchellh/mapstructure"
 )
@@ -93,6 +96,7 @@ func assertPayload[T any](payload any) (T, bool) {
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		TagName: "json", // Use json tags for field mapping
 		Result:  &result,
+		Squash:  true, // Flatten embedded structs (e.g., ClientInfo in ChatInfo)
 	})
 	if err != nil {
 		return result, false
@@ -132,15 +136,23 @@ func assertPayload[T any](payload any) (T, bool) {
 //   - event: The event type (should be EventAddChat)
 //   - payload: The raw payload containing chat message data
 func (r *Room) handleAddChat(client *Client, event Event, payload any) {
+	// Debug: Log raw payload before assertion (INFO level to ensure it shows)
+	slog.Info("handleAddChat RAW payload", "ClientId", client.ID, "RoomId", r.ID, "payloadType", fmt.Sprintf("%T", payload), "payload", payload)
+
 	p, ok := assertPayload[AddChatPayload](payload)
 	logHelper(ok, client.ID, GetFuncName(), r.ID)
 	if !ok {
 		return
 	}
 
+	// Debug: Log asserted payload with all fields
+	slog.Info("handleAddChat ASSERTED payload", "ClientId", client.ID, "RoomId", r.ID,
+		"p.ClientId", p.ClientId, "p.DisplayName", p.DisplayName,
+		"p.ChatId", p.ChatId, "p.ChatContent", p.ChatContent)
+
 	// Validate the chat payload
 	if err := p.ValidateChat(); err != nil {
-		slog.Error("Invalid chat payload", "ClientId", client.ID, "RoomId", r.ID, "error", err)
+		slog.Error("Invalid chat payload", "ClientId", client.ID, "RoomId", r.ID, "error", err, "payload", p)
 		return
 	}
 
@@ -410,7 +422,7 @@ func (r *Room) handleAcceptWaiting(client *Client, event Event, payload any) {
 	delete(r.waiting, p.ClientId)
 
 	// Metrics: Update participant count after accepting from waiting room
-	roomParticipants.WithLabelValues(string(r.ID)).Set(float64(len(r.hosts) + len(r.participants)))
+	metrics.RoomParticipants.WithLabelValues(string(r.ID)).Set(float64(len(r.hosts) + len(r.participants)))
 
 	slog.Info("Client accepted from waiting room",
 		"AcceptedClientId", waitingClient.ID,

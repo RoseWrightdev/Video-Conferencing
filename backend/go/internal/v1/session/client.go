@@ -28,6 +28,8 @@ import (
 	"log/slog"
 
 	"github.com/gorilla/websocket"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
+
 )
 
 // --- Connection and Room Interfaces ---
@@ -136,7 +138,7 @@ func (c *Client) readPump() {
 		c.conn.Close()
 
 		// Metrics: Track WebSocket disconnection
-		activeWebSocketConnections.Dec()
+		metrics.DecConnection()
 	}()
 
 	for {

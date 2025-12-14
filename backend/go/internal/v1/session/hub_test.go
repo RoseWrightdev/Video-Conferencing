@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"Social-Media/backend/go/internal/v1/auth"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

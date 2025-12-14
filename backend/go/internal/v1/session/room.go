@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
+
 	"k8s.io/utils/set"
 )
 
@@ -110,7 +112,7 @@ func (r *Room) handleClientConnect(client *Client) {
 		r.addHost(client)
 
 		// Metrics: Update participant count (hosts count as participants)
-		roomParticipants.WithLabelValues(string(r.ID)).Set(float64(len(r.hosts) + len(r.participants)))
+		metrics.RoomParticipants.WithLabelValues(string(r.ID)).Set(float64(len(r.hosts) + len(r.participants)))
 
 		// Broadcast initial room state to the new host
 		r.sendRoomStateToClient(client)
@@ -135,7 +137,7 @@ func (r *Room) handleClientDisconnect(client *Client) {
 	// Metrics: Update participant count after disconnect
 	totalParticipants := len(r.hosts) + len(r.participants)
 	if totalParticipants > 0 {
-		roomParticipants.WithLabelValues(string(r.ID)).Set(float64(totalParticipants))
+		metrics.RoomParticipants.WithLabelValues(string(r.ID)).Set(float64(totalParticipants))
 	} else {
 		// Room is empty, will be cleaned up - don't set gauge
 	}
@@ -211,7 +213,7 @@ func (r *Room) router(client *Client, data any) {
 	msg, ok := data.(Message)
 	if !ok {
 		slog.Error("router failed to marshal incoming message to type Message", "msg", msg, "id", client.ID)
-		websocketEvents.WithLabelValues("unknown", "error").Inc()
+		metrics.WebsocketEvents.WithLabelValues("unknown", "error").Inc()
 		return
 	}
 
@@ -219,8 +221,8 @@ func (r *Room) router(client *Client, data any) {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start).Seconds()
-		messageProcessingDuration.WithLabelValues(string(msg.Event)).Observe(duration)
-		websocketEvents.WithLabelValues(string(msg.Event), "success").Inc()
+		metrics.MessageProcessingDuration.WithLabelValues(string(msg.Event)).Observe(duration)
+		metrics.WebsocketEvents.WithLabelValues(string(msg.Event), "success").Inc()
 	}()
 
 	role := client.Role

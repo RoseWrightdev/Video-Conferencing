@@ -29,7 +29,8 @@ import (
 	"sync"
 	"time"
 
-	"Social-Media/backend/go/internal/v1/auth"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -180,7 +181,7 @@ func (h *Hub) ServeWs(c *gin.Context) {
 	}
 
 	// Metrics: Track WebSocket connection (defer ensures cleanup on disconnect)
-	activeWebSocketConnections.Inc()
+	metrics.ActiveWebSocketConnections.Inc()
 
 	room.handleClientConnect(client)
 
@@ -223,8 +224,8 @@ func (h *Hub) removeRoom(roomId RoomIdType) {
 			delete(h.pendingRoomCleanups, roomId)
 
 			// Metrics: Track room deletion and cleanup participant gauge
-			activeRooms.Dec()
-			roomParticipants.DeleteLabelValues(string(roomId))
+			metrics.ActiveRooms.Dec()
+			metrics.RoomParticipants.DeleteLabelValues(string(roomId))
 
 			slog.Info("Removed empty room from hub after grace period", "roomId", roomId)
 		} else {
@@ -264,6 +265,6 @@ func (h *Hub) getOrCreateRoom(roomId RoomIdType) *Room {
 	h.rooms[roomId] = room
 
 	// Metrics: Track room creation
-	activeRooms.Inc()
+	metrics.ActiveRooms.Inc()
 	return room
 }

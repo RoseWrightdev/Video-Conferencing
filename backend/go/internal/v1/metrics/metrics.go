@@ -1,4 +1,4 @@
-package session
+package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,42 +20,42 @@ import (
 // - Histogram: Latency distributions (processing time)
 
 var (
-	// Active WebSocket connections (Gauge - current state)
-	activeWebSocketConnections = promauto.NewGauge(prometheus.GaugeOpts{
+	// ActiveWebSocketConnections tracks the current number of active WebSocket connections (Gauge - current state)
+	ActiveWebSocketConnections = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "video_conference",
 		Subsystem: "websocket",
 		Name:      "connections_active",
 		Help:      "Current number of active WebSocket connections",
 	})
 
-	// Active rooms (Gauge - current state)
-	activeRooms = promauto.NewGauge(prometheus.GaugeOpts{
+	// ActiveRooms tracks the current number of active rooms (Gauge - current state)
+	ActiveRooms = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "video_conference",
 		Subsystem: "room",
 		Name:      "rooms_active",
 		Help:      "Current number of active rooms",
 	})
 
-	// Room participants (GaugeVec with room_id label - current state per room)
+	// RoomParticipants tracks the number of participants in each room (GaugeVec with room_id label - current state per room)
 	// Using Gauge instead of Histogram because we want current participant count per room,
 	// not distribution of historical counts
-	roomParticipants = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	RoomParticipants = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "video_conference",
 		Subsystem: "room",
 		Name:      "participants_count",
 		Help:      "Number of participants in each room",
 	}, []string{"room_id"})
 
-	// WebSocket events processed (CounterVec - cumulative)
-	websocketEvents = promauto.NewCounterVec(prometheus.CounterOpts{
+	// WebsocketEvents tracks the total number of WebSocket events processed (CounterVec - cumulative)
+	WebsocketEvents = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "video_conference",
 		Subsystem: "websocket",
 		Name:      "events_total",
 		Help:      "Total WebSocket events processed",
 	}, []string{"event_type", "status"})
 
-	// Message processing duration (HistogramVec - latency distribution)
-	messageProcessingDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	// MessageProcessingDuration tracks the time spent processing WebSocket messages (HistogramVec - latency distribution)
+	MessageProcessingDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "video_conference",
 		Subsystem: "websocket",
 		Name:      "message_processing_seconds",
@@ -63,11 +63,19 @@ var (
 		Buckets:   []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1},
 	}, []string{"event_type"})
 
-	// WebRTC connection success rate (CounterVec - cumulative)
-	webrtcConnectionAttempts = promauto.NewCounterVec(prometheus.CounterOpts{
+	// WebrtcConnectionAttempts tracks the total number of WebRTC connection attempts (CounterVec - cumulative)
+	WebrtcConnectionAttempts = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "video_conference",
 		Subsystem: "webrtc",
 		Name:      "connection_attempts_total",
 		Help:      "Total WebRTC connection attempts",
 	}, []string{"status"})
 )
+
+func IncConnection() {
+	ActiveWebSocketConnections.Inc()
+}
+
+func DecConnection() {
+	ActiveWebSocketConnections.Dec()
+}

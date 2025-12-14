@@ -17,8 +17,8 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"Social-Media/backend/go/internal/v1/auth"
-	"Social-Media/backend/go/internal/v1/session"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/session"
 )
 
 // MockValidator is a development-only token validator that accepts any token
@@ -96,7 +96,7 @@ func main() {
 	developmentMode := os.Getenv("DEVELOPMENT_MODE") == "true"
 
 	if developmentMode {
-		slog.Info("🔧 Running in DEVELOPMENT MODE - Auth validation may be relaxed")
+		slog.Info("Running in DEVELOPMENT MODE")
 	}
 
 	var authValidator *auth.Validator
