@@ -514,3 +514,77 @@ func (r *Room) toggleVideo(payload ToggleVideoPayload) {
 		}
 	}
 }
+
+// getRoomStateUnsafe returns the current room state without acquiring any locks.
+// Thread Safety: This method is NOT thread-safe and must only be called when
+// the room's mutex lock is already held.
+func (r *Room) getRoomState() RoomStatePayload {
+	// Convert client maps to slices of ClientInfo
+	hosts := make([]ClientInfo, 0, len(r.hosts))
+	for _, client := range r.hosts {
+		hosts = append(hosts, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
+	participants := make([]ClientInfo, 0, len(r.participants))
+	for _, client := range r.participants {
+		participants = append(participants, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
+	waitingUsers := make([]ClientInfo, 0, len(r.waiting))
+	for _, client := range r.waiting {
+		waitingUsers = append(waitingUsers, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
+	handsRaised := make([]ClientInfo, 0, len(r.raisingHand))
+	for _, client := range r.raisingHand {
+		handsRaised = append(handsRaised, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
+	sharingScreen := make([]ClientInfo, 0, len(r.sharingScreen))
+	for _, client := range r.sharingScreen {
+		sharingScreen = append(sharingScreen, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
+	unmuted := make([]ClientInfo, 0, len(r.unmuted))
+	for _, client := range r.unmuted {
+		unmuted = append(unmuted, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
+	cameraOn := make([]ClientInfo, 0, len(r.cameraOn))
+	for _, client := range r.cameraOn {
+		cameraOn = append(cameraOn, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+
+	return RoomStatePayload{
+		ClientInfo:    ClientInfo{}, // This will be set by the caller if needed
+		RoomID:        r.ID,
+		Hosts:         hosts,
+		Participants:  participants,
+		HandsRaised:   handsRaised,
+		WaitingUsers:  waitingUsers,
+		SharingScreen: sharingScreen,
+		Unmuted:       unmuted,
+		CameraOn:      cameraOn,
+	}
+}

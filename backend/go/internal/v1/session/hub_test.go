@@ -30,7 +30,8 @@ func NewTestHub(mockValidator TokenValidator) *Hub {
 		// Provide a default mock if none is given
 		mockValidator = &MockValidator{}
 	}
-	return NewHub(mockValidator)
+	// Pass nil for bus service in tests (single-instance mode)
+	return NewHub(mockValidator, nil)
 }
 
 func TestGetOrCreateRoom(t *testing.T) {

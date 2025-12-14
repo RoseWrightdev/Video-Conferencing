@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/session"
 )
 
@@ -119,6 +120,30 @@ func main() {
 		authValidator = nil
 	}
 
+	// --- Redis Bus Initialization (Optional) ---
+	// Initialize Redis for distributed pub/sub if enabled
+	var busService *bus.Service
+	redisEnabled := os.Getenv("REDIS_ENABLED") == "true"
+	if redisEnabled {
+		redisAddr := os.Getenv("REDIS_ADDR")
+		redisPassword := os.Getenv("REDIS_PASSWORD")
+
+		if redisAddr == "" {
+			redisAddr = "localhost:6379" // Default Redis address
+		}
+
+		var err error
+		busService, err = bus.NewService(redisAddr, redisPassword)
+		if err != nil {
+			slog.Error("Failed to connect to Redis, running in single-instance mode", "error", err)
+			busService = nil // Fallback to single-instance mode
+		} else {
+			slog.Info("✅ Redis pub/sub initialized for distributed messaging", "addr", redisAddr)
+		}
+	} else {
+		slog.Info("Running in single-instance mode (Redis disabled)")
+	}
+
 	// --- Create Hubs with Dependencies ---
 	// Each feature gets its own hub, configured with the same dependencies.
 	var validator session.TokenValidator
@@ -128,7 +153,7 @@ func main() {
 		validator = &MockValidator{}
 	}
 
-	hub := session.NewHub(validator)
+	hub := session.NewHub(validator, busService)
 
 	// --- Set up Server ---
 	router := gin.Default()
@@ -180,8 +205,19 @@ func main() {
 	// the requests it is currently handling
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// Shutdown HTTP server
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("Server forced to shutdown:", "error", err)
+	}
+
+	// Close Redis connection if it was initialized
+	if busService != nil {
+		if err := busService.Close(); err != nil {
+			slog.Error("Failed to close Redis connection:", "error", err)
+		} else {
+			slog.Info("Redis connection closed")
+		}
 	}
 
 	slog.Info("Server exiting")

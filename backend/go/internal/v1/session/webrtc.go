@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 )
@@ -52,15 +53,33 @@ func (r *Room) handleWebRTCOffer(client *Client, event Event, payload any) {
 		targetClient = r.hosts[p.TargetClientId]
 	}
 
+	// If target not found locally, attempt cross-pod delivery via Redis
 	if targetClient == nil {
-		slog.Warn("WebRTC offer target client not found",
-			"SourceClientId", client.ID,
-			"TargetClientId", p.TargetClientId,
-			"RoomId", r.ID)
+		if r.bus != nil {
+			ctx := context.Background()
+			err := r.bus.PublishDirect(ctx, string(p.TargetClientId), string(event), p, string(client.ID))
+			if err != nil {
+				slog.Error("Failed to publish WebRTC offer via Redis",
+					"SourceClientId", client.ID,
+					"TargetClientId", p.TargetClientId,
+					"RoomId", r.ID,
+					"error", err)
+			} else {
+				slog.Info("WebRTC offer published via Redis (cross-pod)",
+					"SourceClientId", client.ID,
+					"TargetClientId", p.TargetClientId,
+					"RoomId", r.ID)
+			}
+		} else {
+			slog.Warn("WebRTC offer target client not found and no bus available for cross-pod delivery",
+				"SourceClientId", client.ID,
+				"TargetClientId", p.TargetClientId,
+				"RoomId", r.ID)
+		}
 		return
 	}
 
-	// Forward the offer directly to the target client
+	// Forward the offer directly to the target client (local delivery)
 	if msg, err := json.Marshal(Message{Event: event, Payload: p}); err == nil {
 		select {
 		case targetClient.send <- msg:
@@ -117,15 +136,33 @@ func (r *Room) handleWebRTCAnswer(client *Client, event Event, payload any) {
 		targetClient = r.hosts[p.TargetClientId]
 	}
 
+	// If target not found locally, attempt cross-pod delivery via Redis
 	if targetClient == nil {
-		slog.Warn("WebRTC answer target client not found",
-			"SourceClientId", client.ID,
-			"TargetClientId", p.TargetClientId,
-			"RoomId", r.ID)
+		if r.bus != nil {
+			ctx := context.Background()
+			err := r.bus.PublishDirect(ctx, string(p.TargetClientId), string(event), p, string(client.ID))
+			if err != nil {
+				slog.Error("Failed to publish WebRTC answer via Redis",
+					"SourceClientId", client.ID,
+					"TargetClientId", p.TargetClientId,
+					"RoomId", r.ID,
+					"error", err)
+			} else {
+				slog.Info("WebRTC answer published via Redis (cross-pod)",
+					"SourceClientId", client.ID,
+					"TargetClientId", p.TargetClientId,
+					"RoomId", r.ID)
+			}
+		} else {
+			slog.Warn("WebRTC answer target client not found and no bus available for cross-pod delivery",
+				"SourceClientId", client.ID,
+				"TargetClientId", p.TargetClientId,
+				"RoomId", r.ID)
+		}
 		return
 	}
 
-	// Forward the answer directly to the target client
+	// Forward the answer directly to the target client (local delivery)
 	if msg, err := json.Marshal(Message{Event: event, Payload: p}); err == nil {
 		select {
 		case targetClient.send <- msg:
@@ -183,15 +220,33 @@ func (r *Room) handleWebRTCCandidate(client *Client, event Event, payload any) {
 		targetClient = r.hosts[p.TargetClientId]
 	}
 
+	// If target not found locally, attempt cross-pod delivery via Redis
 	if targetClient == nil {
-		slog.Warn("WebRTC candidate target client not found",
-			"SourceClientId", client.ID,
-			"TargetClientId", p.TargetClientId,
-			"RoomId", r.ID)
+		if r.bus != nil {
+			ctx := context.Background()
+			err := r.bus.PublishDirect(ctx, string(p.TargetClientId), string(event), p, string(client.ID))
+			if err != nil {
+				slog.Debug("Failed to publish WebRTC candidate via Redis",
+					"SourceClientId", client.ID,
+					"TargetClientId", p.TargetClientId,
+					"RoomId", r.ID,
+					"error", err)
+			} else {
+				slog.Debug("WebRTC candidate published via Redis (cross-pod)",
+					"SourceClientId", client.ID,
+					"TargetClientId", p.TargetClientId,
+					"RoomId", r.ID)
+			}
+		} else {
+			slog.Warn("WebRTC candidate target client not found and no bus available for cross-pod delivery",
+				"SourceClientId", client.ID,
+				"TargetClientId", p.TargetClientId,
+				"RoomId", r.ID)
+		}
 		return
 	}
 
-	// Forward the candidate directly to the target client
+	// Forward the candidate directly to the target client (local delivery)
 	if msg, err := json.Marshal(Message{Event: event, Payload: p}); err == nil {
 		select {
 		case targetClient.send <- msg:
@@ -251,15 +306,35 @@ func (r *Room) handleWebRTCRenegotiate(client *Client, event Event, payload any)
 		targetClient = r.hosts[p.TargetClientId]
 	}
 
+	// If target not found locally, attempt cross-pod delivery via Redis
 	if targetClient == nil {
-		slog.Warn("WebRTC renegotiate target client not found",
-			"SourceClientId", client.ID,
-			"TargetClientId", p.TargetClientId,
-			"RoomId", r.ID)
+		if r.bus != nil {
+			ctx := context.Background()
+			err := r.bus.PublishDirect(ctx, string(p.TargetClientId), string(event), p, string(client.ID))
+			if err != nil {
+				slog.Error("Failed to publish WebRTC renegotiation via Redis",
+					"SourceClientId", client.ID,
+					"TargetClientId", p.TargetClientId,
+					"RoomId", r.ID,
+					"Reason", p.Reason,
+					"error", err)
+			} else {
+				slog.Info("WebRTC renegotiation published via Redis (cross-pod)",
+					"SourceClientId", client.ID,
+					"TargetClientId", p.TargetClientId,
+					"RoomId", r.ID,
+					"Reason", p.Reason)
+			}
+		} else {
+			slog.Warn("WebRTC renegotiation target client not found and no bus available for cross-pod delivery",
+				"SourceClientId", client.ID,
+				"TargetClientId", p.TargetClientId,
+				"RoomId", r.ID)
+		}
 		return
 	}
 
-	// Forward the renegotiation request directly to the target client
+	// Forward the renegotiation request directly to the target client (local delivery)
 	if msg, err := json.Marshal(Message{Event: event, Payload: p}); err == nil {
 		select {
 		case targetClient.send <- msg:

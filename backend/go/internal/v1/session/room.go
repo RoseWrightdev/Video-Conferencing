@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 
 	"k8s.io/utils/set"
@@ -74,6 +75,51 @@ type Room struct {
 	// --- Lifecycle Management ---
 	// Callback function invoked when the room becomes empty to trigger cleanup
 	onEmpty func(RoomIdType)
+
+	// --- Distibuted Bus/Sub ---
+	bus *bus.Service
+}
+
+// NewRoom creates and returns a new Room instance with the specified ID and an onEmpty callback.
+// The Room is initialized with empty participant, waiting room, hands raised, hosts, and sharingScreen maps.
+// The onEmptyCallback is called when the room becomes empty, preventing a memory leak.
+//
+// Parameters:
+//   - id: the unique identifier for the room.
+//   - onEmptyCallback: a function to be called when the room becomes empty.
+//   - busService: optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
+//
+// Returns:
+//   - A pointer to the newly created Room.
+func NewRoom(id RoomIdType, onEmptyCallback func(RoomIdType), busService *bus.Service) *Room {
+	room := &Room{
+		ID:                   id,
+		chatHistory:          list.New(),
+		maxChatHistoryLength: 100, // Default to 100 messages
+
+		hosts:        make(map[ClientIdType]*Client),
+		participants: make(map[ClientIdType]*Client),
+		waiting:      make(map[ClientIdType]*Client),
+
+		waitingDrawOrderStack: list.New(),
+		clientDrawOrderQueue:  list.New(),
+		handDrawOrderQueue:    list.New(),
+
+		raisingHand:   make(map[ClientIdType]*Client),
+		sharingScreen: make(map[ClientIdType]*Client),
+		unmuted:       make(map[ClientIdType]*Client),
+		cameraOn:      make(map[ClientIdType]*Client),
+
+		onEmpty: onEmptyCallback,
+		bus:     busService,
+	}
+
+	// Set up Redis subscription for cross-pod messaging if bus is available
+	if busService != nil {
+		room.subscribeToRedis()
+	}
+
+	return room
 }
 
 // handleClientConnect manages the initial connection logic when a client joins the room.
@@ -105,6 +151,9 @@ type Room struct {
 func (r *Room) handleClientConnect(client *Client) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// Subscribe to direct WebRTC messages for this user (cross-pod signaling)
+	r.subscribeToDirectMessages(client.ID)
 
 	// First user to join becomes the host.
 	if len(r.participants) == 0 && len(r.hosts) == 0 {
@@ -165,39 +214,6 @@ func (r *Room) handleClientDisconnect(client *Client) {
 			}()
 			r.onEmpty(r.ID)
 		}()
-	}
-}
-
-// NewRoom creates and returns a new Room instance with the specified ID and an onEmpty callback.
-// The Room is initialized with empty participant, waiting room, hands raised, hosts, and sharingScreen maps.
-// The onEmptyCallback is called when the room becomes empty, preventing a memory leak.
-//
-// Parameters:
-//   - id: the unique identifier for the room.
-//   - onEmptyCallback: a function to be called when the room becomes empty.
-//
-// Returns:
-//   - A pointer to the newly created Room.
-func NewRoom(id RoomIdType, onEmptyCallback func(RoomIdType)) *Room {
-	return &Room{
-		ID:                   id,
-		chatHistory:          list.New(),
-		maxChatHistoryLength: 100, // Default to 100 messages
-
-		hosts:        make(map[ClientIdType]*Client),
-		participants: make(map[ClientIdType]*Client),
-		waiting:      make(map[ClientIdType]*Client),
-
-		waitingDrawOrderStack: list.New(),
-		clientDrawOrderQueue:  list.New(),
-		handDrawOrderQueue:    list.New(),
-
-		raisingHand:   make(map[ClientIdType]*Client),
-		sharingScreen: make(map[ClientIdType]*Client),
-		unmuted:       make(map[ClientIdType]*Client),
-		cameraOn:      make(map[ClientIdType]*Client),
-
-		onEmpty: onEmptyCallback,
 	}
 }
 
@@ -326,8 +342,19 @@ func (r *Room) router(client *Client, data any) {
 }
 
 // broadcast sends a message of the specified event and payload to clients in the room.
+// For distributed deployments, also publishes critical events to Redis for cross-pod delivery.
+// This method assumes the caller already holds the appropriate lock.
+// broadcast sends a message of the specified event and payload to clients in the room.
+// For distributed deployments, also publishes critical events to Redis for cross-pod delivery.
 // This method assumes the caller already holds the appropriate lock.
 func (r *Room) broadcast(event Event, payload any, roles set.Set[RoleType]) {
+	r.broadcastWithOptions(event, payload, roles, "", false)
+}
+
+// broadcastWithOptions is an internal helper to reuse broadcast logic while controlling
+// whether to republish to Redis and optionally exclude a sender (to prevent echo).
+// Caller must hold the appropriate lock.
+func (r *Room) broadcastWithOptions(event Event, payload any, roles set.Set[RoleType], excludeSenderID ClientIdType, skipRedis bool) {
 	msg := Message{Event: event, Payload: payload}
 	rawMsg, err := json.Marshal(msg)
 	if err != nil {
@@ -347,7 +374,10 @@ func (r *Room) broadcast(event Event, payload any, roles set.Set[RoleType]) {
 		// Send to all roles
 		slog.Info("Broadcasting to ALL roles")
 		for _, m := range []map[ClientIdType]*Client{r.hosts, r.sharingScreen, r.participants, r.waiting} {
-			for _, p := range m {
+			for id, p := range m {
+				if excludeSenderID != "" && id == excludeSenderID {
+					continue
+				}
 				select {
 				case p.send <- rawMsg:
 				default:
@@ -359,119 +389,47 @@ func (r *Room) broadcast(event Event, payload any, roles set.Set[RoleType]) {
 	} else {
 		slog.Info("Broadcasting to specific roles", "rolesCount", len(roles))
 		for role := range roles {
-			var clients []*Client
 			switch role {
 			case RoleTypeHost:
-				clients = clientsMapToSlice(r.hosts)
-				slog.Debug("Broadcasting to hosts", "count", len(clients))
+				broadcastToClientMap(rawMsg, role, r.hosts, excludeSenderID)
 			case RoleTypeScreenshare:
-				clients = clientsMapToSlice(r.sharingScreen)
-				slog.Debug("Broadcasting to screenshare", "count", len(clients))
+				broadcastToClientMap(rawMsg, role, r.sharingScreen, excludeSenderID)
 			case RoleTypeParticipant:
-				clients = clientsMapToSlice(r.participants)
-				slog.Debug("Broadcasting to participants", "count", len(clients))
+				broadcastToClientMap(rawMsg, role, r.participants, excludeSenderID)
 			case RoleTypeWaiting:
-				clients = clientsMapToSlice(r.waiting)
-				slog.Debug("Broadcasting to waiting", "count", len(clients))
+				broadcastToClientMap(rawMsg, role, r.waiting, excludeSenderID)
 			default:
 				continue
 			}
-			for _, p := range clients {
-				select {
-				case p.send <- rawMsg:
-					slog.Debug("Message sent to client", "clientId", p.ID)
-				default:
-					// Prevent a slow client from blocking the whole broadcast.
-					slog.Warn("Failed to send to client - channel full", "clientId", p.ID)
-				}
-			}
 		}
 	}
+
+	// Publish critical events to Redis for cross-pod distribution
+	// Only publish events that need to be synchronized across pods
+	if !skipRedis {
+		// Use broadcast roles directly. Nil means all roles.
+		// Use empty senderID since broadcast is not tied to a specific client
+		go r.publishToRedis(event, payload, "", roles)
+	}
 }
 
-// clientsMapToSlice converts a map of ClientIdType to *Client into a slice of *Client.
-// It iterates over the map and appends each client pointer to a new slice, which is then returned.
-// The order of clients in the resulting slice is not guaranteed.
-func clientsMapToSlice(m map[ClientIdType]*Client) []*Client {
-	clients := make([]*Client, 0, len(m))
-	for _, c := range m {
-		clients = append(clients, c)
-	}
-	return clients
-}
-
-// getRoomStateUnsafe returns the current room state without acquiring any locks.
-// Thread Safety: This method is NOT thread-safe and must only be called when
-// the room's mutex lock is already held.
-func (r *Room) getRoomState() RoomStatePayload {
-	// Convert client maps to slices of ClientInfo
-	hosts := make([]ClientInfo, 0, len(r.hosts))
-	for _, client := range r.hosts {
-		hosts = append(hosts, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
+// broadcastToClientMap sends a raw message to all clients in the specified map,
+// optionally excluding a sender to prevent message echo.
+func broadcastToClientMap(rawMsg []byte, roleType RoleType, m map[ClientIdType]*Client, excludeSenderID ClientIdType) {
+	for clientID, client := range m {
+		if excludeSenderID != "" && clientID == excludeSenderID {
+			continue
+		}
+		select {
+		case client.send <- rawMsg:
+			slog.Debug("Message sent to client", "clientId", clientID)
+		default:
+			slog.Warn("Failed to send to client - channel full", "clientId", clientID)
+		}
 	}
 
-	participants := make([]ClientInfo, 0, len(r.participants))
-	for _, client := range r.participants {
-		participants = append(participants, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
-	}
-
-	waitingUsers := make([]ClientInfo, 0, len(r.waiting))
-	for _, client := range r.waiting {
-		waitingUsers = append(waitingUsers, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
-	}
-
-	handsRaised := make([]ClientInfo, 0, len(r.raisingHand))
-	for _, client := range r.raisingHand {
-		handsRaised = append(handsRaised, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
-	}
-
-	sharingScreen := make([]ClientInfo, 0, len(r.sharingScreen))
-	for _, client := range r.sharingScreen {
-		sharingScreen = append(sharingScreen, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
-	}
-
-	unmuted := make([]ClientInfo, 0, len(r.unmuted))
-	for _, client := range r.unmuted {
-		unmuted = append(unmuted, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
-	}
-
-	cameraOn := make([]ClientInfo, 0, len(r.cameraOn))
-	for _, client := range r.cameraOn {
-		cameraOn = append(cameraOn, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
-	}
-
-	return RoomStatePayload{
-		ClientInfo:    ClientInfo{}, // This will be set by the caller if needed
-		RoomID:        r.ID,
-		Hosts:         hosts,
-		Participants:  participants,
-		HandsRaised:   handsRaised,
-		WaitingUsers:  waitingUsers,
-		SharingScreen: sharingScreen,
-		Unmuted:       unmuted,
-		CameraOn:      cameraOn,
-	}
+	clientCount := len(m)
+	slog.Info("Sent to", "clientCount", clientCount, "roleType", string(roleType))
 }
 
 // sendRoomStateToClient sends the current room state directly to a specific client.

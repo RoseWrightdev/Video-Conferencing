@@ -115,7 +115,7 @@ if HasPermission(client.Role, HasHostPermission()) {
 
 ### Message Processing
 
-```
+```text
 Client → WebSocket → readPump → JSON Parse → Router → Handler → Business Logic → Broadcast
 ```
 

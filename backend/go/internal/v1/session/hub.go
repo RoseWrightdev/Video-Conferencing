@@ -22,6 +22,7 @@
 package session
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -30,6 +31,7 @@ import (
 	"time"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 
 	"github.com/gin-gonic/gin"
@@ -52,6 +54,16 @@ import (
 // malformed tokens.
 type TokenValidator interface {
 	ValidateToken(tokenString string) (*auth.CustomClaims, error)
+}
+
+// BusService defines the interface for distributed pub/sub messaging.
+// This abstraction allows the Hub to work with or without Redis for scaling.
+// When nil, the system operates in single-instance mode (no cross-pod messaging).
+type BusService interface {
+	Publish(ctx context.Context, roomID string, event string, payload any, senderID string, roles []string) error
+	PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error
+	Subscribe(ctx context.Context, roomID string, handler func(bus.PubSubPayload))
+	Close() error
 }
 
 // Hub serves as the central coordinator for all video conference rooms in the system.
@@ -82,6 +94,7 @@ type Hub struct {
 	mu                  sync.Mutex                 // Protects concurrent access to rooms map
 	validator           TokenValidator             // JWT authentication service
 	pendingRoomCleanups map[RoomIdType]*time.Timer // Timers for delayed room cleanup
+	bus                 BusService                 // Optional Redis pub/sub for cross-pod messaging
 }
 
 // ServeWs authenticates the user and hands them off to the room.
@@ -137,6 +150,12 @@ func (h *Hub) ServeWs(c *gin.Context) {
 			}
 			return false
 		},
+		WriteBufferPool: &sync.Pool{
+			New: func() any {
+				// Pre-allocate 4KB buffers
+				return make([]byte, 4096)
+			},
+		},
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -191,11 +210,15 @@ func (h *Hub) ServeWs(c *gin.Context) {
 }
 
 // NewHub creates a new Hub and configures it with its dependencies.
-func NewHub(validator TokenValidator) *Hub {
+// Parameters:
+//   - validator: JWT token validator for authentication
+//   - bus: Optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
+func NewHub(validator TokenValidator, bus BusService) *Hub {
 	return &Hub{
 		rooms:               make(map[RoomIdType]*Room),
 		validator:           validator,
 		pendingRoomCleanups: make(map[RoomIdType]*time.Timer),
+		bus:                 bus,
 	}
 }
 
@@ -213,8 +236,7 @@ func (h *Hub) removeRoom(roomId RoomIdType) {
 	}
 
 	// Schedule room cleanup after grace period (5 seconds)
-	const cleanupGracePeriod = 5 * time.Second
-	timer := time.AfterFunc(cleanupGracePeriod, func() {
+	timer := time.AfterFunc(5*time.Second, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 
@@ -261,7 +283,16 @@ func (h *Hub) getOrCreateRoom(roomId RoomIdType) *Room {
 	}
 
 	slog.Info("Creating new session room", "roomroomId", roomId)
-	room := NewRoom(roomId, h.removeRoom)
+	// Type assert bus service to *bus.Service or pass nil
+	var busService *bus.Service
+	if h.bus != nil {
+		// The bus field is an interface, but NewRoom expects *bus.Service
+		// In production, h.bus will be *bus.Service, so this assertion is safe
+		if bs, ok := h.bus.(*bus.Service); ok {
+			busService = bs
+		}
+	}
+	room := NewRoom(roomId, h.removeRoom, busService)
 	h.rooms[roomId] = room
 
 	// Metrics: Track room creation
