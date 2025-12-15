@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Usage: ./copy_files.sh <source_folder> <destination_folder>
+# Usage: ./copy.sh <source_folder> <output_file>
 
 SRC="${1}"
-DEST="${2}"
+OUTPUT="${2}"
 
 # 1. Validation
-if [ -z "$SRC" ] || [ -z "$DEST" ]; then
-    echo "Usage: ./copy_files.sh <source_folder> <destination_folder>"
-    echo "Example: ./copy_files.sh internal/bus ./my_backup"
+if [ -z "$SRC" ] || [ -z "$OUTPUT" ]; then
+    echo "Usage: ./copy.sh <source_folder> <output_file>"
+    echo "Example: ./copy.sh internal/bus combined.go"
     exit 1
 fi
 
@@ -17,18 +17,15 @@ if [ ! -d "$SRC" ]; then
     exit 1
 fi
 
-# 2. Create Destination
-mkdir -p "$DEST"
+echo "Combining files from '$SRC' into '$OUTPUT'..."
 
-echo "Copying from '$SRC' to '$DEST'..."
+# 2. Combine all Go files (excluding tests and comments) into one file
+> "$OUTPUT"  # Clear/create output file
+find "$SRC" -maxdepth 1 -name "*.go" ! -name "*_test.go" -print0 | sort -z | while IFS= read -r -d '' file; do
+    echo "// File: $file" >> "$OUTPUT"
+    # Exclude comments by filtering out lines starting with // or /*
+    grep -v '^\s*//' "$file" | grep -v '^\s*/\*' | grep -v '\*/' >> "$OUTPUT"
+    echo "" >> "$OUTPUT"
+done
 
-# 3. The Magic Command (Find -> Copy)
-# -maxdepth 1: Only look in the specific folder (don't go deeper into subfolders)
-# -name "*.go": Find Go files
-# ! -name "*_test.go": Ignore Test files
-# -exec cp: Copy them
-find "$SRC" -maxdepth 1 -name "*.go" ! -name "*_test.go" -exec cp {} "$DEST" \;
-
-# 4. Verify
-COUNT=$(ls -1 "$DEST"/*.go 2>/dev/null | wc -l)
-echo "Success! Copied $COUNT files."
+echo "Success! Combined files written to '$OUTPUT'"
