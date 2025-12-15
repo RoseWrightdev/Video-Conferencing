@@ -472,7 +472,10 @@ func broadcastToClientMap(rawMsg []byte, roleType RoleType, m map[ClientIdType]*
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 func (r *Room) sendRoomStateToClient(client *Client) {
-	roomState := r.getRoomState()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+
+	roomState := r.getRoomState(ctx)
 
 	if msg, err := json.Marshal(Message{Event: EventRoomState, Payload: roomState}); err == nil {
 		select {
@@ -491,6 +494,6 @@ func (r *Room) sendRoomStateToClient(client *Client) {
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 func (r *Room) broadcastRoomState(ctx context.Context) {
-	roomState := r.getRoomState()
+	roomState := r.getRoomState(ctx)
 	r.broadcast(ctx, EventRoomState, roomState, nil)
 }

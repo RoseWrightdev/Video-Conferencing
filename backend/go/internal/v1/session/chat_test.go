@@ -119,7 +119,7 @@ func TestHandleDeleteChat(t *testing.T) {
 		}
 
 		addMsg := Message{Event: EventAddChat, Payload: addPayload}
-	room.router(context.Background(), addClient, addMsg)
+		room.router(context.Background(), addClient, addMsg)
 
 		initialChatCount := room.chatHistory.Len()
 		require.True(t, initialChatCount > 0, "Chat should be added first")
@@ -137,7 +137,7 @@ func TestHandleDeleteChat(t *testing.T) {
 		deleteMsg := Message{Event: EventDeleteChat, Payload: deletePayload}
 
 		assert.NotPanics(t, func() {
-		room.router(context.Background(), client, deleteMsg)
+			room.router(context.Background(), client, deleteMsg)
 		}, "Router should not panic for delete chat")
 	})
 }

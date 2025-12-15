@@ -597,7 +597,7 @@ func (r *Room) toggleVideo(payload ToggleVideoPayload) {
 //
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
-func (r *Room) getRoomState() RoomStatePayload {
+func (r *Room) getRoomState(ctx context.Context) RoomStatePayload {
 	var hosts []ClientInfo
 	var participants []ClientInfo
 

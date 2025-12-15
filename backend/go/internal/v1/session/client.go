@@ -76,7 +76,7 @@ type wsConnection interface {
 // permission checking, and message broadcasting.
 type Roomer interface {
 	router(ctx context.Context, c *Client, data any) // Route incoming messages to appropriate handlers
-	handleClientDisconnect(c *Client)                 // Handle client disconnection cleanup
+	handleClientDisconnect(c *Client)                // Handle client disconnection cleanup
 }
 
 // Client represents a single user's connection to a video conference room.
