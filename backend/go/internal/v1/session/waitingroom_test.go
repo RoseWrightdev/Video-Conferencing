@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func TestHandleRequestWaiting(t *testing.T) {
 		host := newTestClientWithName("host1", "Host User")
 		host.Role = RoleTypeHost
 
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 		room.addWaiting(client)
 
 		payload := RequestWaitingPayload{
@@ -27,7 +28,7 @@ func TestHandleRequestWaiting(t *testing.T) {
 		}
 
 		assert.NotPanics(t, func() {
-			room.router(client, Message{Event: EventRequestWaiting, Payload: payload})
+			room.router(context.Background(), client, Message{Event: EventRequestWaiting, Payload: payload})
 		}, "Router should not panic for request waiting")
 
 		require.Len(t, room.hosts, 1, "Should have one host")
@@ -50,7 +51,7 @@ func TestHandleRequestWaiting(t *testing.T) {
 		invalidPayload := "invalid payload"
 
 		assert.NotPanics(t, func() {
-			room.router(client, Message{Event: EventRequestWaiting, Payload: invalidPayload})
+			room.router(context.Background(), client, Message{Event: EventRequestWaiting, Payload: invalidPayload})
 		}, "Router should not panic for invalid payload")
 
 		select {
@@ -69,7 +70,7 @@ func TestHandleDenyWaiting(t *testing.T) {
 
 		host := newTestClientWithName("host1", "Host User")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		waitingUser := newTestClientWithName("waiting1", "Waiting User")
 		waitingUser.Role = RoleTypeWaiting
@@ -83,7 +84,7 @@ func TestHandleDenyWaiting(t *testing.T) {
 		msg := Message{Event: EventDenyWaiting, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(host, msg)
+			room.router(context.Background(), host, msg)
 		}, "Router should not panic for deny waiting")
 	})
 
@@ -92,7 +93,7 @@ func TestHandleDenyWaiting(t *testing.T) {
 
 		participant := newTestClientWithName("participant1", "Participant User")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		waitingUser := newTestClientWithName("waiting1", "Waiting User")
 		waitingUser.Role = RoleTypeWaiting
@@ -106,7 +107,7 @@ func TestHandleDenyWaiting(t *testing.T) {
 		msg := Message{Event: EventDenyWaiting, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(participant, msg)
+			room.router(context.Background(), participant, msg)
 		}, "Router should not panic even with insufficient permissions")
 	})
 }
@@ -118,7 +119,7 @@ func TestHandleWaitingRoomOperations(t *testing.T) {
 
 		host := newTestClient("host1")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		waitingUser := newTestClient("waiting1")
 		waitingUser.Role = RoleTypeWaiting
@@ -134,7 +135,7 @@ func TestHandleWaitingRoomOperations(t *testing.T) {
 		msg := Message{Event: EventAcceptWaiting, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(host, msg)
+			room.router(context.Background(), host, msg)
 		}, "Router should not panic for accept waiting")
 	})
 
@@ -143,7 +144,7 @@ func TestHandleWaitingRoomOperations(t *testing.T) {
 
 		participant := newTestClient("participant1")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		waitingUser := newTestClient("waiting1")
 		waitingUser.Role = RoleTypeWaiting
@@ -157,7 +158,7 @@ func TestHandleWaitingRoomOperations(t *testing.T) {
 		msg := Message{Event: EventAcceptWaiting, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(participant, msg)
+			room.router(context.Background(), participant, msg)
 		}, "Router should not panic even with insufficient permissions")
 
 		_, stillWaiting := room.waiting[waitingUser.ID]

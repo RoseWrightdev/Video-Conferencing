@@ -27,6 +27,12 @@ package session
 
 import "k8s.io/utils/set"
 
+var waitingPermissions = set.New(RoleTypeWaiting)
+var screensharePermissions = set.New(RoleTypeHost, RoleTypeScreenshare)
+var participantPermissions = set.New(RoleTypeHost, RoleTypeScreenshare, RoleTypeParticipant)
+var hostPermissions = set.New(RoleTypeHost)
+
+
 // HasWaitingPermission returns the set of roles with waiting-level permissions.
 // This is the most basic permission level, granted only to users who are
 // waiting for admission to the room.
@@ -43,7 +49,7 @@ import "k8s.io/utils/set"
 // Returns:
 //   - Set containing only RoleTypeWaiting
 func HasWaitingPermission() set.Set[RoleType] {
-	return set.New(RoleTypeWaiting)
+	return waitingPermissions
 }
 
 // HasParticipantPermission returns the set of roles with participant-level permissions.
@@ -68,7 +74,7 @@ func HasWaitingPermission() set.Set[RoleType] {
 // Returns:
 //   - Set containing RoleTypeParticipant, RoleTypeScreenshare, and RoleTypeHost
 func HasParticipantPermission() set.Set[RoleType] {
-	return set.New(RoleTypeHost, RoleTypeScreenshare, RoleTypeParticipant)
+	return participantPermissions
 }
 
 // HasScreensharePermission returns the set of roles with screen sharing permissions.
@@ -92,7 +98,7 @@ func HasParticipantPermission() set.Set[RoleType] {
 // Returns:
 //   - Set containing RoleTypeScreenshare and RoleTypeHost
 func HasScreensharePermission() set.Set[RoleType] {
-	return set.New(RoleTypeHost, RoleTypeScreenshare)
+	return screensharePermissions
 }
 
 // HasHostPermission returns the set of roles with host-level permissions.
@@ -119,7 +125,7 @@ func HasScreensharePermission() set.Set[RoleType] {
 // Returns:
 //   - Set containing only RoleTypeHost
 func HasHostPermission() set.Set[RoleType] {
-	return set.New(RoleTypeHost)
+	return hostPermissions
 }
 
 // HasPermission checks if a given role has permission to perform an action.

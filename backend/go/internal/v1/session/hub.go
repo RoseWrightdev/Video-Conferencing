@@ -64,6 +64,10 @@ type BusService interface {
 	PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error
 	Subscribe(ctx context.Context, roomID string, handler func(bus.PubSubPayload))
 	Close() error
+	// Redis Set operations for distributed state management
+	SetAdd(ctx context.Context, key string, value string) error
+	SetRem(ctx context.Context, key string, value string) error
+	SetMembers(ctx context.Context, key string) ([]string, error)
 }
 
 // Hub serves as the central coordinator for all video conference rooms in the system.
@@ -206,12 +210,13 @@ func (h *Hub) ServeWs(c *gin.Context) {
 		"clientId", claims.Subject)
 
 	client := &Client{
-		conn:        conn,
-		send:        make(chan []byte, 256),
-		room:        room,
-		ID:          ClientIdType(claims.Subject),
-		DisplayName: DisplayNameType(displayName),
-		Role:        RoleTypeHost, // Default role, should be derived from token scopes
+		conn:             conn,
+		send:             make(chan []byte, 256),
+		room:             room,
+		ID:               ClientIdType(claims.Subject),
+		DisplayName:      DisplayNameType(displayName),
+		Role:             RoleTypeHost, // Default role, should be derived from token scopes
+		rateLimitEnabled: true,         // Enable rate limiting for production clients
 	}
 
 	// Metrics: Track WebSocket connection (defer ensures cleanup on disconnect)
@@ -285,16 +290,8 @@ func (h *Hub) getOrCreateRoom(roomId RoomIdType) *Room {
 	}
 
 	slog.Info("Creating new session room", "roomroomId", roomId)
-	// Type assert bus service to *bus.Service or pass nil
-	var busService *bus.Service
-	if h.bus != nil {
-		// The bus field is an interface, but NewRoom expects *bus.Service
-		// In production, h.bus will be *bus.Service, so this assertion is safe
-		if bs, ok := h.bus.(*bus.Service); ok {
-			busService = bs
-		}
-	}
-	room := NewRoom(roomId, h.removeRoom, busService)
+	// Pass the bus interface directly - no type assertion needed
+	room := NewRoom(roomId, h.removeRoom, h.bus)
 	h.rooms[roomId] = room
 
 	// Metrics: Track room creation

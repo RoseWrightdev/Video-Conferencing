@@ -28,30 +28,10 @@ func (r *Room) subscribeToRedis() {
 	slog.Info("Room subscribed to Redis pub/sub", "roomId", r.ID)
 }
 
-// subscribeToDirectMessages sets up a Redis subscription for direct WebRTC signals
-// sent to any participant in this room. This enables cross-pod WebRTC signaling.
-// All clients in the room subscribe to receive direct messages routed to their user IDs.
-func (r *Room) subscribeToDirectMessages(clientID ClientIdType) {
-	if r.bus == nil {
-		return
-	}
-
-	// Create a context that persists for the room's lifetime
-	ctx := context.Background()
-
-	r.bus.Subscribe(ctx, "video:user:"+string(clientID), func(payload bus.PubSubPayload) {
-		r.handleDirectMessage(payload)
-	})
-
-	slog.Debug("Room subscribed to direct messages for user", "userId", clientID, "roomId", r.ID)
-}
-
 // handleRedisMessage processes messages received from Redis pub/sub.
-// This method is called when another pod publishes an event to this room's channel.
-// It forwards the message to clients in this pod based on role permissions,
-// EXCEPT the original sender (identified by payload.SenderID) to prevent message echo.
+// It routes WebRTC signaling to local clients when appropriate and
+// falls back to standard broadcast logic for chat/room events.
 func (r *Room) handleRedisMessage(payload bus.PubSubPayload) {
-	// Use write lock because broadcast methods expect caller holds lock
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -61,11 +41,48 @@ func (r *Room) handleRedisMessage(payload bus.PubSubPayload) {
 		"senderID", payload.SenderID,
 		"roles", payload.Roles)
 
-	// No need to reconstruct and marshal; broadcastWithOptions handles it
+	// --- ROUTING LOGIC: Filter WebRTC events locally ---
+	switch Event(payload.Event) {
+	case EventOffer, EventAnswer, EventCandidate, EventRenegotiate:
+		var target struct {
+			TargetClientId ClientIdType `json:"targetClientId"`
+		}
+		if err := json.Unmarshal(payload.Payload, &target); err != nil {
+			slog.Error("Failed to parse target from Redis message", "event", payload.Event, "error", err)
+			return
+		}
 
+		var targetClient *Client
+		if c := r.participants[target.TargetClientId]; c != nil {
+			targetClient = c
+		} else if c := r.hosts[target.TargetClientId]; c != nil {
+			targetClient = c
+		}
+
+		if targetClient != nil {
+			msg := Message{
+				Event:   Event(payload.Event),
+				Payload: payload.Payload,
+			}
+			rawMsg, _ := json.Marshal(msg)
+
+			// Non-blocking send: drop message if channel is full
+			select {
+			case targetClient.send <- rawMsg:
+				slog.Debug("Redis-routed message delivered locally", "target", targetClient.ID)
+			default:
+				// Channel is full - log warning and drop message
+				// Do NOT block the entire room waiting for a slow client
+				slog.Warn("Client send channel full, dropping Redis message",
+					"target", targetClient.ID,
+					"event", payload.Event)
+			}
+		}
+		return
+	}
+
+	// --- STANDARD BROADCAST LOGIC (Chat, RoomState, etc.) ---
 	senderID := ClientIdType(payload.SenderID)
-
-	// Convert string roles to RoleType set for consistent broadcasting pattern
 	var roleSet set.Set[RoleType]
 	if len(payload.Roles) > 0 {
 		roleSet = set.New[RoleType]()
@@ -73,65 +90,16 @@ func (r *Room) handleRedisMessage(payload bus.PubSubPayload) {
 			roleSet.Insert(RoleType(roleStr))
 		}
 	}
-	// Reuse broadcast logic, skip republishing and exclude original sender to prevent echo
-	r.broadcastWithOptions(Event(payload.Event), payload.Payload, roleSet, senderID, true)
-}
-
-// handleDirectMessage processes direct WebRTC signals from other pods.
-// This is used for peer-to-peer signaling (offer, answer, ICE candidates) where
-// the target user is on this pod but the sender is on another pod.
-// The message is forwarded directly to the target client via their WebSocket channel.
-func (r *Room) handleDirectMessage(payload bus.PubSubPayload) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	slog.Debug("Received direct message via Redis",
-		"event", payload.Event,
-		"senderID", payload.SenderID,
-		"roomId", r.ID)
-
-	// This payload should have raw JSON that we forward directly
-	// The frontend expects it wrapped in a Message with Event and Payload
-
-	rawMsg := make([]byte, 0)
-	var err error
-
-	// Reconstruct the message to send to the client
-	msg := Message{
-		Event:   Event(payload.Event),
-		Payload: payload.Payload, // This is already JSON bytes
-	}
-
-	if rawMsg, err = json.Marshal(msg); err != nil {
-		slog.Error("Failed to marshal direct message for client",
-			"error", err,
-			"event", payload.Event,
-			"senderID", payload.SenderID)
-		return
-	}
-
-	// Send to all local clients except the sender
-	// (though typically only one client will need it based on the subscription)
-	for clientID, client := range r.participants {
-		if ClientIdType(payload.SenderID) != clientID {
-			select {
-			case client.send <- rawMsg:
-				slog.Debug("Direct message forwarded to client",
-					"senderID", payload.SenderID,
-					"targetClientID", clientID)
-			default:
-				slog.Warn("Failed to forward direct message - client channel full",
-					"targetClientID", clientID)
-			}
-		}
-	}
+	// reuse broadcast logic; skip republishing to avoid loops
+	ctx := context.Background() // Redis subscription runs in background goroutine
+	r.broadcastWithOptions(ctx, Event(payload.Event), payload.Payload, roleSet, senderID, true)
 }
 
 // publishToRedis publishes an event to Redis for cross-pod distribution.
 // This should be called after local broadcast to ensure other pods receive the event.
 // The senderID is critical to prevent message echo when the message comes back via subscription.
 // The roles parameter specifies which role types should receive this event (nil = all roles).
-func (r *Room) publishToRedis(event Event, payload interface{}, senderID ClientIdType, roles set.Set[RoleType]) {
+func (r *Room) publishToRedis(ctx context.Context, event Event, payload interface{}, senderID ClientIdType, roles set.Set[RoleType]) {
 	if r.bus == nil {
 		return // Single-instance mode, no cross-pod communication needed
 	}
@@ -145,7 +113,6 @@ func (r *Room) publishToRedis(event Event, payload interface{}, senderID ClientI
 		}
 	}
 
-	ctx := context.Background()
 	err := r.bus.Publish(ctx, string(r.ID), string(event), payload, string(senderID), roleStrings)
 	if err != nil {
 		slog.Error("Failed to publish to Redis",

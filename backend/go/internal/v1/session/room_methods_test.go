@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,7 @@ func TestAddParticipant(t *testing.T) {
 	room := NewTestRoom("test-room", nil)
 	client := newTestClient("client-1")
 
-	room.addParticipant(client)
+	room.addParticipant(context.Background(), client)
 
 	// Assert that the client was added to the participants map
 	_, exists := room.participants[client.ID]
@@ -33,13 +34,13 @@ func TestAddParticipant(t *testing.T) {
 func TestDeleteParticipant(t *testing.T) {
 	room := NewTestRoom("test-room", nil)
 	client := newTestClient("client-1")
-	room.addParticipant(client)
+	room.addParticipant(context.Background(), client)
 
 	// Sanity check
 	require.Equal(t, 1, len(room.participants), "Pre-condition: one participant should exist")
 	require.Equal(t, 1, room.clientDrawOrderQueue.Len(), "Pre-condition: draw queue should have one element")
 
-	room.deleteParticipant(client)
+	room.deleteParticipant(context.Background(), client)
 
 	// Assert the client was removed from the map
 	_, exists := room.participants[client.ID]
@@ -54,7 +55,7 @@ func TestAddHost(t *testing.T) {
 	room := NewTestRoom("test-room", nil)
 	client := newTestClient("host-1")
 
-	room.addHost(client)
+	room.addHost(context.Background(), client)
 
 	_, exists := room.hosts[client.ID]
 	assert.True(t, exists, "Client should be in the hosts map")
@@ -65,10 +66,10 @@ func TestAddHost(t *testing.T) {
 func TestDeleteHost(t *testing.T) {
 	room := NewTestRoom("test-room", nil)
 	client := newTestClient("host-1")
-	room.addHost(client)
+	room.addHost(context.Background(), client)
 
 	require.Equal(t, 1, len(room.hosts))
-	room.deleteHost(client)
+	room.deleteHost(context.Background(), client)
 
 	_, exists := room.hosts[client.ID]
 	assert.False(t, exists, "Client should be removed from the hosts map")
@@ -144,13 +145,13 @@ func TestIsRoomEmpty(t *testing.T) {
 
 	t.Run("should NOT be empty if a participant is present", func(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
-		room.addParticipant(newTestClient("p1"))
+		room.addParticipant(context.Background(), newTestClient("p1"))
 		assert.False(t, room.isRoomEmpty(), "Room with a participant should not be empty")
 	})
 
 	t.Run("should NOT be empty if a host is present", func(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
-		room.addHost(newTestClient("h1"))
+		room.addHost(context.Background(), newTestClient("h1"))
 		assert.False(t, room.isRoomEmpty(), "Room with a host should not be empty")
 	})
 

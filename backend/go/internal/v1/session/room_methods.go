@@ -18,7 +18,13 @@
 // preventing deadlocks and ensuring consistent state updates.
 package session
 
-import "container/list"
+import (
+	"container/list"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+)
 
 // addParticipant promotes a client to participant status and adds them to the main meeting.
 // This method updates the client's role, adds them to the participants map, and places
@@ -27,32 +33,64 @@ import "container/list"
 // The client is added to the back of the draw order queue, meaning they appear
 // at the end of the participant list initially.
 //
+// Distributed State: Also persists participant metadata to Redis Set for cross-pod visibility.
+//
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 //
 // Parameters:
+//   - ctx: Context for cancellation and timeout control
 //   - client: The client to promote to participant status
-func (r *Room) addParticipant(client *Client) {
+func (r *Room) addParticipant(ctx context.Context, client *Client) {
 	client.Role = RoleTypeParticipant
 	element := r.clientDrawOrderQueue.PushBack(client)
 	client.drawOrderElement = element
 	r.participants[client.ID] = client
+
+	// Persist to Redis for distributed state
+	if r.bus != nil {
+		clientInfo := ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		}
+		data, _ := json.Marshal(clientInfo)
+		key := fmt.Sprintf("room:%s:participants", r.ID)
+		if err := r.bus.SetAdd(ctx, key, string(data)); err != nil {
+			slog.Error("Failed to add participant to Redis", "roomId", r.ID, "clientId", client.ID, "error", err)
+		}
+	}
 }
 
 // deleteParticipant removes a client from participant status and the main meeting.
 // This method removes the client from the participants map and the client draw order queue.
 // The client's draw order element reference is cleared to prevent memory leaks.
 //
+// Distributed State: Also removes participant from Redis Set for cross-pod consistency.
+//
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 //
 // Parameters:
+//   - ctx: Context for cancellation and timeout control
 //   - client: The client to remove from participant status
-func (r *Room) deleteParticipant(client *Client) {
+func (r *Room) deleteParticipant(ctx context.Context, client *Client) {
 	delete(r.participants, client.ID)
 	if client.drawOrderElement != nil {
 		r.clientDrawOrderQueue.Remove(client.drawOrderElement)
 		client.drawOrderElement = nil
+	}
+
+	// Remove from Redis for distributed state
+	if r.bus != nil {
+		clientInfo := ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		}
+		data, _ := json.Marshal(clientInfo)
+		key := fmt.Sprintf("room:%s:participants", r.ID)
+		if err := r.bus.SetRem(ctx, key, string(data)); err != nil {
+			slog.Error("Failed to remove participant from Redis", "roomId", r.ID, "clientId", client.ID, "error", err)
+		}
 	}
 }
 
@@ -65,16 +103,32 @@ func (r *Room) deleteParticipant(client *Client) {
 //   - Managing screen sharing permissions
 //   - Administrative control over the room
 //
+// Distributed State: Also persists host metadata to Redis Set for cross-pod visibility.
+//
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 //
 // Parameters:
+//   - ctx: Context for cancellation and timeout control
 //   - client: The client to promote to host status
-func (r *Room) addHost(client *Client) {
+func (r *Room) addHost(ctx context.Context, client *Client) {
 	client.Role = RoleTypeHost
 	element := r.clientDrawOrderQueue.PushBack(client)
 	client.drawOrderElement = element
 	r.hosts[client.ID] = client
+
+	// Persist to Redis for distributed state
+	if r.bus != nil {
+		clientInfo := ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		}
+		data, _ := json.Marshal(clientInfo)
+		key := fmt.Sprintf("room:%s:hosts", r.ID)
+		if err := r.bus.SetAdd(ctx, key, string(data)); err != nil {
+			slog.Error("Failed to add host to Redis", "roomId", r.ID, "clientId", client.ID, "error", err)
+		}
+	}
 }
 
 // deleteHost removes a client from host status and revokes their administrative privileges.
@@ -84,16 +138,32 @@ func (r *Room) addHost(client *Client) {
 // Note: Removing all hosts from a room may leave it without administrative control.
 // Consider the implications before calling this method.
 //
+// Distributed State: Also removes host from Redis Set for cross-pod consistency.
+//
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 //
 // Parameters:
+//   - ctx: Context for cancellation and timeout control
 //   - client: The client to remove from host status
-func (r *Room) deleteHost(client *Client) {
+func (r *Room) deleteHost(ctx context.Context, client *Client) {
 	delete(r.hosts, client.ID)
 	if client.drawOrderElement != nil {
 		r.clientDrawOrderQueue.Remove(client.drawOrderElement)
 		client.drawOrderElement = nil
+	}
+
+	// Remove from Redis for distributed state
+	if r.bus != nil {
+		clientInfo := ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		}
+		data, _ := json.Marshal(clientInfo)
+		key := fmt.Sprintf("room:%s:hosts", r.ID)
+		if err := r.bus.SetRem(ctx, key, string(data)); err != nil {
+			slog.Error("Failed to remove host from Redis", "roomId", r.ID, "clientId", client.ID, "error", err)
+		}
 	}
 }
 
@@ -314,10 +384,10 @@ func (r *Room) getRecentChats(payload GetRecentChatsPayload) []AddChatPayload {
 //
 // Parameters:
 //   - client: The client to completely remove from the room
-func (r *Room) disconnectClient(client *Client) {
+func (r *Room) disconnectClient(ctx context.Context, client *Client) {
 	// Remove from role-based maps
-	r.deleteHost(client)
-	r.deleteParticipant(client)
+	r.deleteHost(ctx, client)
+	r.deleteParticipant(ctx, client)
 	r.deleteWaiting(client)
 
 	// Remove from state maps
@@ -325,6 +395,7 @@ func (r *Room) disconnectClient(client *Client) {
 	delete(r.sharingScreen, client.ID)
 	delete(r.unmuted, client.ID)
 	delete(r.cameraOn, client.ID)
+	close(client.send)
 
 	// Remove from hand raise queue if present
 	if client.drawOrderElement != nil {
@@ -516,26 +587,53 @@ func (r *Room) toggleVideo(payload ToggleVideoPayload) {
 }
 
 // getRoomStateUnsafe returns the current room state without acquiring any locks.
+//
+// Distributed State: Fetches complete participant and host lists from Redis Sets
+// to provide cross-pod visibility. This solves the "split-brain" problem where
+// users on different server instances cannot see each other in the participant list.
+//
+// Fallback Behavior: If Redis is unavailable or returns an error, falls back to
+// local state only (original behavior for single-instance deployments).
+//
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
 func (r *Room) getRoomState() RoomStatePayload {
-	// Convert client maps to slices of ClientInfo
-	hosts := make([]ClientInfo, 0, len(r.hosts))
-	for _, client := range r.hosts {
-		hosts = append(hosts, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
+	var hosts []ClientInfo
+	var participants []ClientInfo
+
+	// Try to fetch from Redis for distributed state
+	if r.bus != nil {
+		ctx := context.Background()
+
+		// Fetch hosts from Redis
+		hostsKey := fmt.Sprintf("room:%s:hosts", r.ID)
+		hostsData, err := r.bus.SetMembers(ctx, hostsKey)
+		if err != nil {
+			slog.Warn("Failed to fetch hosts from Redis, using local state", "roomId", r.ID, "error", err)
+			// Fallback to local state
+			hosts = r.getLocalHosts()
+		} else {
+			hosts = r.parseClientInfoList(hostsData)
+		}
+
+		// Fetch participants from Redis
+		participantsKey := fmt.Sprintf("room:%s:participants", r.ID)
+		participantsData, err := r.bus.SetMembers(ctx, participantsKey)
+		if err != nil {
+			slog.Warn("Failed to fetch participants from Redis, using local state", "roomId", r.ID, "error", err)
+			// Fallback to local state
+			participants = r.getLocalParticipants()
+		} else {
+			participants = r.parseClientInfoList(participantsData)
+		}
+	} else {
+		// No Redis bus - use local state only (single-instance mode)
+		hosts = r.getLocalHosts()
+		participants = r.getLocalParticipants()
 	}
 
-	participants := make([]ClientInfo, 0, len(r.participants))
-	for _, client := range r.participants {
-		participants = append(participants, ClientInfo{
-			ClientId:    client.ID,
-			DisplayName: client.DisplayName,
-		})
-	}
-
+	// Waiting users, activity states, and media states are always local
+	// (they don't need cross-pod synchronization as they're connection-specific)
 	waitingUsers := make([]ClientInfo, 0, len(r.waiting))
 	for _, client := range r.waiting {
 		waitingUsers = append(waitingUsers, ClientInfo{
@@ -587,4 +685,45 @@ func (r *Room) getRoomState() RoomStatePayload {
 		Unmuted:       unmuted,
 		CameraOn:      cameraOn,
 	}
+}
+
+// getLocalHosts returns hosts from local state only.
+// Helper method for getRoomState fallback behavior.
+func (r *Room) getLocalHosts() []ClientInfo {
+	hosts := make([]ClientInfo, 0, len(r.hosts))
+	for _, client := range r.hosts {
+		hosts = append(hosts, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+	return hosts
+}
+
+// getLocalParticipants returns participants from local state only.
+// Helper method for getRoomState fallback behavior.
+func (r *Room) getLocalParticipants() []ClientInfo {
+	participants := make([]ClientInfo, 0, len(r.participants))
+	for _, client := range r.participants {
+		participants = append(participants, ClientInfo{
+			ClientId:    client.ID,
+			DisplayName: client.DisplayName,
+		})
+	}
+	return participants
+}
+
+// parseClientInfoList parses JSON-encoded ClientInfo strings from Redis.
+// Returns empty slice if any parsing errors occur.
+func (r *Room) parseClientInfoList(data []string) []ClientInfo {
+	result := make([]ClientInfo, 0, len(data))
+	for _, item := range data {
+		var clientInfo ClientInfo
+		if err := json.Unmarshal([]byte(item), &clientInfo); err != nil {
+			slog.Error("Failed to parse ClientInfo from Redis", "roomId", r.ID, "data", item, "error", err)
+			continue
+		}
+		result = append(result, clientInfo)
+	}
+	return result
 }

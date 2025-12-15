@@ -19,6 +19,7 @@ package session
 
 import (
 	"container/list"
+	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -35,8 +36,9 @@ import (
 // newTestClient creates a client for testing purposes.
 func newTestClient(id ClientIdType) *Client {
 	return &Client{
-		ID:   id,
-		send: make(chan []byte, 10), // Buffered channel to avoid blocking in tests
+		ID:               id,
+		send:             make(chan []byte, 10), // Buffered channel to avoid blocking in tests
+		rateLimitEnabled: false,                 // Disable rate limiting for tests
 	}
 }
 
@@ -115,13 +117,13 @@ func TestHandleClientDisconnect(t *testing.T) {
 		client := newTestClient("client-1")
 
 		// Add and then immediately remove the client
-		room.addHost(client)
+		room.addHost(context.Background(), client)
 		// Manually implement the disconnect logic for the test since it's unimplemented
-		room.deleteHost(client)
+		room.deleteHost(context.Background(), client)
 
 		// Create payload for broadcast
 		payload := ClientDisconnectPayload{ClientId: client.ID, DisplayName: client.DisplayName}
-		room.broadcast(Event(EventDisconnect), payload, nil)
+		room.broadcast(context.Background(), Event(EventDisconnect), payload, nil)
 
 		// Check if room is empty AFTER broadcasting
 		if room.isRoomEmpty() {
@@ -141,8 +143,8 @@ func TestHandleClientDisconnect(t *testing.T) {
 		host := newTestClient("host-1")
 		participant := newTestClient("participant-1")
 
-		room.addHost(host)
-		room.addParticipant(participant)
+		room.addHost(context.Background(), host)
+		room.addParticipant(context.Background(), participant)
 
 		// Simulate participant disconnecting
 		room.handleClientDisconnect(participant)
@@ -182,7 +184,7 @@ func TestRouterPermissions(t *testing.T) {
 		// Test that router doesn't panic and processes the message
 		// Since participant has participant permissions, this should succeed
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic for participant adding chat")
 	})
 
@@ -203,7 +205,7 @@ func TestRouterPermissions(t *testing.T) {
 		// Since waiting clients don't have participant permissions, no broadcast should occur
 		initialChannelLen := len(client.send)
 
-		room.router(client, msg)
+		room.router(context.Background(), client, msg)
 
 		// No messages should be broadcast since waiting client can't add chat
 		assert.Equal(t, initialChannelLen, len(client.send),
@@ -227,7 +229,7 @@ func TestRouterPermissions(t *testing.T) {
 
 		// Host should be able to accept waiting clients
 		assert.NotPanics(t, func() {
-			room.router(host, msg)
+			room.router(context.Background(), host, msg)
 		}, "Host should be able to accept waiting clients")
 	})
 
@@ -250,7 +252,7 @@ func TestRouterPermissions(t *testing.T) {
 		initialWaitingCount := len(room.waiting)
 		initialParticipantCount := len(room.participants)
 
-		room.router(participant, msg)
+		room.router(context.Background(), participant, msg)
 
 		// Waiting client should still be waiting (not moved to participants)
 		assert.Equal(t, initialWaitingCount, len(room.waiting),
@@ -267,12 +269,12 @@ func TestBroadcast(t *testing.T) {
 		participant := newTestClient("p1")
 		waiting := newTestClient("w1")
 
-		room.addHost(host)
-		room.addParticipant(participant)
+		room.addHost(context.Background(), host)
+		room.addParticipant(context.Background(), participant)
 		room.addWaiting(waiting) // Assumes addWaiting is fixed to add to the 'waiting' map
 
 		payload := map[string]string{"data": "hello all"}
-		room.broadcast(Event("test-event"), payload, nil) // nil roles
+		room.broadcast(context.Background(), Event("test-event"), payload, nil) // nil roles
 
 		assert.Len(t, host.send, 1, "Host should receive message")
 		assert.Len(t, participant.send, 1, "Participant should receive message")
@@ -286,13 +288,13 @@ func TestBroadcast(t *testing.T) {
 		participant := newTestClient("p1")
 		waiting := newTestClient("w1")
 
-		room.addHost(host1)
-		room.addHost(host2)
-		room.addParticipant(participant)
+		room.addHost(context.Background(), host1)
+		room.addHost(context.Background(), host2)
+		room.addParticipant(context.Background(), participant)
 		room.addWaiting(waiting)
 
 		payload := map[string]string{"data": "hello hosts"}
-		room.broadcast(Event("host-event"), payload, HasHostPermission())
+		room.broadcast(context.Background(), Event("host-event"), payload, HasHostPermission())
 
 		assert.Len(t, host1.send, 1, "Host 1 should receive message")
 		assert.Len(t, host2.send, 1, "Host 2 should receive message")

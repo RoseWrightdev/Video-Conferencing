@@ -24,8 +24,11 @@ package session
 
 import (
 	"container/list"
+	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 	"github.com/gorilla/websocket"
@@ -50,6 +53,7 @@ type wsConnection interface {
 	ReadMessage() (messageType int, p []byte, err error) // Read the next message from the connection
 	WriteMessage(messageType int, data []byte) error     // Write a message to the connection
 	Close() error                                        // Close the connection
+	SetWriteDeadline(t time.Time) error
 }
 
 // Roomer defines the interface for room operations that a Client needs.
@@ -71,8 +75,8 @@ type wsConnection interface {
 // providing full room functionality including state management,
 // permission checking, and message broadcasting.
 type Roomer interface {
-	router(c *Client, data any)       // Route incoming messages to appropriate handlers
-	handleClientDisconnect(c *Client) // Handle client disconnection cleanup
+	router(ctx context.Context, c *Client, data any) // Route incoming messages to appropriate handlers
+	handleClientDisconnect(c *Client)                 // Handle client disconnection cleanup
 }
 
 // Client represents a single user's connection to a video conference room.
@@ -106,6 +110,23 @@ type Client struct {
 	DisplayName      DisplayNameType // Human-readable name for UI display
 	Role             RoleType        // Current permission level in the room
 	drawOrderElement *list.Element   // Position reference in room draw order queues
+	mu               sync.RWMutex    // Protects concurrent access to Client fields (like Role)
+	lastMessageTime  time.Time
+	rateLimitEnabled bool // Enable rate limiting (disabled for tests)
+}
+
+// Thread-safe reader
+func (c *Client) GetRole() RoleType {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Role
+}
+
+// Thread-safe writer
+func (c *Client) SetRole(role RoleType) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Role = role
 }
 
 // readPump continuously processes incoming WebSocket messages from the client.
@@ -141,6 +162,14 @@ func (c *Client) readPump() {
 	}()
 
 	for {
+		const messageRateLimit = 200 * time.Millisecond // Max 5 messages/sec
+
+		if c.rateLimitEnabled && time.Since(c.lastMessageTime) < messageRateLimit {
+			slog.Warn("Rate limit exceeded", "id", c.ID)
+			continue // Drop the message silently
+		}
+		c.lastMessageTime = time.Now()
+
 		_, rawBytes, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -151,23 +180,26 @@ func (c *Client) readPump() {
 
 		// We define a temporary struct here with json.RawMessage.
 		var incoming struct {
-			Event Event
+			Event   Event
 			Payload json.RawMessage
 		}
 
 		if err := json.Unmarshal(rawBytes, &incoming); err != nil {
-            slog.Warn("Failed to unmarshal message", "ClientId", c.ID, "error", err)
-            continue
-        }
+			slog.Warn("Failed to unmarshal message", "ClientId", c.ID, "error", err)
+			continue
+		}
 
-        // Now we pass the optimized 'incoming' data to the router.
-        // We reconstruct the standard Message struct, but Payload is now []byte (fast!)
-        msg := Message{
-            Event:   incoming.Event,
-            Payload: incoming.Payload,
-        }
+		// Now we pass the optimized 'incoming' data to the router.
+		// We reconstruct the standard Message struct, but Payload is now []byte (fast!)
+		msg := Message{
+			Event:   incoming.Event,
+			Payload: incoming.Payload,
+		}
 
-		c.room.router(c, msg)
+		// Create request-scoped context with timeout for handler chain
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		c.room.router(ctx, c, msg)
+		cancel() // Prevent memory leak
 	}
 }
 
@@ -200,10 +232,19 @@ func (c *Client) readPump() {
 // readPump to provide full-duplex communication.
 func (c *Client) writePump() {
 	defer c.conn.Close()
+
+	// Define a timeout duration (e.g., 10 seconds)
+	writeWait := 10 * time.Second
+
 	for message := range c.send {
+		c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+
 		if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 			slog.Error("error writing message", "error", err)
 			return
 		}
 	}
+	// Loop finishes naturally when 'close(c.send)' is called
+	// Send Close Message to client (polite websocket teardown)
+	c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 }

@@ -23,8 +23,8 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
@@ -82,13 +82,14 @@ func logHelper(ok bool, ClientId ClientIdType, methodName string, RoomId RoomIdT
 // Returns:
 //   - T: The payload cast to the expected type (zero value if assertion fails)
 //   - bool: Whether the type assertion was successful
+//
 // In handlers.go
 func assertPayload[T any](payload any) (T, bool) {
 	var result T
 
-    // 1. Handle the "Raw Bytes" case
+	// 1. Handle the "Raw Bytes" case
 	if raw, ok := payload.(json.RawMessage); ok {
-        // Direct unmarshal from bytes -> struct. Fast!
+		// Direct unmarshal from bytes -> struct. Fast!
 		if err := json.Unmarshal(raw, &result); err != nil {
 			slog.Error("Failed to unmarshal raw payload", "error", err)
 			return result, false
@@ -96,8 +97,8 @@ func assertPayload[T any](payload any) (T, bool) {
 		return result, true
 	}
 
-    // 2. Handle the "Already Struct" case (Test Path)
-    // Useful if your unit tests pass pre-built structs instead of JSON
+	// 2. Handle the "Already Struct" case (Test Path)
+	// Useful if your unit tests pass pre-built structs instead of JSON
 	if typed, ok := payload.(T); ok {
 		return typed, true
 	}
@@ -128,32 +129,40 @@ func assertPayload[T any](payload any) (T, bool) {
 // requests are silently dropped to prevent error message spam.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The client sending the chat message
 //   - event: The event type (should be EventAddChat)
 //   - payload: The raw payload containing chat message data
-func (r *Room) handleAddChat(client *Client, event Event, payload any) {
-	// Debug: Log raw payload before assertion (INFO level to ensure it shows)
-	slog.Info("handleAddChat RAW payload", "ClientId", client.ID, "RoomId", r.ID, "payloadType", fmt.Sprintf("%T", payload), "payload", payload)
-
+func (r *Room) handleAddChat(ctx context.Context, client *Client, event Event, payload any) {
+	// Heavy Lifting
 	p, ok := assertPayload[AddChatPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
 	if !ok {
 		return
 	}
 
-	// Debug: Log asserted payload with all fields
-	slog.Info("handleAddChat ASSERTED payload", "ClientId", client.ID, "RoomId", r.ID,
-		"p.ClientId", p.ClientId, "p.DisplayName", p.DisplayName,
-		"p.ChatId", p.ChatId, "p.ChatContent", p.ChatContent)
-
-	// Validate the chat payload
+	// Validation is CPU work. Do it here so we don't block the room if it fails.
 	if err := p.ValidateChat(); err != nil {
-		slog.Error("Invalid chat payload", "ClientId", client.ID, "RoomId", r.ID, "error", err, "payload", p)
+		slog.Error("Invalid chat payload", "error", err)
+		return
+	}
+
+	// State Mutation
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p.ClientId = client.ID
+	p.DisplayName = client.DisplayName
+
+	// double-check the client is still in the room (optional but safe)
+	if _, exists := r.participants[client.ID]; !exists && !(r.hosts[client.ID] != nil) {
 		return
 	}
 
 	r.addChat(p)
-	r.broadcast(event, p, HasParticipantPermission())
+
+	// Broadcast needs to happen inside lock (or carefully managed)
+	// to ensure messages arrive in the same order they were added to history.
+	r.broadcast(ctx, event, p, HasParticipantPermission())
 }
 
 // handleDeleteChat processes requests to remove chat messages from the room history.
@@ -177,17 +186,26 @@ func (r *Room) handleAddChat(client *Client, event Event, payload any) {
 // that higher-level permission checks ensure appropriate access control.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The client requesting the deletion
 //   - event: The event type (should be EventDeleteChat)
 //   - payload: The raw payload containing the ChatId to delete
-func (r *Room) handleDeleteChat(client *Client, event Event, payload any) {
+func (r *Room) handleDeleteChat(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[DeleteChatPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleDeleteChat", r.ID)
 	if !ok {
 		return
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// force the client ID to match the authenticated user
+	p.ClientId = client.ID
+	p.DisplayName = client.DisplayName
+
 	r.deleteChat(p)
-	r.broadcast(event, p, HasParticipantPermission())
+	r.broadcast(ctx, event, p, HasParticipantPermission())
 }
 
 // handleGetRecentChats processes requests for chat history retrieval.
@@ -214,17 +232,20 @@ func (r *Room) handleDeleteChat(client *Client, event Event, payload any) {
 // send channel is full, ensuring the handler doesn't hang indefinitely.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The client requesting chat history
 //   - event: The event type (should be EventGetRecentChats)
 //   - payload: The raw payload containing request parameters
-func (r *Room) handleGetRecentChats(client *Client, event Event, payload any) {
+func (r *Room) handleGetRecentChats(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[GetRecentChatsPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleGetRecentChats", r.ID)
 	if !ok {
 		return
 	}
 
+	r.mu.Lock()
 	recentChats := r.getRecentChats(p)
+	r.mu.Unlock()
 
 	// Send the recent chats directly to the requesting client
 	if msg, err := json.Marshal(Message{Event: EventGetRecentChats, Payload: recentChats}); err == nil {
@@ -260,17 +281,23 @@ func (r *Room) handleGetRecentChats(client *Client, event Event, payload any) {
 // who has their hand raised and maintain meeting awareness.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The client raising their hand
 //   - event: The event type (should be EventRaiseHand)
 //   - payload: The raw payload containing hand raise information
-func (r *Room) handleRaiseHand(client *Client, event Event, payload any) {
+func (r *Room) handleRaiseHand(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[RaiseHandPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleRaiseHand", r.ID)
 	if !ok {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p.ClientId = client.ID
+	p.DisplayName = client.DisplayName
 	r.raiseHand(p)
-	r.broadcast(event, p, HasParticipantPermission())
+	r.broadcast(ctx, event, p, HasParticipantPermission())
 }
 
 // handleLowerHand processes requests for participants to lower their hands.
@@ -295,17 +322,20 @@ func (r *Room) handleRaiseHand(client *Client, event Event, payload any) {
 // the updated hand-raising status and queue order.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The client lowering their hand
 //   - event: The event type (should be EventLowerHand)
 //   - payload: The raw payload containing hand lower information
-func (r *Room) handleLowerHand(client *Client, event Event, payload any) {
+func (r *Room) handleLowerHand(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[LowerHandPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleLowerHand", r.ID)
 	if !ok {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.lowerHand(p)
-	r.broadcast(event, p, HasParticipantPermission())
+	r.broadcast(ctx, event, p, HasParticipantPermission())
 }
 
 // handleRequestWaiting processes requests from clients to join the waiting room.
@@ -333,16 +363,21 @@ func (r *Room) handleLowerHand(client *Client, event Event, payload any) {
 //   - Late-arriving invited participants
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The client requesting to join the waiting room
 //   - event: The event type (should be EventRequestWaiting)
 //   - payload: The raw payload containing waiting request information
-func (r *Room) handleRequestWaiting(client *Client, event Event, payload any) {
+func (r *Room) handleRequestWaiting(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[RequestWaitingPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleRequestWaiting", r.ID)
 	if !ok {
 		return
 	}
-	r.broadcast(event, p, HasHostPermission())
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.broadcast(ctx, event, p, HasHostPermission())
 }
 
 // handleAcceptWaiting processes host decisions to accept clients from the waiting room.
@@ -375,12 +410,13 @@ func (r *Room) handleRequestWaiting(client *Client, event Event, payload any) {
 // is logged as a warning and ignored to prevent security issues.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The host accepting the waiting client
 //   - event: The event type (should be EventAcceptWaiting)
 //   - payload: The raw payload containing the client ID to accept
-func (r *Room) handleAcceptWaiting(client *Client, event Event, payload any) {
+func (r *Room) handleAcceptWaiting(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[AcceptWaitingPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleAcceptWaiting", r.ID)
 	if !ok {
 		slog.Error("Failed to assert AcceptWaitingPayload", "ClientId", client.ID, "RoomId", r.ID, "payload", payload)
 		return
@@ -391,6 +427,9 @@ func (r *Room) handleAcceptWaiting(client *Client, event Event, payload any) {
 		"TargetClientId", p.ClientId,
 		"WaitingCount", len(r.waiting),
 		"RoomId", r.ID)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Security check: Only accept requests for clients that are actually waiting
 	waitingClient, exists := r.waiting[p.ClientId]
@@ -414,7 +453,7 @@ func (r *Room) handleAcceptWaiting(client *Client, event Event, payload any) {
 	waitingClient.Role = RoleTypeParticipant
 
 	// Move from waiting to participants map
-	r.participants[p.ClientId] = waitingClient
+	r.addParticipant(ctx, waitingClient)
 	delete(r.waiting, p.ClientId)
 
 	// Metrics: Update participant count after accepting from waiting room
@@ -426,9 +465,9 @@ func (r *Room) handleAcceptWaiting(client *Client, event Event, payload any) {
 		"AcceptedByHostId", client.ID,
 		"RoomId", r.ID)
 
-	r.broadcast(event, p, nil)
+	r.broadcast(ctx, event, p, nil)
 	// Broadcast updated room state so all clients are synchronized
-	r.broadcastRoomState()
+	r.broadcastRoomState(ctx)
 }
 
 // handleDenyWaiting processes host decisions to deny clients from the waiting room.
@@ -459,15 +498,19 @@ func (r *Room) handleAcceptWaiting(client *Client, event Event, payload any) {
 //   - Removing disruptive or inappropriate requests
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The host denying the waiting client
 //   - event: The event type (should be EventDenyWaiting)
 //   - payload: The raw payload containing the client ID to deny
-func (r *Room) handleDenyWaiting(client *Client, event Event, payload any) {
+func (r *Room) handleDenyWaiting(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[DenyWaitingPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleDenyWaiting", r.ID)
 	if !ok {
 		return
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Find the waiting client to deny
 	waitingClient, exists := r.waiting[p.ClientId]
@@ -488,9 +531,9 @@ func (r *Room) handleDenyWaiting(client *Client, event Event, payload any) {
 		"HostClientId", client.ID,
 		"RoomId", r.ID)
 
-	r.broadcast(event, p, HasWaitingPermission())
+	r.broadcast(ctx, event, p, HasWaitingPermission())
 	// Broadcast updated room state so all clients are synchronized
-	r.broadcastRoomState()
+	r.broadcastRoomState(ctx)
 }
 
 // handleRequestScreenshare processes participant requests to share their screen.
@@ -520,16 +563,20 @@ func (r *Room) handleDenyWaiting(client *Client, event Event, payload any) {
 //   - Sharing documents or applications
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The participant requesting to share screen
 //   - event: The event type (should be EventRequestScreenshare)
 //   - payload: The raw payload containing screenshare request information
-func (r *Room) handleRequestScreenshare(client *Client, event Event, payload any) {
+func (r *Room) handleRequestScreenshare(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[RequestScreensharePayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleRequestScreenshare", r.ID)
 	if !ok {
 		return
 	}
-	r.broadcast(event, p, HasHostPermission())
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.broadcast(ctx, event, p, HasHostPermission())
 }
 
 // handleAcceptScreenshare processes host decisions to approve screenshare requests.
@@ -561,15 +608,20 @@ func (r *Room) handleRequestScreenshare(client *Client, event Event, payload any
 // notification, preventing unauthorized screenshare activations.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The host accepting the screenshare request
 //   - event: The event type (should be EventAcceptScreenshare)
 //   - payload: The raw payload containing the participant ID to approve
-func (r *Room) handleAcceptScreenshare(client *Client, event Event, payload any) {
+func (r *Room) handleAcceptScreenshare(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[AcceptScreensharePayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleAcceptScreenshare", r.ID)
 	if !ok {
 		return
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	// Find the client to accept for screenshare
 	requestingClient := r.participants[p.ClientId]
 
@@ -616,15 +668,19 @@ func (r *Room) handleAcceptScreenshare(client *Client, event Event, payload any)
 // of denial decisions for coordination and meeting management.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The host denying the screenshare request
 //   - event: The event type (should be EventDenyScreenshare)
 //   - payload: The raw payload containing the participant ID to deny
-func (r *Room) handleDenyScreenshare(client *Client, event Event, payload any) {
+func (r *Room) handleDenyScreenshare(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[DenyScreensharePayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleDenyScreenshare", r.ID)
 	if !ok {
 		return
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if msg, err := json.Marshal(Message{Event: event, Payload: p}); err == nil {
 		// Find the client who requested screenshare to notify them of denial
@@ -634,7 +690,7 @@ func (r *Room) handleDenyScreenshare(client *Client, event Event, payload any) {
 	} else {
 		slog.Error("Failed to marshal payload for DenyScreenshare", "error", err)
 	}
-	r.broadcast(event, p, HasHostPermission())
+	r.broadcast(ctx, event, p, HasHostPermission())
 }
 
 // handleToggleAudio processes audio toggle events from clients.
@@ -654,12 +710,13 @@ func (r *Room) handleDenyScreenshare(client *Client, event Event, payload any) {
 // (router) has already verified the client has appropriate permissions.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The client toggling their audio
 //   - event: The event type (EventToggleAudio)
 //   - payload: ToggleAudioPayload containing the enabled state
-func (r *Room) handleToggleAudio(client *Client, event Event, payload any) {
+func (r *Room) handleToggleAudio(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[ToggleAudioPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleToggleAudio", r.ID)
 	if !ok {
 		return
 	}
@@ -669,6 +726,12 @@ func (r *Room) handleToggleAudio(client *Client, event Event, payload any) {
 		"Enabled", p.Enabled,
 		"RoomId", r.ID,
 		"PayloadClientId", p.ClientId)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p.ClientId = client.ID
+	p.DisplayName = client.DisplayName
 
 	// Delegate state mutation to room_methods.go
 	r.toggleAudio(p)
@@ -680,7 +743,7 @@ func (r *Room) handleToggleAudio(client *Client, event Event, payload any) {
 		"UnmutedCount", len(r.unmuted))
 
 	// Broadcast to all clients (hosts, participants, screenshare) so they can update their UI
-	r.broadcast(event, p, nil)
+	r.broadcast(ctx, event, p, nil)
 }
 
 // handleToggleVideo processes video toggle events from clients.
@@ -700,12 +763,13 @@ func (r *Room) handleToggleAudio(client *Client, event Event, payload any) {
 // (router) has already verified the client has appropriate permissions.
 //
 // Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
 //   - client: The client toggling their video
 //   - event: The event type (EventToggleVideo)
 //   - payload: ToggleVideoPayload containing the enabled state
-func (r *Room) handleToggleVideo(client *Client, event Event, payload any) {
+func (r *Room) handleToggleVideo(ctx context.Context, client *Client, event Event, payload any) {
 	p, ok := assertPayload[ToggleVideoPayload](payload)
-	logHelper(ok, client.ID, GetFuncName(), r.ID)
+	logHelper(ok, client.ID, "handleToggleVideo", r.ID)
 	if !ok {
 		return
 	}
@@ -715,6 +779,12 @@ func (r *Room) handleToggleVideo(client *Client, event Event, payload any) {
 		"Enabled", p.Enabled,
 		"RoomId", r.ID,
 		"PayloadClientId", p.ClientId)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p.ClientId = client.ID
+	p.DisplayName = client.DisplayName
 
 	// Delegate state mutation to room_methods.go
 	r.toggleVideo(p)
@@ -726,5 +796,5 @@ func (r *Room) handleToggleVideo(client *Client, event Event, payload any) {
 		"CameraOnCount", len(r.cameraOn))
 
 	// Broadcast to all clients (hosts, participants, screenshare) so they can update their UI
-	r.broadcast(event, p, nil)
+	r.broadcast(ctx, event, p, nil)
 }

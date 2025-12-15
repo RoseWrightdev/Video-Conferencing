@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,7 +15,7 @@ func TestHandleRaiseHand(t *testing.T) {
 		client := newTestClient("participant1")
 		client.Role = RoleTypeParticipant
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		payload := RaiseHandPayload{
 			ClientId:    client.ID,
@@ -24,7 +25,7 @@ func TestHandleRaiseHand(t *testing.T) {
 		msg := Message{Event: EventRaiseHand, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic for raise hand")
 
 		_, handRaised := room.raisingHand[client.ID]
@@ -36,7 +37,7 @@ func TestHandleRaiseHand(t *testing.T) {
 		client := newTestClient("participant1")
 		client.Role = RoleTypeParticipant
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		raisePayload := RaiseHandPayload{
 			ClientId:    client.ID,
@@ -53,7 +54,7 @@ func TestHandleRaiseHand(t *testing.T) {
 		msg := Message{Event: EventLowerHand, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic for lower hand")
 
 		_, handRaised := room.raisingHand[client.ID]

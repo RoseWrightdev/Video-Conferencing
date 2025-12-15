@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,10 +13,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleAddChat(client, EventAddChat, "invalid payload")
+			room.handleAddChat(context.Background(), client, EventAddChat, "invalid payload")
 		}, "handleAddChat should not panic with invalid payload")
 	})
 
@@ -23,10 +24,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleDeleteChat(client, EventDeleteChat, "invalid payload")
+			room.handleDeleteChat(context.Background(), client, EventDeleteChat, "invalid payload")
 		}, "handleDeleteChat should not panic with invalid payload")
 	})
 
@@ -34,10 +35,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleRaiseHand(client, EventRaiseHand, "invalid payload")
+			room.handleRaiseHand(context.Background(), client, EventRaiseHand, "invalid payload")
 		}, "handleRaiseHand should not panic with invalid payload")
 	})
 
@@ -45,10 +46,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleLowerHand(client, EventLowerHand, "invalid payload")
+			room.handleLowerHand(context.Background(), client, EventLowerHand, "invalid payload")
 		}, "handleLowerHand should not panic with invalid payload")
 	})
 
@@ -56,10 +57,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleRequestScreenshare(client, EventRequestScreenshare, "invalid payload")
+			room.handleRequestScreenshare(context.Background(), client, EventRequestScreenshare, "invalid payload")
 		}, "handleRequestScreenshare should not panic with invalid payload")
 	})
 
@@ -67,10 +68,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("host1", "Host User")
 		client.Role = RoleTypeHost
-		room.addHost(client)
+		room.addHost(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleAcceptScreenshare(client, EventAcceptScreenshare, "invalid payload")
+			room.handleAcceptScreenshare(context.Background(), client, EventAcceptScreenshare, "invalid payload")
 		}, "handleAcceptScreenshare should not panic with invalid payload")
 	})
 
@@ -78,10 +79,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("host1", "Host User")
 		client.Role = RoleTypeHost
-		room.addHost(client)
+		room.addHost(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleDenyScreenshare(client, EventDenyScreenshare, "invalid payload")
+			room.handleDenyScreenshare(context.Background(), client, EventDenyScreenshare, "invalid payload")
 		}, "handleDenyScreenshare should not panic with invalid payload")
 	})
 
@@ -89,10 +90,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("host1", "Host User")
 		client.Role = RoleTypeHost
-		room.addHost(client)
+		room.addHost(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleAcceptWaiting(client, EventAcceptWaiting, "invalid payload")
+			room.handleAcceptWaiting(context.Background(), client, EventAcceptWaiting, "invalid payload")
 		}, "handleAcceptWaiting should not panic with invalid payload")
 	})
 
@@ -100,10 +101,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("host1", "Host User")
 		client.Role = RoleTypeHost
-		room.addHost(client)
+		room.addHost(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleDenyWaiting(client, EventDenyWaiting, "invalid payload")
+			room.handleDenyWaiting(context.Background(), client, EventDenyWaiting, "invalid payload")
 		}, "handleDenyWaiting should not panic with invalid payload")
 	})
 
@@ -111,10 +112,10 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		assert.NotPanics(t, func() {
-			room.handleGetRecentChats(client, EventGetRecentChats, "invalid payload")
+			room.handleGetRecentChats(context.Background(), client, EventGetRecentChats, "invalid payload")
 		}, "handleGetRecentChats should not panic with invalid payload")
 	})
 
@@ -125,7 +126,7 @@ func TestHandlerErrorPaths(t *testing.T) {
 		room.addWaiting(client)
 
 		assert.NotPanics(t, func() {
-			room.handleRequestWaiting(client, EventRequestWaiting, "invalid payload")
+			room.handleRequestWaiting(context.Background(), client, EventRequestWaiting, "invalid payload")
 		}, "handleRequestWaiting should not panic with invalid payload")
 	})
 }
@@ -136,13 +137,13 @@ func TestRoutingEdgeCases(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		client := newTestClientWithName("test-user", "Test User")
 		client.Role = RoleTypeParticipant
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		unknownEvent := Event("unknown_event")
 		msg := Message{Event: unknownEvent, Payload: map[string]string{"test": "data"}}
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should handle unknown event types gracefully")
 	})
 
@@ -160,7 +161,7 @@ func TestRoutingEdgeCases(t *testing.T) {
 		}}
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should handle unknown roles gracefully")
 	})
 }
@@ -184,7 +185,7 @@ func TestRouterPermissionEdgeCases(t *testing.T) {
 		initialChatCount := room.chatHistory.Len()
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should handle unauthorized actions gracefully")
 
 		assert.Equal(t, initialChatCount, room.chatHistory.Len(), "Unauthorized chat should not be added")
@@ -194,7 +195,7 @@ func TestRouterPermissionEdgeCases(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		participant := newTestClientWithName("participant1", "Participant User")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		waitingUser := newTestClientWithName("waiting1", "Waiting User")
 		waitingUser.Role = RoleTypeWaiting
@@ -208,7 +209,7 @@ func TestRouterPermissionEdgeCases(t *testing.T) {
 		initialWaitingCount := len(room.waiting)
 
 		assert.NotPanics(t, func() {
-			room.router(participant, msg)
+			room.router(context.Background(), participant, msg)
 		}, "Router should handle unauthorized host actions gracefully")
 
 		assert.Equal(t, initialWaitingCount, len(room.waiting), "Unauthorized accept should not work")

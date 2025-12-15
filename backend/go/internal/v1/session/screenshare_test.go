@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,11 +15,11 @@ func TestHandleDenyScreenshare(t *testing.T) {
 
 		host := newTestClientWithName("host1", "Host User")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		participant := newTestClientWithName("participant1", "Participant User")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		payload := DenyScreensharePayload{
 			ClientId:    participant.ID,
@@ -28,7 +29,7 @@ func TestHandleDenyScreenshare(t *testing.T) {
 		msg := Message{Event: EventDenyScreenshare, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(host, msg)
+			room.router(context.Background(), host, msg)
 		}, "Router should not panic for deny screenshare")
 	})
 
@@ -37,11 +38,11 @@ func TestHandleDenyScreenshare(t *testing.T) {
 
 		participant := newTestClientWithName("participant1", "Participant User")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		otherParticipant := newTestClientWithName("participant2", "Other Participant")
 		otherParticipant.Role = RoleTypeParticipant
-		room.addParticipant(otherParticipant)
+		room.addParticipant(context.Background(), otherParticipant)
 
 		payload := DenyScreensharePayload{
 			ClientId:    otherParticipant.ID,
@@ -51,7 +52,7 @@ func TestHandleDenyScreenshare(t *testing.T) {
 		msg := Message{Event: EventDenyScreenshare, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(participant, msg)
+			room.router(context.Background(), participant, msg)
 		}, "Router should not panic even with insufficient permissions")
 	})
 }
@@ -63,7 +64,7 @@ func TestHandleScreenshareOperations(t *testing.T) {
 
 		participant := newTestClient("participant1")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		payload := RequestScreensharePayload{
 			ClientId:    participant.ID,
@@ -73,7 +74,7 @@ func TestHandleScreenshareOperations(t *testing.T) {
 		msg := Message{Event: EventRequestScreenshare, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(participant, msg)
+			room.router(context.Background(), participant, msg)
 		}, "Router should not panic for screenshare request")
 	})
 
@@ -82,11 +83,11 @@ func TestHandleScreenshareOperations(t *testing.T) {
 
 		host := newTestClient("host1")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		participant := newTestClient("participant1")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		payload := AcceptScreensharePayload{
 			ClientId:    participant.ID,
@@ -96,7 +97,7 @@ func TestHandleScreenshareOperations(t *testing.T) {
 		msg := Message{Event: EventAcceptScreenshare, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(host, msg)
+			room.router(context.Background(), host, msg)
 		}, "Router should not panic for screenshare acceptance")
 	})
 }
@@ -107,7 +108,7 @@ func TestHandleAcceptScreenshareEdgeCases(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		host := newTestClientWithName("host1", "Host User")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		payload := AcceptScreensharePayload{
 			ClientId:    "non-existent-client",
@@ -115,7 +116,7 @@ func TestHandleAcceptScreenshareEdgeCases(t *testing.T) {
 		}
 
 		assert.NotPanics(t, func() {
-			room.handleAcceptScreenshare(host, EventAcceptScreenshare, payload)
+			room.handleAcceptScreenshare(context.Background(), host, EventAcceptScreenshare, payload)
 		}, "handleAcceptScreenshare should handle non-existent client gracefully")
 	})
 
@@ -123,11 +124,11 @@ func TestHandleAcceptScreenshareEdgeCases(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		host := newTestClientWithName("host1", "Host User")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		participant := newTestClientWithName("participant1", "Participant User")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		payload := AcceptScreensharePayload{
 			ClientId:    participant.ID,
@@ -135,7 +136,7 @@ func TestHandleAcceptScreenshareEdgeCases(t *testing.T) {
 		}
 
 		assert.NotPanics(t, func() {
-			room.handleAcceptScreenshare(host, EventAcceptScreenshare, payload)
+			room.handleAcceptScreenshare(context.Background(), host, EventAcceptScreenshare, payload)
 		}, "handleAcceptScreenshare should handle existing client")
 
 		_, isScreensharing := room.sharingScreen[participant.ID]
@@ -149,7 +150,7 @@ func TestHandleDenyScreenshareEdgeCases(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		host := newTestClientWithName("host1", "Host User")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		payload := DenyScreensharePayload{
 			ClientId:    "non-existent-client",
@@ -157,7 +158,7 @@ func TestHandleDenyScreenshareEdgeCases(t *testing.T) {
 		}
 
 		assert.NotPanics(t, func() {
-			room.handleDenyScreenshare(host, EventDenyScreenshare, payload)
+			room.handleDenyScreenshare(context.Background(), host, EventDenyScreenshare, payload)
 		}, "handleDenyScreenshare should handle non-existent client gracefully")
 	})
 
@@ -165,11 +166,11 @@ func TestHandleDenyScreenshareEdgeCases(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		host := newTestClientWithName("host1", "Host User")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		participant := newTestClientWithName("participant1", "Participant User")
 		participant.Role = RoleTypeParticipant
-		room.addParticipant(participant)
+		room.addParticipant(context.Background(), participant)
 
 		payload := DenyScreensharePayload{
 			ClientId:    participant.ID,
@@ -177,7 +178,7 @@ func TestHandleDenyScreenshareEdgeCases(t *testing.T) {
 		}
 
 		assert.NotPanics(t, func() {
-			room.handleDenyScreenshare(host, EventDenyScreenshare, payload)
+			room.handleDenyScreenshare(context.Background(), host, EventDenyScreenshare, payload)
 		}, "handleDenyScreenshare should handle existing client")
 
 		select {

@@ -192,3 +192,64 @@ func (s *Service) Subscribe(ctx context.Context, roomID string, handler func(Pub
 func (s *Service) Close() error {
 	return s.client.Close()
 }
+
+// SetAdd adds a member to a Redis Set. Used for distributed state management.
+// The key typically follows the pattern "room:{roomId}:participants" or "room:{roomId}:hosts".
+// This enables cross-pod participant tracking where each pod can see all users
+// across the cluster, not just local connections.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control
+//   - key: Redis key for the set (e.g., "room:123:participants")
+//   - member: The value to add (typically JSON-encoded ClientInfo)
+//
+// Returns:
+//   - error: If Redis operation fails
+func (s *Service) SetAdd(ctx context.Context, key string, member string) error {
+	err := s.client.SAdd(ctx, key, member).Err()
+	if err != nil {
+		slog.Error("Redis SetAdd failed", "key", key, "member", member, "error", err)
+		return fmt.Errorf("failed to add to set: %w", err)
+	}
+	return nil
+}
+
+// SetRem removes a member from a Redis Set.
+// Used when a participant disconnects or is removed from the room.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control
+//   - key: Redis key for the set (e.g., "room:123:participants")
+//   - member: The value to remove (typically JSON-encoded ClientInfo)
+//
+// Returns:
+//   - error: If Redis operation fails
+func (s *Service) SetRem(ctx context.Context, key string, member string) error {
+	err := s.client.SRem(ctx, key, member).Err()
+	if err != nil {
+		slog.Error("Redis SetRem failed", "key", key, "member", member, "error", err)
+		return fmt.Errorf("failed to remove from set: %w", err)
+	}
+	return nil
+}
+
+// SetMembers retrieves all members of a Redis Set.
+// Used by getRoomState to fetch the complete list of participants across all pods.
+// This solves the "split-brain" problem where users on different server instances
+// cannot see each other in the participant list.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control
+//   - key: Redis key for the set (e.g., "room:123:participants")
+//
+// Returns:
+//   - []string: Slice of all members in the set (JSON-encoded ClientInfo objects)
+//   - error: If Redis operation fails
+func (s *Service) SetMembers(ctx context.Context, key string) ([]string, error) {
+	members, err := s.client.SMembers(ctx, key).Result()
+	if err != nil {
+		slog.Error("Redis SetMembers failed", "key", key, "error", err)
+		return nil, fmt.Errorf("failed to get set members: %w", err)
+	}
+	return members, nil
+}

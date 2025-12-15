@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"runtime"
 	"strings"
 )
 
@@ -52,31 +51,4 @@ func GetAllowedOriginsFromEnv(envVarName string, defaultEnvs []string) []string 
 		return defaultEnvs
 	}
 	return strings.Split(originsStr, ",")
-}
-
-// GetFuncName retrieves the name of the calling function for logging and debugging.
-// This utility function uses Go's runtime reflection to determine the name
-// of the function that called it, which is useful for structured logging.
-//
-// Implementation Details:
-// The function uses runtime.Caller(1) to get information about the calling
-// function (1 level up the call stack) and extracts the function name from
-// the program counter information.
-//
-// Usage Pattern:
-// Typically used in logging helpers and error reporting:
-//
-//	slog.Info("Handler called", "function", GetFuncName())
-//	logHelper(ok, client.ID, GetFuncName(), room.ID)
-//
-// Performance Considerations:
-// Runtime reflection has some overhead, so this function should primarily
-// be used in logging contexts where the overhead is acceptable compared
-// to the debugging benefits.
-//
-// Returns:
-//   - String containing the fully qualified name of the calling function
-func GetFuncName() string {
-	pc, _, _, _ := runtime.Caller(1)
-	return fmt.Sprintf("%s", runtime.FuncForPC(pc).Name())
 }

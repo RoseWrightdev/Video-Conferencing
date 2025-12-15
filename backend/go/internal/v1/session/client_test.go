@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -18,6 +19,11 @@ type MockConn struct {
 	CloseCalled     chan bool
 	ReadError       error
 	WriteError      error
+}
+
+// SetWriteDeadline sets the write deadline for the connection.
+func (m *MockConn) SetWriteDeadline(t time.Time) error {
+	return nil // No-op for mock
 }
 
 // newMockConn creates a properly initialized MockConn for testing.
@@ -85,7 +91,7 @@ func newMockRoom() *MockRoom {
 
 // router processes an incoming Message from a Client and sends it to the handledMessage channel.
 // It acquires a lock to ensure thread-safe access to the handledMessage channel.
-func (m *MockRoom) router(c *Client, data any) {
+func (m *MockRoom) router(ctx context.Context, c *Client, data any) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.handledMessage <- data.(Message)
@@ -104,7 +110,7 @@ func TestClient_readPump(t *testing.T) {
 	t.Run("should handle messages and pass to room", func(t *testing.T) {
 		mockConn := newMockConn()
 		mockRoom := newMockRoom()
-		client := &Client{conn: mockConn, room: mockRoom, ID: "test-user"}
+		client := &Client{conn: mockConn, room: mockRoom, ID: "test-user", rateLimitEnabled: false}
 
 		go client.readPump()
 
@@ -128,7 +134,7 @@ func TestClient_readPump(t *testing.T) {
 	t.Run("should continue on json unmarshal error", func(t *testing.T) {
 		mockConn := newMockConn()
 		mockRoom := newMockRoom()
-		client := &Client{conn: mockConn, room: mockRoom}
+		client := &Client{conn: mockConn, room: mockRoom, rateLimitEnabled: false}
 
 		go client.readPump()
 
@@ -153,7 +159,7 @@ func TestClient_readPump(t *testing.T) {
 		mockConn := newMockConn()
 		mockConn.ReadError = errors.New("network error")
 		mockRoom := newMockRoom()
-		client := &Client{conn: mockConn, room: mockRoom}
+		client := &Client{conn: mockConn, room: mockRoom, rateLimitEnabled: false}
 
 		// Run the pump directly as it will exit immediately
 		client.readPump()
@@ -180,8 +186,9 @@ func TestClient_writePump(t *testing.T) {
 	t.Run("should write messages from send channel", func(t *testing.T) {
 		mockConn := newMockConn()
 		client := &Client{
-			conn: mockConn,
-			send: make(chan []byte, 1),
+			conn:             mockConn,
+			send:             make(chan []byte, 1),
+			rateLimitEnabled: false,
 		}
 
 		go client.writePump()
@@ -202,8 +209,9 @@ func TestClient_writePump(t *testing.T) {
 		mockConn := newMockConn()
 		mockConn.WriteError = errors.New("write error")
 		client := &Client{
-			conn: mockConn,
-			send: make(chan []byte, 1),
+			conn:             mockConn,
+			send:             make(chan []byte, 1),
+			rateLimitEnabled: false,
 		}
 
 		go client.writePump()

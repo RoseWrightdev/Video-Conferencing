@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -23,8 +24,8 @@ func TestHandleWebRTCOffer(t *testing.T) {
 		target.DisplayName = "Target User"
 		target.Role = RoleTypeParticipant
 
-		room.addParticipant(sender)
-		room.addParticipant(target)
+		room.addParticipant(context.Background(), sender)
+		room.addParticipant(context.Background(), target)
 
 		// Create WebRTC offer payload
 		payload := WebRTCOfferPayload{
@@ -40,7 +41,7 @@ func TestHandleWebRTCOffer(t *testing.T) {
 		msg := Message{Event: EventOffer, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(sender, msg)
+			room.router(context.Background(), sender, msg)
 		}, "Router should not panic for WebRTC offer")
 
 		// Check that target received the offer
@@ -65,12 +66,12 @@ func TestHandleWebRTCOffer(t *testing.T) {
 	t.Run("should handle invalid payload", func(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		sender := newTestClient("sender1")
-		room.addParticipant(sender)
+		room.addParticipant(context.Background(), sender)
 
 		msg := Message{Event: EventOffer, Payload: "invalid"}
 
 		assert.NotPanics(t, func() {
-			room.router(sender, msg)
+			room.router(context.Background(), sender, msg)
 		}, "Router should not panic with invalid payload")
 	})
 
@@ -78,7 +79,7 @@ func TestHandleWebRTCOffer(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		sender := newTestClient("sender1")
 		sender.DisplayName = "Sender User"
-		room.addParticipant(sender)
+		room.addParticipant(context.Background(), sender)
 
 		payload := WebRTCOfferPayload{
 			ClientInfo: ClientInfo{
@@ -93,7 +94,7 @@ func TestHandleWebRTCOffer(t *testing.T) {
 		msg := Message{Event: EventOffer, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(sender, msg)
+			room.router(context.Background(), sender, msg)
 		}, "Router should not panic for non-existent target")
 	})
 }
@@ -112,8 +113,8 @@ func TestHandleWebRTCAnswer(t *testing.T) {
 		target.DisplayName = "Target User"
 		target.Role = RoleTypeParticipant
 
-		room.addParticipant(answerer)
-		room.addParticipant(target)
+		room.addParticipant(context.Background(), answerer)
+		room.addParticipant(context.Background(), target)
 
 		// Create WebRTC answer payload
 		payload := WebRTCAnswerPayload{
@@ -129,7 +130,7 @@ func TestHandleWebRTCAnswer(t *testing.T) {
 		msg := Message{Event: EventAnswer, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(answerer, msg)
+			room.router(context.Background(), answerer, msg)
 		}, "Router should not panic for WebRTC answer")
 
 		// Check that target received the answer
@@ -154,12 +155,12 @@ func TestHandleWebRTCAnswer(t *testing.T) {
 	t.Run("should handle invalid payload", func(t *testing.T) {
 		room := NewTestRoom("test-room", nil)
 		answerer := newTestClient("answerer1")
-		room.addParticipant(answerer)
+		room.addParticipant(context.Background(), answerer)
 
 		msg := Message{Event: EventAnswer, Payload: nil}
 
 		assert.NotPanics(t, func() {
-			room.router(answerer, msg)
+			room.router(context.Background(), answerer, msg)
 		}, "Router should not panic with nil payload")
 	})
 }
@@ -178,8 +179,8 @@ func TestHandleWebRTCCandidate(t *testing.T) {
 		target.DisplayName = "Target User"
 		target.Role = RoleTypeParticipant
 
-		room.addParticipant(sender)
-		room.addParticipant(target)
+		room.addParticipant(context.Background(), sender)
+		room.addParticipant(context.Background(), target)
 
 		// Create ICE candidate payload
 		sdpMid := "0"
@@ -198,7 +199,7 @@ func TestHandleWebRTCCandidate(t *testing.T) {
 		msg := Message{Event: EventCandidate, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(sender, msg)
+			room.router(context.Background(), sender, msg)
 		}, "Router should not panic for ICE candidate")
 
 		// Check that target received the candidate
@@ -228,8 +229,8 @@ func TestHandleWebRTCCandidate(t *testing.T) {
 		target := newTestClient("target1")
 		target.DisplayName = "Target User"
 
-		room.addParticipant(sender)
-		room.addParticipant(target)
+		room.addParticipant(context.Background(), sender)
+		room.addParticipant(context.Background(), target)
 
 		// Create minimal ICE candidate payload (without optional fields)
 		payload := WebRTCCandidatePayload{
@@ -246,7 +247,7 @@ func TestHandleWebRTCCandidate(t *testing.T) {
 		msg := Message{Event: EventCandidate, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(sender, msg)
+			room.router(context.Background(), sender, msg)
 		}, "Router should not panic for minimal candidate")
 
 		// Verify message is still forwarded
@@ -273,8 +274,8 @@ func TestHandleWebRTCRenegotiate(t *testing.T) {
 		target.DisplayName = "Target User"
 		target.Role = RoleTypeParticipant
 
-		room.addParticipant(initiator)
-		room.addParticipant(target)
+		room.addParticipant(context.Background(), initiator)
+		room.addParticipant(context.Background(), target)
 
 		// Create renegotiation payload
 		payload := WebRTCRenegotiatePayload{
@@ -289,7 +290,7 @@ func TestHandleWebRTCRenegotiate(t *testing.T) {
 		msg := Message{Event: EventRenegotiate, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(initiator, msg)
+			room.router(context.Background(), initiator, msg)
 		}, "Router should not panic for renegotiation request")
 
 		// Check that target received the renegotiation request
@@ -319,8 +320,8 @@ func TestHandleWebRTCRenegotiate(t *testing.T) {
 		target := newTestClient("target1")
 		target.DisplayName = "Target User"
 
-		room.addParticipant(initiator)
-		room.addParticipant(target)
+		room.addParticipant(context.Background(), initiator)
+		room.addParticipant(context.Background(), target)
 
 		// Create renegotiation payload without reason
 		payload := WebRTCRenegotiatePayload{
@@ -335,7 +336,7 @@ func TestHandleWebRTCRenegotiate(t *testing.T) {
 		msg := Message{Event: EventRenegotiate, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(initiator, msg)
+			room.router(context.Background(), initiator, msg)
 		}, "Router should not panic for renegotiation without reason")
 
 		// Verify message is still forwarded
@@ -356,7 +357,7 @@ func TestWebRTCPermissions(t *testing.T) {
 		// Create a host and a waiting user
 		host := newTestClient("host1")
 		host.Role = RoleTypeHost
-		room.addHost(host)
+		room.addHost(context.Background(), host)
 
 		waitingUser := newTestClient("waiting1")
 		waitingUser.Role = RoleTypeWaiting
@@ -376,7 +377,7 @@ func TestWebRTCPermissions(t *testing.T) {
 		msg := Message{Event: EventOffer, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(waitingUser, msg)
+			room.router(context.Background(), waitingUser, msg)
 		}, "Router should not panic for waiting user WebRTC attempt")
 
 		// Host should not receive the offer (blocked by permissions)
@@ -400,8 +401,8 @@ func TestWebRTCPermissions(t *testing.T) {
 		participant2.DisplayName = "Participant 2"
 		participant2.Role = RoleTypeParticipant
 
-		room.addParticipant(participant1)
-		room.addParticipant(participant2)
+		room.addParticipant(context.Background(), participant1)
+		room.addParticipant(context.Background(), participant2)
 
 		// Participant 1 sends offer to participant 2
 		payload := WebRTCOfferPayload{
@@ -415,7 +416,7 @@ func TestWebRTCPermissions(t *testing.T) {
 		}
 
 		msg := Message{Event: EventOffer, Payload: payload}
-		room.router(participant1, msg)
+		room.router(context.Background(), participant1, msg)
 
 		// Participant 2 should receive the offer
 		select {
@@ -438,8 +439,8 @@ func TestWebRTCPermissions(t *testing.T) {
 		participant.DisplayName = "Participant User"
 		participant.Role = RoleTypeParticipant
 
-		room.addHost(host)
-		room.addParticipant(participant)
+		room.addHost(context.Background(), host)
+		room.addParticipant(context.Background(), participant)
 
 		// Host sends candidate to participant
 		payload := WebRTCCandidatePayload{
@@ -452,7 +453,7 @@ func TestWebRTCPermissions(t *testing.T) {
 		}
 
 		msg := Message{Event: EventCandidate, Payload: payload}
-		room.router(host, msg)
+		room.router(context.Background(), host, msg)
 
 		// Participant should receive the candidate
 		select {
@@ -471,7 +472,7 @@ func TestWebRTCEdgeCases(t *testing.T) {
 
 		client := newTestClient("client1")
 		client.DisplayName = "Self User"
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		// Client tries to send offer to themselves
 		payload := WebRTCOfferPayload{
@@ -487,7 +488,7 @@ func TestWebRTCEdgeCases(t *testing.T) {
 		msg := Message{Event: EventOffer, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic for self-targeting WebRTC")
 
 		// Client should not receive their own message (depends on implementation)
@@ -507,8 +508,8 @@ func TestWebRTCEdgeCases(t *testing.T) {
 		target := newTestClient("target1")
 		target.DisplayName = "Target User"
 
-		room.addParticipant(sender)
-		room.addParticipant(target)
+		room.addParticipant(context.Background(), sender)
+		room.addParticipant(context.Background(), target)
 
 		// Send offer with malformed SDP
 		payload := WebRTCOfferPayload{
@@ -524,7 +525,7 @@ func TestWebRTCEdgeCases(t *testing.T) {
 		msg := Message{Event: EventOffer, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(sender, msg)
+			room.router(context.Background(), sender, msg)
 		}, "Router should not panic for malformed SDP")
 
 		// Target should still receive the message (validation is client-side)

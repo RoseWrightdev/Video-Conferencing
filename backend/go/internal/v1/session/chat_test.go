@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -17,7 +18,7 @@ func TestHandleAddChat(t *testing.T) {
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		payload := AddChatPayload{
 			ClientInfo: ClientInfo{
@@ -32,7 +33,7 @@ func TestHandleAddChat(t *testing.T) {
 		msg := Message{Event: EventAddChat, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic for valid chat message")
 
 		assert.True(t, room.chatHistory.Len() > 0, "Chat message should be added to history")
@@ -44,7 +45,7 @@ func TestHandleAddChat(t *testing.T) {
 		client.Role = RoleTypeParticipant
 		client.DisplayName = ""
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		payload := AddChatPayload{
 			ClientInfo: ClientInfo{
@@ -60,7 +61,7 @@ func TestHandleAddChat(t *testing.T) {
 		initialChatCount := room.chatHistory.Len()
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic even with invalid data")
 
 		assert.Equal(t, initialChatCount, room.chatHistory.Len(), "Invalid chat should not be added")
@@ -71,7 +72,7 @@ func TestHandleAddChat(t *testing.T) {
 		client := newTestClient("participant1")
 		client.Role = RoleTypeParticipant
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		payload := AddChatPayload{
 			ClientInfo: ClientInfo{
@@ -87,7 +88,7 @@ func TestHandleAddChat(t *testing.T) {
 		initialChatCount := room.chatHistory.Len()
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic with empty content")
 
 		assert.Equal(t, initialChatCount, room.chatHistory.Len(), "Empty chat should not be added")
@@ -101,11 +102,11 @@ func TestHandleDeleteChat(t *testing.T) {
 		client := newTestClient("participant1")
 		client.Role = RoleTypeParticipant
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		addClient := newTestClientWithName("participant1", "John Doe")
 		addClient.Role = RoleTypeParticipant
-		room.addParticipant(addClient)
+		room.addParticipant(context.Background(), addClient)
 
 		addPayload := AddChatPayload{
 			ClientInfo: ClientInfo{
@@ -118,7 +119,7 @@ func TestHandleDeleteChat(t *testing.T) {
 		}
 
 		addMsg := Message{Event: EventAddChat, Payload: addPayload}
-		room.router(addClient, addMsg)
+	room.router(context.Background(), addClient, addMsg)
 
 		initialChatCount := room.chatHistory.Len()
 		require.True(t, initialChatCount > 0, "Chat should be added first")
@@ -136,7 +137,7 @@ func TestHandleDeleteChat(t *testing.T) {
 		deleteMsg := Message{Event: EventDeleteChat, Payload: deletePayload}
 
 		assert.NotPanics(t, func() {
-			room.router(client, deleteMsg)
+		room.router(context.Background(), client, deleteMsg)
 		}, "Router should not panic for delete chat")
 	})
 }
@@ -148,7 +149,7 @@ func TestHandleGetRecentChats(t *testing.T) {
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		chatPayload1 := AddChatPayload{
 			ClientInfo: ClientInfo{
@@ -159,7 +160,7 @@ func TestHandleGetRecentChats(t *testing.T) {
 			Timestamp:   1234567890,
 			ChatContent: "First message",
 		}
-		room.router(client, Message{Event: EventAddChat, Payload: chatPayload1})
+		room.router(context.Background(), client, Message{Event: EventAddChat, Payload: chatPayload1})
 
 		chatPayload2 := AddChatPayload{
 			ClientInfo: ClientInfo{
@@ -170,7 +171,7 @@ func TestHandleGetRecentChats(t *testing.T) {
 			Timestamp:   1234567891,
 			ChatContent: "Second message",
 		}
-		room.router(client, Message{Event: EventAddChat, Payload: chatPayload2})
+		room.router(context.Background(), client, Message{Event: EventAddChat, Payload: chatPayload2})
 
 		require.True(t, room.chatHistory.Len() >= 2, "Should have chat history")
 
@@ -188,7 +189,7 @@ func TestHandleGetRecentChats(t *testing.T) {
 		msg := Message{Event: EventGetRecentChats, Payload: payload}
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic for get recent chats")
 
 		select {
@@ -207,12 +208,12 @@ func TestHandleGetRecentChats(t *testing.T) {
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		msg := Message{Event: EventGetRecentChats, Payload: "invalid"}
 
 		assert.NotPanics(t, func() {
-			room.router(client, msg)
+			room.router(context.Background(), client, msg)
 		}, "Router should not panic with invalid payload")
 	})
 
@@ -221,7 +222,7 @@ func TestHandleGetRecentChats(t *testing.T) {
 		client := newTestClientWithName("participant1", "John Doe")
 		client.Role = RoleTypeParticipant
 
-		room.addParticipant(client)
+		room.addParticipant(context.Background(), client)
 
 		for i := 0; i < cap(client.send); i++ {
 			client.send <- []byte("filler")
@@ -235,7 +236,7 @@ func TestHandleGetRecentChats(t *testing.T) {
 		}
 
 		assert.NotPanics(t, func() {
-			room.handleGetRecentChats(client, EventGetRecentChats, payload)
+			room.handleGetRecentChats(context.Background(), client, EventGetRecentChats, payload)
 		}, "handleGetRecentChats should not panic when client channel is full")
 	})
 }

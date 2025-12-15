@@ -2,12 +2,13 @@ package session
 
 import (
 	"container/list"
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 
 	"k8s.io/utils/set"
@@ -77,7 +78,7 @@ type Room struct {
 	onEmpty func(RoomIdType)
 
 	// --- Distibuted Bus/Sub ---
-	bus *bus.Service
+	bus BusService
 }
 
 // NewRoom creates and returns a new Room instance with the specified ID and an onEmpty callback.
@@ -91,7 +92,7 @@ type Room struct {
 //
 // Returns:
 //   - A pointer to the newly created Room.
-func NewRoom(id RoomIdType, onEmptyCallback func(RoomIdType), busService *bus.Service) *Room {
+func NewRoom(id RoomIdType, onEmptyCallback func(RoomIdType), busService BusService) *Room {
 	room := &Room{
 		ID:                   id,
 		chatHistory:          list.New(),
@@ -152,13 +153,49 @@ func (r *Room) handleClientConnect(client *Client) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Subscribe to direct WebRTC messages for this user (cross-pod signaling)
-	r.subscribeToDirectMessages(client.ID)
-
 	// First user to join becomes the host.
+	// Check local state first (fast path)
 	if len(r.participants) == 0 && len(r.hosts) == 0 {
+		// If Redis is available, verify the room is truly empty across all pods
+		// This prevents "split-brain" where a user on a new pod gets promoted while
+		// hosts exist on other pods
+		if r.bus != nil {
+			ctx := context.Background()
+			hostsKey := fmt.Sprintf("room:%s:hosts", r.ID)
+			participantsKey := fmt.Sprintf("room:%s:participants", r.ID)
+
+			// Check if any hosts exist in Redis
+			hostMembers, err := r.bus.SetMembers(ctx, hostsKey)
+			if err != nil {
+				slog.Error("Failed to check Redis hosts for split-brain prevention", "room", r.ID, "error", err)
+				// Fall through to local-only decision on error
+			} else if len(hostMembers) > 0 {
+				// Hosts exist on other pods - do not promote, add to waiting
+				slog.Info("User joining room with existing hosts on other pods", "room", r.ID, "ClientId", client.ID, "redisHosts", len(hostMembers))
+				r.addWaiting(client)
+				r.sendRoomStateToClient(client)
+				return
+			}
+
+			// Check if any participants exist in Redis
+			participantMembers, err := r.bus.SetMembers(ctx, participantsKey)
+			if err != nil {
+				slog.Error("Failed to check Redis participants for split-brain prevention", "room", r.ID, "error", err)
+				// Fall through to local-only decision on error
+			} else if len(participantMembers) > 0 {
+				// Participants exist on other pods - do not promote, add to waiting
+				slog.Info("User joining room with existing participants on other pods", "room", r.ID, "ClientId", client.ID, "redisParticipants", len(participantMembers))
+				r.addWaiting(client)
+				r.sendRoomStateToClient(client)
+				return
+			}
+
+			// Both local memory and Redis confirm room is empty - safe to promote
+		}
+
 		slog.Info("First user joined, making them host.", "room", r.ID, "ClientId", client.ID)
-		r.addHost(client)
+		ctx := context.Background()
+		r.addHost(ctx, client)
 
 		// Metrics: Update participant count (hosts count as participants)
 		metrics.RoomParticipants.WithLabelValues(string(r.ID)).Set(float64(len(r.hosts) + len(r.participants)))
@@ -180,7 +217,8 @@ func (r *Room) handleClientDisconnect(client *Client) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.disconnectClient(client)
+	ctx := context.Background()
+	r.disconnectClient(ctx, client)
 	slog.Info("Client disconnected and removed from room", "room", r.ID, "ClientId", client.ID)
 
 	// Metrics: Update participant count after disconnect
@@ -197,7 +235,7 @@ func (r *Room) handleClientDisconnect(client *Client) {
 	}
 
 	// Broadcast to remaining clients
-	r.broadcast(Event(EventDisconnect), payload, nil)
+	r.broadcast(ctx, Event(EventDisconnect), payload, nil)
 
 	// Check if room is empty AFTER broadcasting
 	if r.isRoomEmpty() {
@@ -222,10 +260,7 @@ func (r *Room) handleClientDisconnect(client *Client) {
 // has the required permissions.
 //
 // It acquires a lock to ensure thread safety.
-func (r *Room) router(client *Client, data any) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+func (r *Room) router(ctx context.Context, client *Client, data any) {
 	msg, ok := data.(Message)
 	if !ok {
 		slog.Error("router failed to marshal incoming message to type Message", "msg", msg, "id", client.ID)
@@ -241,7 +276,7 @@ func (r *Room) router(client *Client, data any) {
 		metrics.WebsocketEvents.WithLabelValues(string(msg.Event), "success").Inc()
 	}()
 
-	role := client.Role
+	role := client.GetRole()
 	isHost := HasPermission(role, HasHostPermission())
 	isParticipant := HasPermission(role, HasParticipantPermission())
 	isWaiting := HasPermission(role, HasWaitingPermission())
@@ -249,88 +284,88 @@ func (r *Room) router(client *Client, data any) {
 	switch msg.Event {
 	case EventAddChat:
 		if isParticipant {
-			r.handleAddChat(client, msg.Event, msg.Payload)
+			r.handleAddChat(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventDeleteChat:
 		if isParticipant {
-			r.handleDeleteChat(client, msg.Event, msg.Payload)
+			r.handleDeleteChat(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventGetRecentChats:
 		if isParticipant {
-			r.handleGetRecentChats(client, msg.Event, msg.Payload)
+			r.handleGetRecentChats(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventRaiseHand:
 		if isParticipant {
-			r.handleRaiseHand(client, msg.Event, msg.Payload)
+			r.handleRaiseHand(ctx, client, msg.Event, msg.Payload)
 		}
 	case EventLowerHand:
 		if isParticipant {
-			r.handleLowerHand(client, msg.Event, msg.Payload)
+			r.handleLowerHand(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventToggleAudio:
 		if isParticipant {
-			r.handleToggleAudio(client, msg.Event, msg.Payload)
+			r.handleToggleAudio(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventToggleVideo:
 		if isParticipant {
-			r.handleToggleVideo(client, msg.Event, msg.Payload)
+			r.handleToggleVideo(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventRequestWaiting:
 		if isWaiting {
-			r.handleRequestWaiting(client, msg.Event, msg.Payload)
+			r.handleRequestWaiting(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventAcceptWaiting:
 		if isHost {
-			r.handleAcceptWaiting(client, msg.Event, msg.Payload)
+			r.handleAcceptWaiting(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventDenyWaiting:
 		if isHost {
-			r.handleDenyWaiting(client, msg.Event, msg.Payload)
+			r.handleDenyWaiting(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventRequestScreenshare:
 		if (role != RoleTypeScreenshare) &&
 			isParticipant {
-			r.handleRequestScreenshare(client, msg.Event, msg.Payload)
+			r.handleRequestScreenshare(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventAcceptScreenshare:
 		if isHost {
-			r.handleAcceptScreenshare(client, msg.Event, msg.Payload)
+			r.handleAcceptScreenshare(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventDenyScreenshare:
 		if isHost {
-			r.handleDenyScreenshare(client, msg.Event, msg.Payload)
+			r.handleDenyScreenshare(ctx, client, msg.Event, msg.Payload)
 		}
 
 	// WebRTC signaling events - available to participants and hosts
 	case EventOffer:
 		if isParticipant || isHost {
-			r.handleWebRTCOffer(client, msg.Event, msg.Payload)
+			r.handleWebRTCOffer(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventAnswer:
 		if isParticipant || isHost {
-			r.handleWebRTCAnswer(client, msg.Event, msg.Payload)
+			r.handleWebRTCAnswer(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventCandidate:
 		if isParticipant || isHost {
-			r.handleWebRTCCandidate(client, msg.Event, msg.Payload)
+			r.handleWebRTCCandidate(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventRenegotiate:
 		if isParticipant || isHost {
-			r.handleWebRTCRenegotiate(client, msg.Event, msg.Payload)
+			r.handleWebRTCRenegotiate(ctx, client, msg.Event, msg.Payload)
 		}
 
 	case EventPing:
@@ -347,14 +382,14 @@ func (r *Room) router(client *Client, data any) {
 // broadcast sends a message of the specified event and payload to clients in the room.
 // For distributed deployments, also publishes critical events to Redis for cross-pod delivery.
 // This method assumes the caller already holds the appropriate lock.
-func (r *Room) broadcast(event Event, payload any, roles set.Set[RoleType]) {
-	r.broadcastWithOptions(event, payload, roles, "", false)
+func (r *Room) broadcast(ctx context.Context, event Event, payload any, roles set.Set[RoleType]) {
+	r.broadcastWithOptions(ctx, event, payload, roles, "", false)
 }
 
 // broadcastWithOptions is an internal helper to reuse broadcast logic while controlling
 // whether to republish to Redis and optionally exclude a sender (to prevent echo).
 // Caller must hold the appropriate lock.
-func (r *Room) broadcastWithOptions(event Event, payload any, roles set.Set[RoleType], excludeSenderID ClientIdType, skipRedis bool) {
+func (r *Room) broadcastWithOptions(ctx context.Context, event Event, payload any, roles set.Set[RoleType], excludeSenderID ClientIdType, skipRedis bool) {
 	msg := Message{Event: event, Payload: payload}
 	rawMsg, err := json.Marshal(msg)
 	if err != nil {
@@ -409,7 +444,7 @@ func (r *Room) broadcastWithOptions(event Event, payload any, roles set.Set[Role
 	if !skipRedis {
 		// Use broadcast roles directly. Nil means all roles.
 		// Use empty senderID since broadcast is not tied to a specific client
-		go r.publishToRedis(event, payload, "", roles)
+		go r.publishToRedis(ctx, event, payload, "", roles)
 	}
 }
 
@@ -455,7 +490,7 @@ func (r *Room) sendRoomStateToClient(client *Client) {
 // keep all clients synchronized with the current state.
 // Thread Safety: This method is NOT thread-safe and must only be called when
 // the room's mutex lock is already held.
-func (r *Room) broadcastRoomState() {
+func (r *Room) broadcastRoomState(ctx context.Context) {
 	roomState := r.getRoomState()
-	r.broadcast(EventRoomState, roomState, nil)
+	r.broadcast(ctx, EventRoomState, roomState, nil)
 }
