@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,17 +46,21 @@ func TestAssertPayload(t *testing.T) {
 		assert.Equal(t, payload.ChatId, result.ChatId, "Should return correct payload")
 	})
 
-	t.Run("should handle map[string]interface{} payload", func(t *testing.T) {
-		payloadMap := map[string]interface{}{
-			"clientId":    "test-id",
-			"displayName": "Test User",
-			"chatId":      "chat-1",
-			"chatContent": "Test message",
-		}
+	t.Run("should_handle_json_RawMessage_payload", func(t *testing.T) {
+		// This simulates exactly what the new readPump does
+		rawJSON := []byte(`{
+            "clientId": "test-client",
+            "displayName": "Test User",
+            "chatId": "chat-1",
+            "chatContent": "test content"
+        }`)
 
-		result, ok := assertPayload[AddChatPayload](payloadMap)
-		assert.True(t, ok, "Should successfully convert map to struct")
-		assert.NotEmpty(t, result, "Should return valid payload")
+		// Pass it as json.RawMessage
+		p, ok := assertPayload[AddChatPayload](json.RawMessage(rawJSON))
+
+		assert.True(t, ok, "Should successfully unmarshal RawMessage to struct")
+		assert.Equal(t, "test-client", string(p.ClientId))
+		assert.Equal(t, "test content", string(p.ChatContent))
 	})
 
 	t.Run("should fail for invalid payload type", func(t *testing.T) {

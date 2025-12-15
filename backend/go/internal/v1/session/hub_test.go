@@ -88,10 +88,12 @@ func TestServeWs_AuthFailure(t *testing.T) {
 
 func TestRemoveHub(t *testing.T) {
 	hub := NewTestHub(nil)
+	hub.cleanupGracePeriod = 1 * time.Millisecond
+
 	var testID RoomIdType = "test_room"
 	hub.rooms[testID] = NewTestRoom(testID, nil)
 
-	// removeRoom schedules async deletion after 5 seconds grace period
+	// removeRoom schedules async deletion after grace period
 	hub.removeRoom(testID)
 
 	// Room should still exist immediately (not yet deleted)
@@ -101,8 +103,7 @@ func TestRemoveHub(t *testing.T) {
 	// Timer should be registered
 	assert.NotNil(t, hub.pendingRoomCleanups[testID], "Cleanup timer should be registered")
 
-	// Wait for the async cleanup to complete (grace period is 5 seconds)
-	time.Sleep(6 * time.Second)
+	time.Sleep(50 * time.Millisecond)
 
 	// Now the room should be deleted
 	hub.mu.Lock()

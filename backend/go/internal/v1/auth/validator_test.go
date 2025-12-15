@@ -151,7 +151,6 @@ func TestValidateToken(t *testing.T) {
 		tokenString := createTestJWT(t, privateKey, claims)
 		_, err := validator.ValidateToken(tokenString)
 		assert.Error(t, err)
-		// **FIX:** The library returns a simpler error message without "claims:".
 		assert.Contains(t, err.Error(), "token has invalid issuer")
 	})
 

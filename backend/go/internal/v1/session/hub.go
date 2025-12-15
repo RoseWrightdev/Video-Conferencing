@@ -95,6 +95,21 @@ type Hub struct {
 	validator           TokenValidator             // JWT authentication service
 	pendingRoomCleanups map[RoomIdType]*time.Timer // Timers for delayed room cleanup
 	bus                 BusService                 // Optional Redis pub/sub for cross-pod messaging
+	cleanupGracePeriod  time.Duration              // Optional grace period for room deletion w/ no users
+}
+
+// NewHub creates a new Hub and configures it with its dependencies.
+// Parameters:
+//   - validator: JWT token validator for authentication
+//   - bus: Optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
+func NewHub(validator TokenValidator, bus BusService) *Hub {
+	return &Hub{
+		rooms:               make(map[RoomIdType]*Room),
+		validator:           validator,
+		pendingRoomCleanups: make(map[RoomIdType]*time.Timer),
+		bus:                 bus,
+		cleanupGracePeriod:  5 * time.Second,
+	}
 }
 
 // ServeWs authenticates the user and hands them off to the room.
@@ -209,21 +224,8 @@ func (h *Hub) ServeWs(c *gin.Context) {
 	go client.readPump()
 }
 
-// NewHub creates a new Hub and configures it with its dependencies.
-// Parameters:
-//   - validator: JWT token validator for authentication
-//   - bus: Optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
-func NewHub(validator TokenValidator, bus BusService) *Hub {
-	return &Hub{
-		rooms:               make(map[RoomIdType]*Room),
-		validator:           validator,
-		pendingRoomCleanups: make(map[RoomIdType]*time.Timer),
-		bus:                 bus,
-	}
-}
-
 // removeRoom is a private method for the Hub to clean up empty rooms.
-// It implements a grace period (5 seconds) before actually removing the room,
+// It implements a grace period before actually removing the room,
 // allowing clients to reconnect without losing the room state. This prevents
 // the race condition where a client refresh causes a new room to be created.
 func (h *Hub) removeRoom(roomId RoomIdType) {
@@ -235,8 +237,8 @@ func (h *Hub) removeRoom(roomId RoomIdType) {
 		delete(h.pendingRoomCleanups, roomId)
 	}
 
-	// Schedule room cleanup after grace period (5 seconds)
-	timer := time.AfterFunc(5*time.Second, func() {
+	// Schedule room cleanup after grace period
+	timer := time.AfterFunc(h.cleanupGracePeriod, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 
