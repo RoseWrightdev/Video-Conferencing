@@ -28,8 +28,6 @@ import (
 	"log/slog"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
-
-	"github.com/mitchellh/mapstructure"
 )
 
 // logHelper provides consistent logging for handler operations.
@@ -84,29 +82,27 @@ func logHelper(ok bool, ClientId ClientIdType, methodName string, RoomId RoomIdT
 // Returns:
 //   - T: The payload cast to the expected type (zero value if assertion fails)
 //   - bool: Whether the type assertion was successful
+// In handlers.go
 func assertPayload[T any](payload any) (T, bool) {
 	var result T
 
-	// First try direct type assertion (for tests that pass the correct type)
+    // 1. Handle the "Raw Bytes" case
+	if raw, ok := payload.(json.RawMessage); ok {
+        // Direct unmarshal from bytes -> struct. Fast!
+		if err := json.Unmarshal(raw, &result); err != nil {
+			slog.Error("Failed to unmarshal raw payload", "error", err)
+			return result, false
+		}
+		return result, true
+	}
+
+    // 2. Handle the "Already Struct" case (Test Path)
+    // Useful if your unit tests pass pre-built structs instead of JSON
 	if typed, ok := payload.(T); ok {
 		return typed, true
 	}
 
-	// Use mapstructure to decode map to struct (more efficient than marshal/unmarshal)
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		TagName: "json", // Use json tags for field mapping
-		Result:  &result,
-		Squash:  true, // Flatten embedded structs (e.g., ClientInfo in ChatInfo)
-	})
-	if err != nil {
-		return result, false
-	}
-
-	if err := decoder.Decode(payload); err != nil {
-		return result, false
-	}
-
-	return result, true
+	return result, false
 }
 
 // handleAddChat processes requests to add new chat messages to the room.

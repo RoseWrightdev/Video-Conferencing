@@ -27,9 +27,8 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/gorilla/websocket"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
-
+	"github.com/gorilla/websocket"
 )
 
 // --- Connection and Room Interfaces ---
@@ -142,7 +141,7 @@ func (c *Client) readPump() {
 	}()
 
 	for {
-		_, rawMessage, err := c.conn.ReadMessage()
+		_, rawBytes, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				slog.Warn("Unexpected client close", "ClientId", c.ID, "error", err)
@@ -150,11 +149,23 @@ func (c *Client) readPump() {
 			break
 		}
 
-		var msg Message
-		if err := json.Unmarshal(rawMessage, &msg); err != nil {
-			slog.Warn("Failed to unmarshal message", "ClientId", c.ID, "error", err)
-			continue
+		// We define a temporary struct here with json.RawMessage.
+		var incoming struct {
+			Event Event
+			Payload json.RawMessage
 		}
+
+		if err := json.Unmarshal(rawBytes, &incoming); err != nil {
+            slog.Warn("Failed to unmarshal message", "ClientId", c.ID, "error", err)
+            continue
+        }
+
+        // Now we pass the optimized 'incoming' data to the router.
+        // We reconstruct the standard Message struct, but Payload is now []byte (fast!)
+        msg := Message{
+            Event:   incoming.Event,
+            Payload: incoming.Payload,
+        }
 
 		c.room.router(c, msg)
 	}
