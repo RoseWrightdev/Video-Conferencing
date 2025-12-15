@@ -5,9 +5,11 @@ services:
   # Frontend development overrides
   frontend:
     build:
-      context: ./frontend
+      context: .
+      dockerfile: devops/docker/frontend.dockerfile
       target: builder
     command: npm run dev
+    working_dir: /app
     ports:
       - "3000:3000"
     environment:
@@ -26,9 +28,11 @@ services:
   # Backend development overrides
   backend:
     build:
-      context: ./backend/go
-      target: development
+      context: .
+      dockerfile: devops/docker/backend.dockerfile
+      target: builder
     command: go run cmd/v1/session/main.go
+    working_dir: /app
     ports:
       - "8080:8080"
     environment:
