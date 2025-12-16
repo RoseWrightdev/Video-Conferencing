@@ -1,0 +1,182 @@
+syntax = "proto3";
+package signaling;
+
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto/signaling";
+
+// The Master Envelope
+message WebSocketMessage {
+  oneof payload {
+    // --- Connection & Auth ---
+    JoinRequest join = 1;
+    JoinResponse join_response = 2;
+    ReconnectRequest reconnect = 3;
+
+    // --- Media Controls (Self) ---
+    ToggleMediaRequest toggle_media = 4;
+    MediaStateEvent media_state_changed = 5; // Broadcast to room
+
+    // --- Screen Share ---
+    ScreenShareRequest screen_share = 6;
+    ScreenShareEvent screen_share_changed = 7;
+
+    // --- Chat ---
+    ChatRequest chat = 8;
+    ChatEvent chat_event = 9;
+
+    // --- Hand Raising ---
+    ToggleHandRequest toggle_hand = 10;
+    HandUpdateEvent hand_update = 11;
+
+    // --- Waiting Room (Host Only) ---
+    WaitingRoomEvent waiting_room_notification = 12; // Host sees this
+    AdminActionRequest admin_action = 13; // Host sends this (Approve/Reject/Kick)
+    AdminActionEvent admin_event = 14; // User sees "You were kicked"
+
+    // --- WebRTC Signaling (The Tunnel) ---
+    SignalRequest signal = 15;
+    SignalEvent signal_event = 16;
+
+    // --- State Sync ---
+    RoomStateEvent room_state = 17;
+
+    // --- Errors ---
+    ErrorEvent error = 18;
+  }
+}
+
+// ---------------------------------------------------------
+// 1. Auth & Connection
+// ---------------------------------------------------------
+message JoinRequest {
+  string token = 1;
+  string room_id = 2;
+  string display_name = 3; // Fallback if not in token
+}
+
+message JoinResponse {
+  bool success = 1;
+  string user_id = 2;
+  RoomStateEvent initial_state = 3;
+  bool is_host = 4;
+}
+
+message ReconnectRequest {
+  string token = 1;
+  string previous_session_id = 2;
+}
+
+// ---------------------------------------------------------
+// 2. Media State (Mute/Video/Hand)
+// ---------------------------------------------------------
+message ToggleMediaRequest {
+  string kind = 1; // "audio" or "video"
+  bool is_enabled = 2;
+}
+
+message MediaStateEvent {
+  string user_id = 1;
+  bool is_audio_enabled = 2;
+  bool is_video_enabled = 3;
+}
+
+message ToggleHandRequest {
+  bool is_raised = 1;
+}
+
+message HandUpdateEvent {
+  string user_id = 1;
+  bool is_raised = 2;
+}
+
+// ---------------------------------------------------------
+// 3. Screen Share
+// ---------------------------------------------------------
+message ScreenShareRequest {
+  bool is_sharing = 1;
+}
+
+message ScreenShareEvent {
+  string user_id = 1;
+  bool is_sharing = 2;
+}
+
+// ---------------------------------------------------------
+// 4. Chat
+// ---------------------------------------------------------
+message ChatRequest {
+  string content = 1;
+  string target_id = 2; // Empty = Public, Set = Private DM
+}
+
+message ChatEvent {
+  string id = 1;
+  string sender_id = 2;
+  string sender_name = 3;
+  string content = 4;
+  int64 timestamp = 5;
+  bool is_private = 6;
+}
+
+// ---------------------------------------------------------
+// 5. Admin / Waiting Room
+// ---------------------------------------------------------
+// Sent TO the Host when someone tries to join
+message WaitingRoomEvent {
+  string user_id = 1;
+  string display_name = 2;
+  string status = 3; // "waiting"
+}
+
+// Host sends this to Server
+message AdminActionRequest {
+  string target_user_id = 1;
+  string action = 2; // "approve", "reject", "kick", "mute_all"
+}
+
+// Server sends this TO the target user (or room)
+message AdminActionEvent {
+  string action = 1; // "kicked", "muted"
+  string reason = 2;
+}
+
+// ---------------------------------------------------------
+// 6. WebRTC Tunnel (Forwarded to Rust)
+// ---------------------------------------------------------
+message SignalRequest {
+  oneof signal {
+    string sdp_answer = 1;
+    string ice_candidate = 2;
+    bool renegotiate = 3;
+  }
+}
+
+message SignalEvent {
+  oneof signal {
+    string sdp_offer = 1;
+    string ice_candidate = 2;
+  }
+}
+
+// ---------------------------------------------------------
+// 7. Global State
+// ---------------------------------------------------------
+message RoomStateEvent {
+  repeated ParticipantInfo participants = 1;
+  repeated ParticipantInfo waiting_users = 2; // Only sent to Host
+}
+
+message ParticipantInfo {
+  string id = 1;
+  string display_name = 2;
+  bool is_host = 3;
+  bool is_audio_enabled = 4;
+  bool is_video_enabled = 5;
+  bool is_screen_sharing = 6;
+  bool is_hand_raised = 7;
+}
+
+message ErrorEvent {
+  string code = 1;
+  string message = 2;
+  bool fatal = 3;
+}

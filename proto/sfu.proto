@@ -1,0 +1,49 @@
+syntax = "proto3";
+package sfu;
+
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto/sfu";
+
+// SfuService defines the gRPC interface for the Rust Selective Forwarding Unit (SFU).
+// It handles peer session management, signaling, and media routing in the Data Plane.
+service SfuService {
+  // 1. Initialize a new peer allocation in Rust
+  // Rust creates the PeerConnection and returns an SDP Offer immediately.
+  rpc CreateSession (CreateSessionRequest) returns (CreateSessionResponse);
+
+  // 2. Forward a signal from the Client (Answer/ICE) to Rust
+  rpc HandleSignal (SignalMessage) returns (SignalResponse);
+
+  // 3. Cleanup when a user leaves
+  rpc DeleteSession (DeleteSessionRequest) returns (DeleteSessionResponse);
+}
+
+message CreateSessionRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message CreateSessionResponse {
+  string sdp_offer = 1; // The SFU always initiates the connection
+}
+
+message SignalMessage {
+  string room_id = 1;
+  string user_id = 2;
+  oneof payload {
+    string sdp_answer = 3;
+    string ice_candidate = 4;
+  }
+}
+
+message SignalResponse {
+  bool success = 1;
+}
+
+message DeleteSessionRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message DeleteSessionResponse {
+  bool success = 1;
+}
