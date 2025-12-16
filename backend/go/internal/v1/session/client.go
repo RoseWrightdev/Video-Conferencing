@@ -162,7 +162,7 @@ func (c *Client) readPump() {
 	}()
 
 	for {
-		const messageRateLimit = 200 * time.Millisecond // Max 5 messages/sec
+		const messageRateLimit = 100 * time.Millisecond // Max 10 messages/sec
 
 		if c.rateLimitEnabled && time.Since(c.lastMessageTime) < messageRateLimit {
 			slog.Warn("Rate limit exceeded", "id", c.ID)

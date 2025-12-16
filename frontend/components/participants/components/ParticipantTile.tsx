@@ -17,6 +17,7 @@ interface ParticipantTileProps {
   isPinned?: boolean;
   onPin?: (participantId: string) => void;
   className?: string;
+  screenShareStream?: MediaStream | null; // Screen share stream for local participant
 }
 
 export default function ParticipantTile({
@@ -30,6 +31,7 @@ export default function ParticipantTile({
   isPinned = false,
   onPin,
   className,
+  screenShareStream,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -37,8 +39,11 @@ export default function ParticipantTile({
   useEffect(() => {
     const videoElement = videoRef.current;
     
-    if (videoElement && participant.stream) {
-      videoElement.srcObject = participant.stream;
+    // For local participant sharing screen, use screen share stream
+    const streamToDisplay = isLocal && screenShareStream ? screenShareStream : participant.stream;
+    
+    if (videoElement && streamToDisplay) {
+      videoElement.srcObject = streamToDisplay;
       
       // Explicitly play the video to ensure it displays
       const playPromise = videoElement.play();
@@ -48,7 +53,7 @@ export default function ParticipantTile({
         });
       }
     }
-  }, [participant.stream, participant.id]);
+  }, [participant.stream, participant.id, isLocal, screenShareStream]);
 
   const getInitials = (name: string) => {
     return name
@@ -58,6 +63,10 @@ export default function ParticipantTile({
       .toUpperCase()
       .slice(0, 2);
   };
+
+  // Determine if we have a stream to display
+  const hasStreamToDisplay = (isLocal && screenShareStream) || participant.stream;
+  const shouldShowVideo = hasStreamToDisplay && (isVideoEnabled || isScreenSharing);
 
   return (
     <div
@@ -76,15 +85,15 @@ export default function ParticipantTile({
         muted={isLocal}
         className={cn(
           'absolute inset-0 w-full h-full object-cover',
-          isLocal && 'scale-x-[-1]', // Mirror local video
-          (!participant.stream || !isVideoEnabled) && 'invisible' // Hide when not active but keep in DOM
+          isLocal && !isScreenSharing && 'scale-x-[-1]', // Mirror local video (but not screen share)
+          !shouldShowVideo && 'invisible' // Hide when not active but keep in DOM
         )}
       />
       
       {/* Avatar Placeholder - shown when video is not visible */}
       <div className={cn(
         'absolute inset-0 w-full h-full flex items-center justify-center bg-linear-to-br from-gray-700 to-gray-800',
-        (participant.stream && isVideoEnabled) && 'invisible' // Hide when video is active
+        shouldShowVideo && 'invisible' // Hide when video is active
       )}>
         <div className={cn(
           'w-24 h-24 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg',

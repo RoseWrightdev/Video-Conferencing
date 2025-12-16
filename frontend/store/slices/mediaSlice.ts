@@ -301,6 +301,22 @@ export const createMediaSlice: StateCreator<
           screenShareStream: screenStream,
           isScreenSharing: true 
         });
+
+        // Listen for when the user clicks "stop sharing" in Chrome's native UI
+        const videoTrack = screenStream.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.onended = () => {
+            // Automatically clean up when screen share stops
+            get().stopScreenShare();
+          };
+        }
+
+        // Notify backend and update participant state
+        const { wsClient, clientInfo, setScreenSharing } = get();
+        if (wsClient && clientInfo) {
+          wsClient.toggleScreenShare(clientInfo, true);
+          setScreenSharing(clientInfo.clientId, true);
+        }
       }
     } catch (error) {
       const errorMessage = `Failed to start screen share: ${error instanceof Error ? error.message : String(error)}`;
@@ -318,5 +334,12 @@ export const createMediaSlice: StateCreator<
       screenShareStream: null,
       isScreenSharing: false 
     });
+
+    // Notify backend and update participant state
+    const { wsClient, clientInfo, setScreenSharing } = get();
+    if (wsClient && clientInfo) {
+      wsClient.toggleScreenShare(clientInfo, false);
+      setScreenSharing(clientInfo.clientId, false);
+    }
   },
 });

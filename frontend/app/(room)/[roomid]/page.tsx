@@ -38,6 +38,7 @@ export default function RoomPage() {
   const { requestPermissions, initializeStream, refreshDevices } = useMediaStream();
   const { 
     localStream, 
+    screenShareStream,
     leaveRoom, 
     wsClient, 
     clientInfo, 
@@ -404,6 +405,7 @@ export default function RoomPage() {
               sharingScreenParticipants={sharingScreenParticipants}
               raisingHandParticipants={raisingHandParticipants}
               speakingParticipants={speakingParticipants}
+              screenShareStream={screenShareStream}
               onPinParticipant={(id) => {
                 pinParticipant(pinnedParticipantId === id ? null : id);
               }}

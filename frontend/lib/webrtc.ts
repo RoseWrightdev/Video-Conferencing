@@ -139,6 +139,9 @@ export class PeerConnection {
   private iceCandidateHandlers: ICECandidateHandler[] = [];
   private negotiationNeededHandlers: NegotiationNeededHandler[] = [];
   private dataChannelMessageHandlers: DataChannelMessageHandler[] = [];
+  private isNegotiating = false; // Prevent simultaneous offer creation
+  private makingOffer = false; // Track if we're currently making an offer
+  private polite: boolean; // Polite peer rolls back on glare, impolite peer ignores
 
   constructor(
     peerId: string,
@@ -149,6 +152,8 @@ export class PeerConnection {
     this.peerId = peerId;
     this.localClientInfo = localClientInfo;
     this.websocketClient = websocketClient;
+    // Determine politeness by comparing client IDs (lexicographic order)
+    this.polite = localClientInfo.clientId < peerId;
 
     this.pc = new RTCPeerConnection({
       iceServers: config.iceServers || DEFAULT_ICE_SERVERS,
@@ -212,6 +217,8 @@ export class PeerConnection {
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {
     try {
+      this.makingOffer = true;
+      this.isNegotiating = true;
       const offer = await this.pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true,
@@ -221,18 +228,42 @@ export class PeerConnection {
       this.websocketClient.sendWebRTCOffer(offer, this.peerId, this.localClientInfo);      
       return offer;
     } catch (error) {
+      this.isNegotiating = false;
       throw new Error(`Failed to create offer for peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.makingOffer = false;
     }
   }
 
   async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
     try {
-      await this.pc.setRemoteDescription(offer);
+      logger.info(`Handling offer from ${this.peerId} - signalingState: ${this.pc.signalingState}, makingOffer: ${this.makingOffer}, polite: ${this.polite}`);
       
+      // GLARE DETECTION: Both peers sent offers simultaneously
+      const offerCollision = (offer.type === 'offer') && 
+                             (this.makingOffer || this.pc.signalingState !== 'stable');
+
+      // PERFECT NEGOTIATION PATTERN:
+      // - Impolite peer: Ignore incoming offer during collision
+      // - Polite peer: Rollback local offer and accept incoming offer
+      const ignoreOffer = !this.polite && offerCollision;
+      if (ignoreOffer) {
+        logger.debug(`Impolite peer ${this.localClientInfo.clientId} ignoring offer from ${this.peerId} due to glare`);
+        throw new Error('Ignoring offer due to glare (impolite peer)');
+      }
+
+      logger.info(`Setting remote description for offer from ${this.peerId}`);
+      this.isNegotiating = false; // Clear flag when accepting offer
+      await this.pc.setRemoteDescription(offer);
+      logger.info(`Remote description set - new signalingState: ${this.pc.signalingState}`);
+      
+      logger.info(`Creating and sending answer to ${this.peerId}`);
       const answer = await this.pc.createAnswer();
       await this.pc.setLocalDescription(answer);
+      logger.info(`Answer created - final signalingState: ${this.pc.signalingState}`);
       
       this.websocketClient.sendWebRTCAnswer(answer, this.peerId, this.localClientInfo);
+      logger.info(`Answer sent to ${this.peerId}`);
       return answer;
     } catch (error) {
       throw new Error(`Failed to handle offer from peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
@@ -245,11 +276,14 @@ export class PeerConnection {
       // 'have-local-offer' means we created an offer and are waiting for an answer
       if (this.pc.signalingState !== 'have-local-offer') {
         logger.warn(`Ignoring answer from ${this.peerId} - wrong signaling state: ${this.pc.signalingState}`);
+        this.isNegotiating = false;
         return;
       }
       
       await this.pc.setRemoteDescription(answer);
+      this.isNegotiating = false; // Negotiation complete
     } catch (error) {
+      this.isNegotiating = false;
       throw new Error(`Failed to handle answer from peer ${this.peerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -370,10 +404,12 @@ export class PeerConnection {
       if (stream) {
         const hasVideo = stream.getVideoTracks().length > 0;
         const hasAudio = stream.getAudioTracks().length > 0;
+        logger.info(`Received track from ${this.peerId} - video: ${hasVideo}, audio: ${hasAudio}, streamId: ${stream.id}`);
         
         let streamType: StreamType = 'camera';
         if (hasVideo && !hasAudio) {
           streamType = 'screen';
+          logger.info(`Identified as screen share stream from ${this.peerId}`);
         } else if (!hasVideo && hasAudio) {
           streamType = 'audio';
         }
@@ -564,11 +600,10 @@ export class WebRTCManager {
       logger.debug(`Screen share stream obtained with ${stream.getTracks().length} tracks`);
       
       // Add screen share to all existing peer connections
+      // NOTE: Adding tracks automatically triggers negotiationneeded event - no manual renegotiation needed
       for (const [peerId, peer] of this.peers) {
         logger.debug(`Adding screen share to peer ${peerId}`);
         await peer.addLocalStream(stream, 'screen');
-        // Trigger renegotiation to update connection with new stream
-        await peer.requestRenegotiation('screen sharing started');
       }
 
       // Auto-stop screen share when user stops sharing via browser UI
@@ -593,11 +628,10 @@ export class WebRTCManager {
     try {
       logger.info('Stopping screen share');
       // Remove screen share from all peer connections
+      // NOTE: Removing tracks automatically triggers negotiationneeded event - no manual renegotiation needed
       for (const [peerId, peer] of this.peers) {
         logger.debug(`Removing screen share from peer ${peerId}`);
         await peer.removeLocalStream('screen');
-        // Trigger renegotiation to update connection without screen stream
-        await peer.requestRenegotiation('screen sharing stopped');
       }
 
       // Stop all tracks to release screen capture
@@ -640,11 +674,12 @@ export class WebRTCManager {
       // Only auto-create offer if:
       // 1. We're in stable signaling state (not already negotiating)
       // 2. Connection is established (for renegotiation scenarios like adding screen share)
+      // 3. Not currently in the middle of another negotiation
       // Don't auto-negotiate during initial setup - let manual createOffer handle it
       const signalingState = peer.getSignalingState();
       const connectionState = peer.getConnectionState();
       
-      if (signalingState === 'stable' && connectionState === 'connected') {
+      if (signalingState === 'stable' && connectionState === 'connected' && !peer['isNegotiating']) {
         try {
           logger.debug(`Auto-renegotiating with peer ${peerId} (connection: ${connectionState}, signaling: ${signalingState})`);
           await peer.createOffer();
@@ -652,7 +687,7 @@ export class WebRTCManager {
           logger.warn(`Auto-renegotiation failed for peer ${peerId}`, error);
         }
       } else {
-        logger.debug(`Skipping auto-negotiation for peer ${peerId} (connection: ${connectionState}, signaling: ${signalingState})`);
+        logger.debug(`Skipping auto-negotiation for peer ${peerId} (negotiating: ${peer['isNegotiating']}, connection: ${connectionState}, signaling: ${signalingState})`);
       }
     });
 
@@ -664,7 +699,7 @@ export class WebRTCManager {
       await peer.addLocalStream(this.localMediaStream, 'camera');
     }
     if (this.localScreenStream) {
-      logger.debug(`Adding screen share stream to peer ${peerId}`);
+      logger.info(`Adding screen share stream to new peer ${peerId} - screen sharing active!`);
       await peer.addLocalStream(this.localScreenStream, 'screen');
     }
 
@@ -674,7 +709,7 @@ export class WebRTCManager {
       await peer.createOffer();
     }
 
-    logger.info(`Successfully added peer ${peerId}`);
+    logger.info(`Successfully added peer ${peerId} (camera: ${!!this.localMediaStream}, screen: ${!!this.localScreenStream})`);
     return peer;
   }
 

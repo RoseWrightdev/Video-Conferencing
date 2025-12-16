@@ -28,6 +28,7 @@ export interface ParticipantGridProps {
   sharingScreenParticipants?: Set<string>;
   raisingHandParticipants?: Set<string>;
   speakingParticipants?: Set<string>;
+  screenShareStream?: MediaStream | null; // Local screen share stream for display
 }
 
 /**
@@ -70,6 +71,7 @@ export default function ParticipantGrid({
   sharingScreenParticipants = new Set(),
   raisingHandParticipants = new Set(),
   speakingParticipants = new Set(),
+  screenShareStream,
 }: ParticipantGridProps) {
   // Determine featured participant for speaker/sidebar layouts
   const getFeaturedParticipant = (): Participant | null => {
@@ -130,6 +132,7 @@ export default function ParticipantGrid({
                 isLocal={participants[0].id === currentUserId}
                 isPinned={participants[0].id === pinnedParticipantId}
                 onPin={onPinParticipant}
+                screenShareStream={participants[0].id === currentUserId ? screenShareStream : undefined}
               />
             </AspectRatio>
           </div>
@@ -153,6 +156,7 @@ export default function ParticipantGrid({
               isLocal={participant.id === currentUserId}
               isPinned={participant.id === pinnedParticipantId}
               onPin={onPinParticipant}
+              screenShareStream={participant.id === currentUserId ? screenShareStream : undefined}
             />
           ))}
         </div>
@@ -180,6 +184,7 @@ export default function ParticipantGrid({
               isLocal={featured.id === currentUserId}
               isPinned={featured.id === pinnedParticipantId}
               onPin={onPinParticipant}
+              screenShareStream={featured.id === currentUserId ? screenShareStream : undefined}
               className="h-full"
             />
           </div>
@@ -200,6 +205,7 @@ export default function ParticipantGrid({
                 isLocal={participant.id === currentUserId}
                 isPinned={participant.id === pinnedParticipantId}
                 onPin={onPinParticipant}
+                screenShareStream={participant.id === currentUserId ? screenShareStream : undefined}
               />
             ))}
           </div>
@@ -228,6 +234,7 @@ export default function ParticipantGrid({
               isLocal={featured.id === currentUserId}
               isPinned={featured.id === pinnedParticipantId}
               onPin={onPinParticipant}
+              screenShareStream={featured.id === currentUserId ? screenShareStream : undefined}
               className="h-full"
             />
           </div>
@@ -248,6 +255,7 @@ export default function ParticipantGrid({
                 isLocal={participant.id === currentUserId}
                 isPinned={participant.id === pinnedParticipantId}
                 onPin={onPinParticipant}
+                screenShareStream={participant.id === currentUserId ? screenShareStream : undefined}
               />
             ))}
           </div>

@@ -52,6 +52,10 @@ func NewService(addr, password string) (*Service, error) {
 // Publish broadcasts a message to all other Pods watching this room.
 // The roles parameter specifies which role types should receive this event (nil/empty = all roles).
 func (s *Service) Publish(ctx context.Context, roomID string, event string, payload any, senderID string, roles []string) error {
+	if s == nil || s.client == nil {
+		return nil // Single-instance mode, no Redis available
+	}
+
 	// 1. Wrap the payload
 	// We use json.Marshal here to ensure the inner payload is properly serialized
 	// before wrapping it in the PubSub struct.
@@ -116,6 +120,10 @@ func (s *Service) Publish(ctx context.Context, roomID string, event string, payl
 // Returns:
 //   - error: If Redis publish fails (connection error, context timeout, etc.)
 func (s *Service) PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error {
+	if s == nil || s.client == nil {
+		return nil // Single-instance mode, no Redis available
+	}
+
 	// Wrap the payload
 	innerBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -151,6 +159,10 @@ func (s *Service) PublishDirect(ctx context.Context, targetUserId string, event 
 // Subscribe starts a background goroutine that listens for messages from OTHER pods.
 // handler: A function that will be executed for every valid message received.
 func (s *Service) Subscribe(ctx context.Context, roomID string, handler func(PubSubPayload)) {
+	if s == nil || s.client == nil {
+		return // Single-instance mode, no Redis available
+	}
+
 	channel := fmt.Sprintf("video:room:%s", roomID)
 
 	// Create the subscription
@@ -190,6 +202,9 @@ func (s *Service) Subscribe(ctx context.Context, roomID string, handler func(Pub
 
 // Close gracefully shuts down the Redis connection
 func (s *Service) Close() error {
+	if s == nil || s.client == nil {
+		return nil // Single-instance mode, no Redis available
+	}
 	return s.client.Close()
 }
 
@@ -206,6 +221,10 @@ func (s *Service) Close() error {
 // Returns:
 //   - error: If Redis operation fails
 func (s *Service) SetAdd(ctx context.Context, key string, member string) error {
+	if s == nil || s.client == nil {
+		return nil // Single-instance mode, no Redis available
+	}
+
 	err := s.client.SAdd(ctx, key, member).Err()
 	if err != nil {
 		slog.Error("Redis SetAdd failed", "key", key, "member", member, "error", err)
@@ -225,6 +244,10 @@ func (s *Service) SetAdd(ctx context.Context, key string, member string) error {
 // Returns:
 //   - error: If Redis operation fails
 func (s *Service) SetRem(ctx context.Context, key string, member string) error {
+	if s == nil || s.client == nil {
+		return nil // Single-instance mode, no Redis available
+	}
+
 	err := s.client.SRem(ctx, key, member).Err()
 	if err != nil {
 		slog.Error("Redis SetRem failed", "key", key, "member", member, "error", err)
@@ -246,6 +269,10 @@ func (s *Service) SetRem(ctx context.Context, key string, member string) error {
 //   - []string: Slice of all members in the set (JSON-encoded ClientInfo objects)
 //   - error: If Redis operation fails
 func (s *Service) SetMembers(ctx context.Context, key string) ([]string, error) {
+	if s == nil || s.client == nil {
+		return nil, nil // Single-instance mode, no Redis available
+	}
+
 	members, err := s.client.SMembers(ctx, key).Result()
 	if err != nil {
 		slog.Error("Redis SetMembers failed", "key", key, "error", err)

@@ -153,7 +153,7 @@ func main() {
 		validator = &MockValidator{}
 	}
 
-	hub := session.NewHub(validator, busService)
+	hub := session.NewHub(validator, busService, skipAuth)
 
 	// --- Set up Server ---
 	router := gin.Default()

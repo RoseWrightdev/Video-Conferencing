@@ -31,7 +31,8 @@ func NewTestHub(mockValidator TokenValidator) *Hub {
 		mockValidator = &MockValidator{}
 	}
 	// Pass nil for bus service in tests (single-instance mode)
-	return NewHub(mockValidator, nil)
+	// Pass true for devMode to disable rate limiting in tests
+	return NewHub(mockValidator, nil, true)
 }
 
 func TestGetOrCreateRoom(t *testing.T) {

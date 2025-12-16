@@ -488,6 +488,11 @@ export class RoomService {
       useRoomStore.getState().setVideoEnabled(payload.clientId, payload.enabled);
     });
 
+    this.wsClient.on('toggle_screenshare', (message) => {
+      const payload = message.payload as { clientId: string; displayName: string; enabled: boolean };
+      useRoomStore.getState().setScreenSharing(payload.clientId, payload.enabled);
+    });
+
     // WebRTC Signaling Handlers
     this.wsClient.on('offer', async (message) => {
       const payload = message.payload as WebRTCOfferPayload;

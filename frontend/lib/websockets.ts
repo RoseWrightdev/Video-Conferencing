@@ -502,6 +502,20 @@ export class WebSocketClient {
     this.send('toggle_video', payload);
   }
 
+  /**
+   * Toggle screen share state.
+   * 
+   * Notifies all participants of screen share state change.
+   * Updates sharingScreen map on backend for participant tracking.
+   * 
+   * @param clientInfo - Client toggling screen share
+   * @param enabled - true if screen sharing is active, false if stopped
+   */
+  toggleScreenShare(clientInfo: ClientInfo, enabled: boolean): void {
+    const payload = { ...clientInfo, enabled };
+    this.send('toggle_screenshare', payload);
+  }
+
   /** Request to join from waiting room */
   requestWaiting(clientInfo: ClientInfo): void {
     const payload: RequestWaitingPayload = clientInfo;

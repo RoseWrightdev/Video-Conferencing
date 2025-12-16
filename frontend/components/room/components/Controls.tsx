@@ -70,7 +70,7 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
           </TooltipContent>
         </Tooltip>
       </div>
-      <div className="m-3 bg-white-/20 frosted-2 rounded-full p-1 flex items-center justify-center">
+      <div className="m-3 bg-white/15 frosted-2 rounded-full p-1 flex items-center justify-center">
         {/* Center controls */}
         <div className="flex items-center gap-3">
           {/* Audio Toggle */}

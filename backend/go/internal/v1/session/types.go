@@ -53,6 +53,12 @@ type ToggleVideoPayload struct {
 	Enabled bool `json:"enabled"` // true if camera is on, false if off
 }
 
+// ToggleScreensharePayload contains information about a client's screen share state.
+type ToggleScreensharePayload struct {
+	ClientInfo
+	Enabled bool `json:"enabled"` // true if screen sharing is active, false if stopped
+}
+
 // DisplayNameType represents the human-readable name for a client.
 // This is typically extracted from the JWT token or user profile.
 type DisplayNameType string
@@ -110,8 +116,9 @@ const (
 	EventDenyScreenshare    Event = "deny_screenshare"    // Host denies screen sharing permission
 
 	// Media control events
-	EventToggleAudio Event = "toggle_audio" // Toggle microphone on/off
-	EventToggleVideo Event = "toggle_video" // Toggle camera on/off
+	EventToggleAudio       Event = "toggle_audio"       // Toggle microphone on/off
+	EventToggleVideo       Event = "toggle_video"       // Toggle camera on/off
+	EventToggleScreenshare Event = "toggle_screenshare" // Toggle screen sharing on/off
 
 	// WebRTC signaling events for peer-to-peer connection establishment
 	EventOffer       Event = "offer"       // WebRTC offer for establishing peer connection

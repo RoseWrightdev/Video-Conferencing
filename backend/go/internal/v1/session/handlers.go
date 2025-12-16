@@ -798,3 +798,56 @@ func (r *Room) handleToggleVideo(ctx context.Context, client *Client, event Even
 	// Broadcast to all clients (hosts, participants, screenshare) so they can update their UI
 	r.broadcast(ctx, event, p, nil)
 }
+
+// handleToggleScreenshare processes screen share toggle events from clients.
+// Orchestrates screen share state changes by delegating to toggleScreenshare and broadcasting updates.
+//
+// Operation Flow:
+//  1. Validate payload structure
+//  2. Update room's sharingScreen map via toggleScreenshare method
+//  3. Broadcast the event to all participants
+//
+// State Synchronization:
+// The broadcast ensures all clients receive the screen share state change so they can
+// update their UI to display the correct screen sharing indicator for this participant.
+//
+// Permissions:
+// Only participants and hosts can toggle screen share. This handler assumes the caller
+// (router) has already verified the client has appropriate permissions.
+//
+// Parameters:
+//   - ctx: Request-scoped context for timeout and cancellation
+//   - client: The client toggling their screen share
+//   - event: The event type (EventToggleScreenshare)
+//   - payload: ToggleScreensharePayload containing the enabled state
+func (r *Room) handleToggleScreenshare(ctx context.Context, client *Client, event Event, payload any) {
+	p, ok := assertPayload[ToggleScreensharePayload](payload)
+	logHelper(ok, client.ID, "handleToggleScreenshare", r.ID)
+	if !ok {
+		return
+	}
+
+	slog.Info("handleToggleScreenshare called",
+		"ClientId", client.ID,
+		"Enabled", p.Enabled,
+		"RoomId", r.ID,
+		"PayloadClientId", p.ClientId)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p.ClientId = client.ID
+	p.DisplayName = client.DisplayName
+
+	// Delegate state mutation to room_methods.go
+	r.toggleScreenshare(p)
+
+	slog.Info("Client toggled screen share",
+		"ClientId", client.ID,
+		"Enabled", p.Enabled,
+		"RoomId", r.ID,
+		"SharingScreenCount", len(r.sharingScreen))
+
+	// Broadcast to all clients (hosts, participants, screenshare) so they can update their UI
+	r.broadcast(ctx, event, p, nil)
+}

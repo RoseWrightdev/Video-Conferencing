@@ -586,6 +586,48 @@ func (r *Room) toggleVideo(payload ToggleVideoPayload) {
 	}
 }
 
+// toggleScreenshare manages screen sharing state for clients by adding or removing them
+// from the sharingScreen map. This method follows the same pattern as toggleAudio and toggleVideo,
+// tracking which participants are currently sharing their screen.
+//
+// State Management:
+//   - enabled=true: Adds client to sharingScreen map (screen sharing active)
+//   - enabled=false: Removes client from sharingScreen map (screen sharing stopped)
+//
+// The sharingScreen map is used to:
+//   - Track which participants are sharing their screen
+//   - Display screen share indicators in the UI
+//   - Include in room_state broadcasts for state synchronization
+//   - Manage screen share permissions and layout changes
+//
+// Use Cases:
+//   - Participant starts/stops screen sharing
+//   - Screen share state synchronization across clients
+//   - Initial screen share state when joining
+//
+// Thread Safety: This method is NOT thread-safe and must only be called when
+// the room's mutex lock is already held.
+//
+// Parameters:
+//   - payload: Contains the ClientId and enabled state for the screen share toggle
+func (r *Room) toggleScreenshare(payload ToggleScreensharePayload) {
+	// Find the client in participants map
+	client := r.participants[payload.ClientId]
+
+	// Also check hosts map
+	if client == nil {
+		client = r.hosts[payload.ClientId]
+	}
+
+	if client != nil {
+		if payload.Enabled {
+			r.sharingScreen[client.ID] = client
+		} else {
+			delete(r.sharingScreen, client.ID)
+		}
+	}
+}
+
 // getRoomStateUnsafe returns the current room state without acquiring any locks.
 //
 // Distributed State: Fetches complete participant and host lists from Redis Sets
@@ -608,9 +650,8 @@ func (r *Room) getRoomState(ctx context.Context) RoomStatePayload {
 		// Fetch hosts from Redis
 		hostsKey := fmt.Sprintf("room:%s:hosts", r.ID)
 		hostsData, err := r.bus.SetMembers(ctx, hostsKey)
-		if err != nil {
-			slog.Warn("Failed to fetch hosts from Redis, using local state", "roomId", r.ID, "error", err)
-			// Fallback to local state
+		// Fallback to local state if Redis fails OR returns nil/empty (single-instance mode)
+		if err != nil || hostsData == nil {
 			hosts = r.getLocalHosts()
 		} else {
 			hosts = r.parseClientInfoList(hostsData)
@@ -619,9 +660,8 @@ func (r *Room) getRoomState(ctx context.Context) RoomStatePayload {
 		// Fetch participants from Redis
 		participantsKey := fmt.Sprintf("room:%s:participants", r.ID)
 		participantsData, err := r.bus.SetMembers(ctx, participantsKey)
-		if err != nil {
-			slog.Warn("Failed to fetch participants from Redis, using local state", "roomId", r.ID, "error", err)
-			// Fallback to local state
+		// Fallback to local state if Redis fails OR returns nil/empty (single-instance mode)
+		if err != nil || participantsData == nil {
 			participants = r.getLocalParticipants()
 		} else {
 			participants = r.parseClientInfoList(participantsData)

@@ -316,6 +316,11 @@ func (r *Room) router(ctx context.Context, client *Client, data any) {
 			r.handleToggleVideo(ctx, client, msg.Event, msg.Payload)
 		}
 
+	case EventToggleScreenshare:
+		if isParticipant {
+			r.handleToggleScreenshare(ctx, client, msg.Event, msg.Payload)
+		}
+
 	case EventRequestWaiting:
 		if isWaiting {
 			r.handleRequestWaiting(ctx, client, msg.Event, msg.Payload)
@@ -473,7 +478,7 @@ func broadcastToClientMap(rawMsg []byte, roleType RoleType, m map[ClientIdType]*
 // the room's mutex lock is already held.
 func (r *Room) sendRoomStateToClient(client *Client) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
+	defer cancel()
 
 	roomState := r.getRoomState(ctx)
 

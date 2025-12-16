@@ -26,11 +26,12 @@ export type EventType =
   // Media Controls
   | 'toggle_audio'
   | 'toggle_video'
+  | 'toggle_screenshare'
   // Waiting Room
   | 'waiting_request'
   | 'accept_waiting'
   | 'deny_waiting'
-  // Screenshare
+  // Screenshare Requests
   | 'request_screenshare'
   | 'accept_screenshare'
   | 'deny_screenshare'
@@ -68,12 +69,16 @@ export type GetRecentChatsPayload = ClientInfo;
 // raise_hand / lower_hand
 export type HandStatePayload = ClientInfo;
 
-// toggle_audio / toggle_video
+// toggle_audio / toggle_video / toggle_screenshare
 export interface ToggleAudioPayload extends ClientInfo {
   enabled: boolean;
 }
 
 export interface ToggleVideoPayload extends ClientInfo {
+  enabled: boolean;
+}
+
+export interface ToggleScreensharePayload extends ClientInfo {
   enabled: boolean;
 }
 
@@ -139,6 +144,9 @@ export type AnyPayload =
   | DeleteChatPayload
   | GetRecentChatsPayload
   | HandStatePayload
+  | ToggleAudioPayload
+  | ToggleVideoPayload
+  | ToggleScreensharePayload
   | RequestWaitingPayload
   | AcceptWaitingPayload
   | DenyWaitingPayload

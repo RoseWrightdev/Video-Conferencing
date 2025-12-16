@@ -100,19 +100,22 @@ type Hub struct {
 	pendingRoomCleanups map[RoomIdType]*time.Timer // Timers for delayed room cleanup
 	bus                 BusService                 // Optional Redis pub/sub for cross-pod messaging
 	cleanupGracePeriod  time.Duration              // Optional grace period for room deletion w/ no users
+	devMode             bool                       // Disable rate limiting in development mode
 }
 
 // NewHub creates a new Hub and configures it with its dependencies.
 // Parameters:
 //   - validator: JWT token validator for authentication
 //   - bus: Optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
-func NewHub(validator TokenValidator, bus BusService) *Hub {
+//   - devMode: Disable rate limiting for development (allows rapid WebSocket messages)
+func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
 	return &Hub{
 		rooms:               make(map[RoomIdType]*Room),
 		validator:           validator,
 		pendingRoomCleanups: make(map[RoomIdType]*time.Timer),
 		bus:                 bus,
 		cleanupGracePeriod:  5 * time.Second,
+		devMode:             devMode,
 	}
 }
 
@@ -216,7 +219,7 @@ func (h *Hub) ServeWs(c *gin.Context) {
 		ID:               ClientIdType(claims.Subject),
 		DisplayName:      DisplayNameType(displayName),
 		Role:             RoleTypeHost, // Default role, should be derived from token scopes
-		rateLimitEnabled: true,         // Enable rate limiting for production clients
+		rateLimitEnabled: !h.devMode,   // Disable rate limiting in dev mode for rapid messages
 	}
 
 	// Metrics: Track WebSocket connection (defer ensures cleanup on disconnect)
