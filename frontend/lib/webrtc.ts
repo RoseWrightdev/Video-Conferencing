@@ -60,7 +60,7 @@ import type {
     WebRTCAnswerPayload,
     WebRTCCandidatePayload,
     WebRTCRenegotiatePayload
-} from '../../shared/types/events';
+} from '../events';
 
 /**
  * Configuration for WebRTC peer connections.

@@ -8,7 +8,7 @@ import type {
   HandStatePayload, 
   ToggleAudioPayload, 
   ToggleVideoPayload 
-} from '../../../shared/types/events';
+} from '../../events';
 
 /**
  * Room slice for managing room lifecycle and core connection infrastructure.

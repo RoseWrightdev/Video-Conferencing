@@ -14,7 +14,7 @@ import type {
   WebRTCAnswerPayload,
   WebRTCCandidatePayload,
   WebRTCRenegotiatePayload,
-} from '../../shared/types/events';
+} from '../events';
 
 /**
  * RoomService manages the lifecycle of a video conferencing room.

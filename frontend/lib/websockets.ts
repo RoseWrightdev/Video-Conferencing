@@ -19,7 +19,7 @@ import type {
     WebRTCAnswerPayload,
     WebRTCCandidatePayload,
     WebRTCRenegotiatePayload
-} from '../../shared/types/events';
+} from '../events';
 
 /**
  * WebSocket connection lifecycle states.
