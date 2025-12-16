@@ -68,9 +68,9 @@ export const createDeviceSlice: StateCreator<
   },
 
   switchCamera: async (deviceId) => {
-    const { webrtcManager } = get();
-    if (webrtcManager) {
-      // Logic for switching camera might involve WebRTCManager directly
+    const { sfuClient } = get();
+    if (sfuClient) {
+      // Logic for switching camera might involve sfuClient directly
       // For now, we just update the selected device
       set((state) => ({
         selectedDevices: { ...state.selectedDevices, camera: deviceId }
@@ -79,8 +79,8 @@ export const createDeviceSlice: StateCreator<
   },
 
   switchMicrophone: async (deviceId) => {
-    const { webrtcManager } = get();
-    if (webrtcManager) {
+    const { sfuClient } = get();
+    if (sfuClient) {
       // Logic for switching microphone
       set((state) => ({
         selectedDevices: { ...state.selectedDevices, microphone: deviceId }

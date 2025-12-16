@@ -1,61 +1,9 @@
 import { StateCreator } from 'zustand';
 import { WebSocketClient } from '@/lib/websockets';
-import { WebRTCManager } from '@/lib/webrtc';
+import { SFUClient } from '@/lib/webrtc';
 import { type RoomSlice, type RoomStoreState, type Participant, type ChatMessage } from '../types';
-import type { 
-  AddChatPayload, 
-  RoomStatePayload, 
-  HandStatePayload, 
-  ToggleAudioPayload, 
-  ToggleVideoPayload 
-} from '../../events';
+import { WebSocketMessage } from '@/types/proto/signaling'; // Ensure this path matches your structure
 
-/**
- * Room slice for managing room lifecycle and core connection infrastructure.
- * 
- * State:
- * - roomId/roomName: Room identifiers
- * - roomSettings: Configuration (max participants, waiting room, permissions)
- * - isJoined: Whether successfully joined and approved
- * - isWaitingRoom: Whether waiting for host approval
- * - currentUserId/currentUsername: This client's identity
- * - clientInfo: ClientInfo object for WebSocket messages
- * - wsClient: WebSocket connection instance
- * - webrtcManager: WebRTC peer connection manager
- * 
- * Actions:
- * - initializeRoom: Create WebSocket/WebRTC infrastructure
- * - joinRoom: Request to join (may enter waiting room)
- * - leaveRoom: Cleanup all connections and reset state
- * - updateRoomSettings: Modify room configuration (host only)
- * 
- * Initialization Flow:
- * 1. Generate unique client ID
- * 2. Create WebSocket client with JWT token
- * 3. Register all event handlers (chat, room_state, etc.)
- * 4. Connect to WebSocket server
- * 5. Create WebRTC manager for peer connections
- * 6. Update store with references
- * 7. Enumerate available devices
- * 
- * Event Handlers:
- * - add_chat: Append incoming messages
- * - room_state: Sync participant list
- * - accept_waiting: Transition from lobby to room
- * - deny_waiting: Show rejection error
- * - raise_hand/lower_hand: Update speaking indicators
- * - Connection state changes: Update UI status
- * 
- * Cleanup:
- * - Stops all media tracks
- * - Closes WebRTC connections
- * - Disconnects WebSocket (code 1000)
- * - Resets all state to null/empty
- * 
- * @see RoomService For alternative initialization API
- * @see WebSocketClient For connection management
- * @see WebRTCManager For peer connection handling
- */
 export const createRoomSlice: StateCreator<
   RoomStoreState,
   [],
@@ -71,251 +19,131 @@ export const createRoomSlice: StateCreator<
   currentUsername: null,
   clientInfo: null,
   wsClient: null,
-  webrtcManager: null,
+  sfuClient: null, // Initialized as null
 
   initializeRoom: async (roomId, username, token) => {
     const state = get();
-    
-    if (state.wsClient) {
-      state.wsClient.disconnect();
-    }
+    if (state.wsClient) state.wsClient.disconnect();
 
-    // Extract client ID from JWT token's 'sub' claim (backend uses this as the client ID)
-    let clientId: string;
-    try {
-      const tokenParts = token.split('.');
-      if (tokenParts.length !== 3) {
-        throw new Error('Invalid JWT token format');
-      }
-      const payload = JSON.parse(atob(tokenParts[1]));
-      clientId = payload.sub || payload.subject;
-      if (!clientId) {
-        throw new Error('JWT token missing sub/subject claim');
-      }
-    } catch (error) {
-      throw new Error('Invalid authentication token');
-    }
+    // 1. Setup WebSocket (Signal Transport)
+    // Ensure URL is correct for your Go server
+    const wsUrl = 'ws://localhost:8080/ws/hub';
+    const wsClient = new WebSocketClient(wsUrl, token);
 
-    const clientInfo = {
-      clientId,
-      displayName: username,
-    };
-
-    const wsClient = new WebSocketClient({
-      url: `ws://localhost:8080/ws/hub/${roomId}`,
-      token,
-      autoReconnect: true,
-      reconnectInterval: 3000,
-      maxReconnectAttempts: 5,
+    // 2. Setup SFU Client (Media Transport)
+    // We pass a callback to handle incoming tracks from the SFU
+    const sfuClient = new SFUClient(wsClient, (stream, track) => {
+      // When SFU sends a track, we need to map it to a user.
+      // For the MVP, we assume the stream.id matches the userId.
+      const userId = stream.id;
+      get().setParticipantStream(userId, stream);
     });
 
-    // Setup all WebSocket event handlers here
-    wsClient.on('add_chat', (message) => {
-      const chatPayload = message.payload as AddChatPayload;
-      const chatMessage: ChatMessage = {
-        id: chatPayload.chatId,
-        participantId: chatPayload.clientId,
-        username: chatPayload.displayName,
-        content: chatPayload.chatContent,
-        timestamp: new Date(chatPayload.timestamp),
-        type: 'text',
-      };
-      get().addMessage(chatMessage);
-    });
-
-    wsClient.on('room_state', (message) => {
-      const payload = message.payload as RoomStatePayload;
-      const newParticipants = new Map<string, Participant>();
-      const newHosts = new Map<string, Participant>();
-      const newWaiting = new Map<string, Participant>();
-      
-      payload.hosts?.forEach((host) => {
-        const participant: Participant = {
-          id: host.clientId,
-          username: host.displayName,
-          role: 'host',
+    // 3. Register Protobuf Event Listeners
+    wsClient.onMessage((msg: WebSocketMessage) => {
+      // A. Handle Chat
+      if (msg.chatEvent) {
+        const chat = msg.chatEvent;
+        const newMsg: ChatMessage = {
+          id: chat.id,
+          participantId: chat.senderId,
+          username: chat.senderName,
+          content: chat.content,
+          timestamp: new Date(Number(chat.timestamp)), // Convert Long/string to date
+          type: chat.isPrivate ? 'private' : 'text',
         };
-        newParticipants.set(host.clientId, participant);
-        newHosts.set(host.clientId, participant);
-      });
-
-      payload.participants?.forEach((participant) => {
-        const p: Participant = {
-          id: participant.clientId,
-          username: participant.displayName,
-          role: 'participant',
-        };
-        newParticipants.set(participant.clientId, p);
-      });
-      
-      payload.waitingUsers?.forEach((user) => {
-        const participant: Participant = {
-          id: user.clientId,
-          username: user.displayName,
-          role: 'waiting',
-        };
-        newWaiting.set(user.clientId, participant);
-      });
-
-      // Initialize audio/video state from payload
-      const unmuted = new Set<string>();
-      payload.unmuted?.forEach((client) => {
-        unmuted.add(client.clientId);
-      });
-
-      const cameraOn = new Set<string>();
-      payload.cameraOn?.forEach((client) => {
-        cameraOn.add(client.clientId);
-      });
-
-      // Initialize screen sharing state from payload
-      const sharingScreen = new Set<string>();
-      payload.sharingScreen?.forEach((client) => {
-        sharingScreen.add(client.clientId);
-      });
-
-      // Initialize hand raising state from payload
-      const raisingHand = new Set<string>();
-      payload.handsRaised?.forEach((client) => {
-        raisingHand.add(client.clientId);
-      });
-
-      // Ensure local participant is in the participants map
-      // This is critical for media state tracking to work correctly
-      const currentState = get();
-      const localClientId = currentState.currentUserId || clientInfo.clientId;
-      if (!newParticipants.has(localClientId) && !newWaiting.has(localClientId)) {
-        const localParticipant: Participant = {
-          id: localClientId,
-          username: currentState.currentUsername || clientInfo.displayName,
-          role: payload.hosts?.some((h) => h.clientId === localClientId) ? 'host' : 'participant',
-          stream: currentState.localStream || undefined, // Attach existing stream if available
-        };
-        newParticipants.set(localClientId, localParticipant);
-      } else if (newParticipants.has(localClientId) && currentState.localStream) {
-        // Update existing local participant with stream
-        const existing = newParticipants.get(localClientId)!;
-        newParticipants.set(localClientId, { ...existing, stream: currentState.localStream });
+        get().addMessage(newMsg);
       }
 
-      set({
-        participants: newParticipants,
-        hosts: newHosts,
-        waitingParticipants: newWaiting,
-        unmutedParticipants: unmuted,
-        cameraOnParticipants: cameraOn,
-        sharingScreenParticipants: sharingScreen,
-        raisingHandParticipants: raisingHand,
-        isHost: payload.hosts?.some((h) => h.clientId === clientInfo.clientId) || false,
-      });
+      // B. Handle Room State (Participants List)
+      if (msg.roomState) {
+        const newParticipants = new Map<string, Participant>();
+
+        msg.roomState.participants.forEach((p) => {
+          newParticipants.set(p.id, {
+            id: p.id,
+            username: p.displayName,
+            role: p.isHost ? 'host' : 'participant',
+            // Preserve existing stream if we already have it
+            stream: get().participants.get(p.id)?.stream,
+          });
+
+          // Sync Media State
+          get().setAudioEnabled(p.id, p.isAudioEnabled);
+          get().setVideoEnabled(p.id, p.isVideoEnabled);
+          get().setScreenSharing(p.id, p.isScreenSharing);
+          get().setHandRaised(p.id, p.isHandRaised);
+        });
+
+        set({ participants: newParticipants });
+      }
+
+      // C. Handle Join Response (Success/Fail)
+      if (msg.joinResponse) {
+        if (msg.joinResponse.success) {
+          set({
+            isJoined: true,
+            currentUserId: msg.joinResponse.userId,
+            isHost: msg.joinResponse.isHost
+          });
+        } else {
+          get().handleError('Failed to join room');
+        }
+      }
+
+      // D. Handle Errors
+      if (msg.error) {
+        get().handleError(msg.error.message);
+      }
     });
 
-    wsClient.on('accept_waiting', () => {
-      set({ isWaitingRoom: false, isJoined: true });
-    });
-
-    wsClient.on('deny_waiting', () => {
-      get().handleError('Access to room denied by host');
-    });
-
-    wsClient.on('raise_hand', (message) => {
-      const payload = message.payload as HandStatePayload;
-      get().setHandRaised(payload.clientId, true);
-    });
-
-    wsClient.on('lower_hand', (message) => {
-      const payload = message.payload as HandStatePayload;
-      get().setHandRaised(payload.clientId, false);
-    });
-
-    wsClient.on('toggle_audio', (message) => {
-      const payload = message.payload as ToggleAudioPayload;
-      get().setAudioEnabled(payload.clientId, payload.enabled);
-    });
-
-    wsClient.on('toggle_video', (message) => {
-      const payload = message.payload as ToggleVideoPayload;
-      get().setVideoEnabled(payload.clientId, payload.enabled);
-    });
-
-    wsClient.onConnectionChange?.((connectionState) => {
-      get().updateConnectionState({
-        wsConnected: connectionState === 'connected',
-        wsReconnecting: connectionState === 'reconnecting',
-      });
-    });
-
-    wsClient.onError((error) => {
-      get().handleError(`Connection error: ${error.message}`);
-    });
-
+    // 4. Connect
     try {
       await wsClient.connect();
-      const webrtcManager = new WebRTCManager(clientInfo, wsClient);
-
-      // Register handler for remote streams from peer connections
-      webrtcManager.onStreamAdded((stream, peerId, streamType) => {
-        get().setParticipantStream(peerId, stream);
-      });
 
       set({
         roomId,
-        currentUserId: clientInfo.clientId,
         currentUsername: username,
         wsClient,
-        webrtcManager,
-        clientInfo,
+        sfuClient,
+        clientInfo: { clientId: 'temp', displayName: username }
       });
 
-      await get().refreshDevices();
+      // 5. Send Join Request (Protobuf)
+      wsClient.send({
+        join: {
+          token: token,
+          roomId: roomId,
+          displayName: username
+        }
+      });
+
     } catch (error) {
-      const errorMessage = `Failed to initialize room: ${error instanceof Error ? error.message : String(error)}`;
-      get().handleError(errorMessage);
-      throw new Error(errorMessage);
+      get().handleError(`Connection failed: ${error}`);
     }
   },
 
   joinRoom: async () => {
-    const { wsClient, clientInfo, handleError } = get();
-    if (!wsClient || !clientInfo) {
-      handleError('Connection not ready. Please try again.');
-      return;
-    }
-    try {
-      wsClient.requestWaiting(clientInfo);
-      // Backend will send 'accept_waiting' or 'deny_waiting'
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      handleError(`Failed to join room: ${message}`);
-      throw error;
-    }
+    // Legacy support: logic moved to initializeRoom for smoother flow
   },
 
   leaveRoom: () => {
-    const { webrtcManager, wsClient, localStream, screenShareStream } = get();
-    
-    localStream?.getTracks().forEach(track => track.stop());
-    screenShareStream?.getTracks().forEach(track => track.stop());
-    webrtcManager?.cleanup();
-    wsClient?.disconnect();
+    const { sfuClient, wsClient, localStream } = get();
+    localStream?.getTracks().forEach(t => t.stop());
+
+    // Cleanup SFU
+    if (sfuClient) sfuClient.close();
+    if (wsClient) wsClient.disconnect();
 
     set({
       roomId: null,
-      roomName: null,
       isJoined: false,
-      currentUserId: null,
-      currentUsername: null,
-      clientInfo: null,
       wsClient: null,
-      webrtcManager: null,
+      sfuClient: null,
       participants: new Map(),
-      messages: [],
+      messages: []
     });
   },
 
-  updateRoomSettings: (settings) => {
-    set((state) => ({
-      roomSettings: { ...state.roomSettings!, ...settings },
-    }));
-  },
+  updateRoomSettings: () => { },
 });
