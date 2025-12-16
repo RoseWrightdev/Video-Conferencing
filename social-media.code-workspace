@@ -17,8 +17,12 @@
       "path": "./backend/rust"
     },
     {
-      "name": "Kubernetes",
-      "path": "./kubernetes"
+      "name": "DevOps",
+      "path": "./devops"
+    },
+    {
+      "name": "Protobuf",
+      "path": "./proto"
     }
   ],
   "settings": {
@@ -28,6 +32,7 @@
       "autodocs",
       "WEBRTC"
     ],
-    "typescript.tsdk": "Frontend/node_modules/typescript/lib"
+    "typescript.tsdk": "Frontend/node_modules/typescript/lib",
+    "protobuf.protoc.path": "/opt/homebrew/bin/protoc"
   }
 }

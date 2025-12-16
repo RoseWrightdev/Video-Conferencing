@@ -1,3 +1,4 @@
 backend/go/.env
-.DS_Store
+*.DS_Store
 temp
+backend/rust/sfu/target
