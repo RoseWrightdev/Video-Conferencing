@@ -1,116 +1,52 @@
-# Video Conferencing Platform
+# Scale.
 
-Video conferencing with Go and Next.js.
+**Distributed, high-performance video conferencing.**
 
-## Features
+A "Split-Brain" SFU architecture decoupling signaling from media routing for massive scalability.
 
-- Multi-participant video calls
-- Real-time chat
-- Screen sharing
-- Waiting room with host approval
-- Role-based permissions
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## UI Design
+---
 
-![Chat Participants](https://github.com/user-attachments/assets/1354c553-7088-404d-851e-29c9c52f201b)
+### Tech Stack.
 
-Full design system available on [Figma](https://www.figma.com/design/7uD81ikYXdkFDPeAWfXRl8/Social-Media----Comms?node-id=41-2&t=lxks1c13fWrUnXKb-0).
+* **Frontend:** Next.js 16, React 19, Zustand, Turbopack.
+* **Control Plane (Go):** Gin, Gorilla WebSocket, Redis Pub/Sub.
+* **Data Plane (Rust):** Tokio, WebRTC.rs, Tonic (gRPC).
+* **Protocol:** Protocol Buffers (gRPC/Protobuf) for all contracts.
+* **Infrastructure:** AWS ECS (Fargate & EC2), Terraform.
+* **Routing:** Kubernetes Gateway API.
+* **Observability:** Prometheus & Grafana.
 
-## Key Highlights
+---
 
-- Scale: Auto-scaling Kubernetes deployment (2-15 replicas)
-- Reliability: 500+ tests with 100% coverage on critical paths
-- Security: JWT auth, RBAC, network policies, pod security
-- Observability: Prometheus metrics, distributed tracing
-- DevOps: One-command deployment, GitOps-ready
+### Architecture.
 
-## Quick Start
+[Image of Hybrid Microservices Architecture Diagram NextJS Go Rust]
 
+**1. Connect (Control Plane)**
+Client connects via WebSocket to the **Go** signaling server. Go manages auth, chat, and room state. It is stateless and scalable.
+
+**2. Negotiate (Bridge)**
+Go calls **Rust** via gRPC to allocate resources. Rust reserves UDP ports and returns an SDP Offer.
+
+**3. Stream (Data Plane)**
+Client establishes a direct WebRTC connection with **Rust**. The Rust SFU ingests UDP packets and fan-outs to subscribers with zero-GC overhead.
+
+---
+
+### DevOps & Monitoring.
+
+**Routing: Gateway API**
+L4 (UDP) and L7 (HTTP) traffic managed via standardized Kubernetes Gateway API resources, decoupling routing from infrastructure.
+
+**Metrics: Prometheus & Grafana**
+Real-time observability into packet loss, jitter, Go goroutines, and Rust memory usage.
+
+---
+
+### Quick Start.
+
+**1. Generate Protobufs**
 ```bash
-git clone https://github.com/RoseWrightdev/Social-Media.git
-cd Social-Media
-./devops/deploy.sh deploy
-```
-
-## Architecture
-
-```text
-Client Browser ←→ Next.js Frontend ←→ Go Backend ←→ WebRTC P2P
-                         ↓              ↓
-                    Zustand State   WebSocket Hub
-                         ↓              ↓
-                   React Components  Room Manager
-```
-
-Core Components:
-
-- Frontend: Next.js with real-time UI updates
-- Backend: Go WebSocket server with JWT auth
-- Communication: WebRTC for video, WebSocket for signaling
-- State: Zustand for client state, Go channels for server state
-- Infrastructure: Kubernetes with auto-scaling and monitoring
-
-## Tech Stack
-
-- Backend: Go, WebSocket, JWT
-- Frontend: Next.js 15, React 19, TypeScript
-- Infrastructure: Kubernetes, Envoy Gateway
-- Testing: 500+ tests
-
-## Backend
-
-Tech Stack: Go 1.24+, Gorilla WebSocket, JWT, Gin Framework
-
-Key Features:
-
-- Event-driven WebSocket architecture with Go channels
-- JWT authentication with Auth0 integration
-- Real-time message routing and room state management
-- Rate limiting and CORS protection
-- Comprehensive unit and integration tests
-
-## Frontend
-
-Tech Stack: Next.js 15, React 19, TypeScript 5, Zustand, Vitest
-
-Key Features:
-
-- Real-time UI updates with WebSocket integration
-- Custom hooks for room, media, and participant management
-- WebRTC peer-to-peer video streaming
-- Responsive design with modern React patterns
-- 100% test coverage on critical user flows
-
-## DevOps
-
-Tech Stack: Kubernetes, Envoy Gateway, Docker, Prometheus, Grafana
-
-Key Features:
-
-- Auto-scaling based on CPU/Memory metrics (2-15 replicas)
-- High availability with Pod Disruption Budgets
-- Enterprise security (RBAC, NetworkPolicy, Pod Security)
-- TLS termination and certificate management
-- Monitoring with distributed tracing and alerting
-
-## API & Authentication
-
-OpenAPI Specification: Complete WebSocket API documentation with event schemas, request/response models, and error handling patterns. See [API docs](backend/go/internal/api/v1/session/openapi.yaml).
-
-Auth0 Integration: Production-ready authentication with JWT token validation, user management, and secure session handling. Supports social logins and enterprise SSO.
-
-WebSocket Events: Real-time communication protocol with structured message routing for video calls, chat, screen sharing, and room management.
-
-## Local Development
-
-```bash
-# Backend
-cd backend/go && go run cmd/v1/session/main.go
-
-# Frontend
-cd frontend && npm install && npm run dev
-```
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file.
+./scripts/generate_protos.sh

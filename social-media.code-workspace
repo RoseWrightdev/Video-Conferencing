@@ -1,7 +1,7 @@
 {
   "folders": [
     {
-      "name": "Social-Media",
+      "name": "Video Confrencing",
       "path": "."
     },
     {
@@ -9,12 +9,16 @@
       "path": "./frontend"
     },
     {
-      "name": "Backend",
-      "path": "./backend"
+      "name": "Go",
+      "path": "./backend/go"
+    },
+        {
+      "name": "Rust",
+      "path": "./backend/rust"
     },
     {
-      "name": "Devops",
-      "path": "./devops"
+      "name": "Kubernetes",
+      "path": "./kubernetes"
     }
   ],
   "settings": {
