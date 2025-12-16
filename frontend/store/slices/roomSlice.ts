@@ -168,6 +168,18 @@ export const createRoomSlice: StateCreator<
         cameraOn.add(client.clientId);
       });
 
+      // Initialize screen sharing state from payload
+      const sharingScreen = new Set<string>();
+      payload.sharingScreen?.forEach((client) => {
+        sharingScreen.add(client.clientId);
+      });
+
+      // Initialize hand raising state from payload
+      const raisingHand = new Set<string>();
+      payload.handsRaised?.forEach((client) => {
+        raisingHand.add(client.clientId);
+      });
+
       // Ensure local participant is in the participants map
       // This is critical for media state tracking to work correctly
       const currentState = get();
@@ -192,6 +204,8 @@ export const createRoomSlice: StateCreator<
         waitingParticipants: newWaiting,
         unmutedParticipants: unmuted,
         cameraOnParticipants: cameraOn,
+        sharingScreenParticipants: sharingScreen,
+        raisingHandParticipants: raisingHand,
         isHost: payload.hosts?.some((h) => h.clientId === clientInfo.clientId) || false,
       });
     });
