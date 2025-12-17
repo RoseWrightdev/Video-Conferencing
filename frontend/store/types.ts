@@ -61,6 +61,7 @@ export interface ChatSlice {
   addMessage: (message: ChatMessage) => void;
   markMessagesRead: () => void;
   toggleChatPanel: () => void;
+  fetchHistory: () => void;
 }
 
 export interface ConnectionSlice {

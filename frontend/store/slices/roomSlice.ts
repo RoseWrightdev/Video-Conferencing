@@ -27,7 +27,7 @@ export const createRoomSlice: StateCreator<
 
     // 1. Setup WebSocket (Signal Transport)
     // Ensure URL is correct for your Go server
-    const wsUrl = 'ws://localhost:8080/ws/hub';
+    const wsUrl = `ws://localhost:8080/ws/hub/${roomId}`;
     const wsClient = new WebSocketClient(wsUrl, token);
 
     // 2. Setup SFU Client (Media Transport)
@@ -91,7 +91,24 @@ export const createRoomSlice: StateCreator<
         }
       }
 
-      // D. Handle Errors
+      // D. Handle Recent Chats (On Join)
+      if (msg.recentChats) {
+        msg.recentChats.chats.forEach((chat) => {
+          const newMsg: ChatMessage = {
+            id: chat.id,
+            participantId: chat.senderId,
+            username: chat.senderName,
+            content: chat.content,
+            timestamp: new Date(Number(chat.timestamp)),
+            type: chat.isPrivate ? 'private' : 'text',
+          };
+          // Helper to add without duplicates could go here, 
+          // but for now simple add works if list is empty
+          get().addMessage(newMsg);
+        });
+      }
+
+      // E. Handle Errors
       if (msg.error) {
         get().handleError(msg.error.message);
       }

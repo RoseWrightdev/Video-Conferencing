@@ -180,7 +180,7 @@ func (r *Room) Broadcast(msg *pb.WebSocketMessage) {
 
 	sendToMap(r.hosts)
 	sendToMap(r.participants)
-	
+
 	// Send to Redis (Stubbed in Dev Mode)
 	go r.publishToRedis(context.Background(), msg)
 }

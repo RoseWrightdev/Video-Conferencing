@@ -104,8 +104,7 @@ func (r *Room) addChat(chat ChatInfo) {
 	}
 }
 
-// [FIX 1] Added missing helper for HandleGetRecentChats
-func (r *Room) getRecentChats(payload GetRecentChatsPayload) []ChatInfo {
+func (r *Room) getRecentChats() []ChatInfo {
 	if r.chatHistory == nil {
 		return []ChatInfo{}
 	}
@@ -126,7 +125,6 @@ func (r *Room) getRecentChats(payload GetRecentChatsPayload) []ChatInfo {
 	return messages
 }
 
-// [FIX 2] Added missing helper for HandleDeleteChat
 func (r *Room) deleteChat(payload DeleteChatPayload) {
 	if r.chatHistory == nil {
 		return

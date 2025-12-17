@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -112,10 +113,27 @@ type Hub struct {
 //   - bus: Optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
 //   - devMode: Disable rate limiting for development (allows rapid WebSocket messages)
 func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
-	sfuClient, err := sfu.NewSFUClient("localhost:50051")
-	if err != nil {
-		slog.Error("Failed to connect to SFU", "error", err)
-		panic("SFU connection failed")
+	var sfuClient *sfu.SFUClient
+	var err error
+
+	// 1. Check Flag
+	// We only attempt connection if explicitly enabled
+	if os.Getenv("ENABLE_SFU") == "true" {
+		sfuAddr := os.Getenv("SFU_ADDR")
+		if sfuAddr == "" {
+			sfuAddr = "localhost:50051"
+		}
+
+		slog.Info("🔌 SFU Enabled. Connecting...", "addr", sfuAddr)
+		sfuClient, err = sfu.NewSFUClient(sfuAddr)
+		if err != nil {
+			// If we asked for it and it failed, we panic to alert the dev
+			slog.Error("SFU Connection Failed", "error", err)
+			panic(err)
+		}
+		slog.Info("✅ SFU Connected")
+	} else {
+		slog.Warn("⚠️  SFU Disabled (ENABLE_SFU != true). App running in Signaling-Only mode.")
 	}
 
 	return &Hub{
@@ -125,7 +143,7 @@ func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
 		bus:                 bus,
 		cleanupGracePeriod:  5 * time.Second,
 		devMode:             devMode,
-		sfu:                 sfuClient,
+		sfu:                 sfuClient, // This will be nil if disabled
 	}
 }
 

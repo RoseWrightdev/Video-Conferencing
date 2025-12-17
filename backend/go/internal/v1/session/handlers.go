@@ -108,8 +108,7 @@ func (r *Room) HandleGetRecentChats(ctx context.Context, client *Client) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Use internal method from methods.go
-	internalChats := r.getRecentChats(ChatInfo{})
+	internalChats := r.getRecentChats()
 
 	var protoChats []*pb.ChatEvent
 	for _, msg := range internalChats {

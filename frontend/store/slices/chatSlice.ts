@@ -43,4 +43,14 @@ export const createChatSlice: StateCreator<
       };
     });
   },
+
+  fetchHistory: () => {
+    const { wsClient } = get();
+    if (!wsClient) return;
+
+    // Send the empty request object defined in your proto
+    wsClient.send({
+      getRecentChats: {}
+    });
+  },
 });
