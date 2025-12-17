@@ -7,7 +7,22 @@ PROTO_DIR="$ROOT_DIR/proto"
 
 # Output Directories
 GO_OUT_DIR="$ROOT_DIR/backend/go/gen/proto"
-TS_OUT_DIR="$ROOT_DIR/frontend/src/generated"
+TS_OUT_DIR="$ROOT_DIR/frontend/types/proto"
+
+# PATH TO PLUGIN (Direct Reference)
+TS_PLUGIN="$ROOT_DIR/frontend/node_modules/.bin/protoc-gen-ts_proto"
+
+# Force add Go bin to path for this session
+export PATH=$PATH:$(go env GOPATH)/bin:$HOME/go/bin
+
+echo "Checking tools..."
+
+# Check if ts-proto is installed
+if [ ! -f "$TS_PLUGIN" ]; then
+    echo "Error: protoc-gen-ts_proto not found at: $TS_PLUGIN"
+    echo "Run 'npm install --save-dev ts-proto' inside the frontend folder."
+    exit 1
+fi
 
 echo "Generating Protobufs from $PROTO_DIR..."
 
@@ -18,8 +33,6 @@ mkdir -p "$GO_OUT_DIR"
 mkdir -p "$TS_OUT_DIR"
 
 # 2. Generate Go (Server)
-# Requires: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-#           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 protoc --proto_path="$PROTO_DIR" \
        --go_out="$GO_OUT_DIR" --go_opt=paths=source_relative \
        --go-grpc_out="$GO_OUT_DIR" --go-grpc_opt=paths=source_relative \
@@ -28,10 +41,9 @@ protoc --proto_path="$PROTO_DIR" \
 echo "Go generated."
 
 # 3. Generate TypeScript (Client)
-# Requires: npm install -g ts-proto
-# Options: esModuleInterop=true,outputEncodeMethods=true,outputJsonMethods=false,outputClientImpl=false
+# We use --plugin=protoc-gen-ts_proto=PATH to strictly tell protoc where it is
 protoc --proto_path="$PROTO_DIR" \
-       --plugin=./frontend/node_modules/.bin/protoc-gen-ts_proto \
+       --plugin="protoc-gen-ts_proto=${TS_PLUGIN}" \
        --ts_proto_out="$TS_OUT_DIR" \
        --ts_proto_opt=esModuleInterop=true \
        --ts_proto_opt=outputEncodeMethods=true \

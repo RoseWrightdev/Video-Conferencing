@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -14,10 +17,10 @@ import (
 // CustomClaims represents custom JWT claims used for authentication.
 // It embeds jwt.RegisteredClaims and adds a Scope field to specify the user's access scope.
 type CustomClaims struct {
-    Scope string `json:"scope"`
-    Name  string `json:"name,omitempty"`
-    Email string `json:"email,omitempty"`
-    jwt.RegisteredClaims
+	Scope string `json:"scope"`
+	Name  string `json:"name,omitempty"`
+	Email string `json:"email,omitempty"`
+	jwt.RegisteredClaims
 }
 
 // Validator provides JWT validation functionality, including key retrieval,
@@ -132,4 +135,15 @@ func (v *Validator) ValidateToken(tokenString string) (*CustomClaims, error) {
 	}
 
 	return claims, nil
+}
+
+func GetAllowedOriginsFromEnv(envVarName string, defaultEnvs []string) []string {
+	// Example: ALLOWED_ORIGINS="http://localhost:3000,https://your-app.com"
+	originsStr := os.Getenv(envVarName)
+	if originsStr == "" {
+		// Provide sensible defaults for local development if the env var isn't set.
+		slog.Warn(fmt.Sprintf("%s environment variable not set. Using default development origins:\n%s", envVarName, defaultEnvs))
+		return defaultEnvs
+	}
+	return strings.Split(originsStr, ",")
 }

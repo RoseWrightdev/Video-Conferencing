@@ -2,122 +2,67 @@ package session
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
-	"k8s.io/utils/set"
+
+	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
+	"google.golang.org/protobuf/proto"
 )
 
-// subscribeToRedis sets up a Redis pub/sub subscription for this room.
-// This allows the room to receive events from other pods in a distributed deployment.
-// The subscription runs in a background goroutine and automatically forwards messages
-// to clients in this pod (excluding the original sender to prevent echo).
 func (r *Room) subscribeToRedis() {
 	if r.bus == nil {
+		slog.Info("Dev Mode: Redis disabled")
 		return
 	}
 
-	// Create a context that we can cancel when the room is destroyed
 	ctx := context.Background()
-
 	r.bus.Subscribe(ctx, string(r.ID), func(payload bus.PubSubPayload) {
 		r.handleRedisMessage(payload)
 	})
-
-	slog.Info("Room subscribed to Redis pub/sub", "roomId", r.ID)
+	slog.Info("Subscribed to Redis", "roomId", r.ID)
 }
 
-// handleRedisMessage processes messages received from Redis pub/sub.
-// It routes WebRTC signaling to local clients when appropriate and
-// falls back to standard broadcast logic for chat/room events.
 func (r *Room) handleRedisMessage(payload bus.PubSubPayload) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	slog.Debug("Received Redis message for room",
-		"roomId", r.ID,
-		"event", payload.Event,
-		"senderID", payload.SenderID,
-		"roles", payload.Roles)
-
-	// --- ROUTING LOGIC: Filter WebRTC events locally ---
-	switch Event(payload.Event) {
-	case EventOffer, EventAnswer, EventCandidate, EventRenegotiate:
-		var target struct {
-			TargetClientId ClientIdType `json:"targetClientId"`
-		}
-		if err := json.Unmarshal(payload.Payload, &target); err != nil {
-			slog.Error("Failed to parse target from Redis message", "event", payload.Event, "error", err)
-			return
-		}
-
-		var targetClient *Client
-		if c := r.participants[target.TargetClientId]; c != nil {
-			targetClient = c
-		} else if c := r.hosts[target.TargetClientId]; c != nil {
-			targetClient = c
-		}
-
-		if targetClient != nil {
-			msg := Message{
-				Event:   Event(payload.Event),
-				Payload: payload.Payload,
-			}
-			rawMsg, _ := json.Marshal(msg)
-
-			// Non-blocking send: drop message if channel is full
-			select {
-			case targetClient.send <- rawMsg:
-				slog.Debug("Redis-routed message delivered locally", "target", targetClient.ID)
-			default:
-				// Channel is full - log warning and drop message
-				// Do NOT block the entire room waiting for a slow client
-				slog.Warn("Client send channel full, dropping Redis message",
-					"target", targetClient.ID,
-					"event", payload.Event)
-			}
-		}
+	// 1. Safety Check
+	if len(payload.Payload) == 0 {
 		return
 	}
 
-	// --- STANDARD BROADCAST LOGIC (Chat, RoomState, etc.) ---
-	senderID := ClientIdType(payload.SenderID)
-	var roleSet set.Set[RoleType]
-	if len(payload.Roles) > 0 {
-		roleSet = set.New[RoleType]()
-		for _, roleStr := range payload.Roles {
-			roleSet.Insert(RoleType(roleStr))
-		}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// 2. Cast Payload (json.RawMessage is []byte)
+	data := []byte(payload.Payload)
+
+	// 3. Decode Protobuf
+	var msg pb.WebSocketMessage
+	if err := proto.Unmarshal(data, &msg); err != nil {
+		slog.Error("Redis proto unmarshal failed", "error", err)
+		return
 	}
-	// reuse broadcast logic; skip republishing to avoid loops
-	ctx := context.Background() // Redis subscription runs in background goroutine
-	r.broadcastWithOptions(ctx, Event(payload.Event), payload.Payload, roleSet, senderID, true)
+
+	// 4. Broadcast to LOCAL users
+	// This ensures users on Pod A see chat messages from Pod B
+	r.Broadcast(&msg)
 }
 
-// publishToRedis publishes an event to Redis for cross-pod distribution.
-// This should be called after local broadcast to ensure other pods receive the event.
-// The senderID is critical to prevent message echo when the message comes back via subscription.
-// The roles parameter specifies which role types should receive this event (nil = all roles).
-func (r *Room) publishToRedis(ctx context.Context, event Event, payload interface{}, senderID ClientIdType, roles set.Set[RoleType]) {
+func (r *Room) publishToRedis(ctx context.Context, msg *pb.WebSocketMessage) {
 	if r.bus == nil {
-		return // Single-instance mode, no cross-pod communication needed
+		return // Dev Mode: Skip
 	}
 
-	// Convert set to []string for bus interface
-	var roleStrings []string
-	if roles != nil && roles.Len() > 0 {
-		roleStrings = make([]string, 0, roles.Len())
-		for role := range roles {
-			roleStrings = append(roleStrings, string(role))
-		}
-	}
-
-	err := r.bus.Publish(ctx, string(r.ID), string(event), payload, string(senderID), roleStrings)
+	// 1. Marshal to Binary
+	data, err := proto.Marshal(msg)
 	if err != nil {
-		slog.Error("Failed to publish to Redis",
-			"roomId", r.ID,
-			"event", event,
-			"error", err)
+		slog.Error("Redis proto marshal failed", "error", err)
+		return
+	}
+
+	// 2. Publish
+	// We use a generic event name "proto" because the payload is self-describing
+	err = r.bus.Publish(ctx, string(r.ID), "proto", data, "", nil)
+	if err != nil {
+		slog.Error("Redis publish failed", "error", err)
 	}
 }

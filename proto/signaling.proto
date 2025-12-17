@@ -1,7 +1,7 @@
 syntax = "proto3";
 package signaling;
 
-option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto/signaling";
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; sfu";
 
 // The Master Envelope
 message WebSocketMessage {
@@ -13,33 +13,41 @@ message WebSocketMessage {
 
     // --- Media Controls (Self) ---
     ToggleMediaRequest toggle_media = 4;
-    MediaStateEvent media_state_changed = 5; // Broadcast to room
+    MediaStateEvent media_state_changed = 5;
 
     // --- Screen Share ---
     ScreenShareRequest screen_share = 6;
     ScreenShareEvent screen_share_changed = 7;
 
+    // Permission Flow
+    RequestScreenSharePermission request_screen_share_permission = 20;
+    ScreenSharePermissionEvent screen_share_permission_event = 21;
+
     // --- Chat ---
     ChatRequest chat = 8;
     ChatEvent chat_event = 9;
+
+    // Chat History & Deletion
+    GetRecentChatsRequest get_recent_chats = 22;
+    RecentChatsEvent recent_chats = 23;
+    DeleteChatRequest delete_chat = 24;
+    DeleteChatEvent delete_chat_event = 25;
 
     // --- Hand Raising ---
     ToggleHandRequest toggle_hand = 10;
     HandUpdateEvent hand_update = 11;
 
     // --- Waiting Room (Host Only) ---
-    WaitingRoomEvent waiting_room_notification = 12; // Host sees this
-    AdminActionRequest admin_action = 13; // Host sends this (Approve/Reject/Kick)
-    AdminActionEvent admin_event = 14; // User sees "You were kicked"
+    WaitingRoomEvent waiting_room_notification = 12;
+    AdminActionRequest admin_action = 13;
+    AdminActionEvent admin_event = 14;
 
-    // --- WebRTC Signaling (The Tunnel) ---
+    // --- WebRTC Signaling ---
     SignalRequest signal = 15;
     SignalEvent signal_event = 16;
 
     // --- State Sync ---
     RoomStateEvent room_state = 17;
-
-    // --- Errors ---
     ErrorEvent error = 18;
   }
 }
@@ -50,7 +58,7 @@ message WebSocketMessage {
 message JoinRequest {
   string token = 1;
   string room_id = 2;
-  string display_name = 3; // Fallback if not in token
+  string display_name = 3;
 }
 
 message JoinResponse {
@@ -100,12 +108,20 @@ message ScreenShareEvent {
   bool is_sharing = 2;
 }
 
+message RequestScreenSharePermission {}
+
+message ScreenSharePermissionEvent {
+  string user_id = 1;
+  string display_name = 2;
+  bool is_granted = 3;
+}
+
 // ---------------------------------------------------------
 // 4. Chat
 // ---------------------------------------------------------
 message ChatRequest {
   string content = 1;
-  string target_id = 2; // Empty = Public, Set = Private DM
+  string target_id = 2;
 }
 
 message ChatEvent {
@@ -117,25 +133,37 @@ message ChatEvent {
   bool is_private = 6;
 }
 
+message GetRecentChatsRequest {}
+
+message RecentChatsEvent {
+  repeated ChatEvent chats = 1;
+}
+
+message DeleteChatRequest {
+  string chat_id = 1;
+}
+
+message DeleteChatEvent {
+  string chat_id = 1;
+}
+
 // ---------------------------------------------------------
 // 5. Admin / Waiting Room
 // ---------------------------------------------------------
-// Sent TO the Host when someone tries to join
 message WaitingRoomEvent {
   string user_id = 1;
   string display_name = 2;
-  string status = 3; // "waiting"
+  string status = 3;
 }
 
-// Host sends this to Server
 message AdminActionRequest {
   string target_user_id = 1;
-  string action = 2; // "approve", "reject", "kick", "mute_all"
+  // Actions: "approve", "reject", "kick", "mute", "unmute", "mute_all", "approve_screenshare", "reject_screenshare"
+  string action = 2;
 }
 
-// Server sends this TO the target user (or room)
 message AdminActionEvent {
-  string action = 1; // "kicked", "muted"
+  string action = 1;
   string reason = 2;
 }
 
@@ -162,7 +190,7 @@ message SignalEvent {
 // ---------------------------------------------------------
 message RoomStateEvent {
   repeated ParticipantInfo participants = 1;
-  repeated ParticipantInfo waiting_users = 2; // Only sent to Host
+  repeated ParticipantInfo waiting_users = 2;
 }
 
 message ParticipantInfo {

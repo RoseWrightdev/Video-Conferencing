@@ -23,6 +23,10 @@
     {
       "name": "Protobuf",
       "path": "./proto"
+    },
+        {
+      "name": "Scripts",
+      "path": "./scripts"
     }
   ],
   "settings": {

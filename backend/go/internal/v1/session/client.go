@@ -25,13 +25,15 @@ package session
 import (
 	"container/list"
 	"context"
-	"encoding/json"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 	"github.com/gorilla/websocket"
+
+	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // --- Connection and Room Interfaces ---
@@ -75,8 +77,10 @@ type wsConnection interface {
 // providing full room functionality including state management,
 // permission checking, and message broadcasting.
 type Roomer interface {
-	router(ctx context.Context, c *Client, data any) // Route incoming messages to appropriate handlers
+	router(ctx context.Context, client *Client, msg *pb.WebSocketMessage)
 	handleClientDisconnect(c *Client)                // Handle client disconnection cleanup
+	CreateSFUSession(ctx context.Context, client *Client) error
+	HandleSFUSignal(ctx context.Context, client *Client, signal *pb.SignalRequest)
 }
 
 // Client represents a single user's connection to a video conference room.
@@ -111,7 +115,6 @@ type Client struct {
 	Role             RoleType        // Current permission level in the room
 	drawOrderElement *list.Element   // Position reference in room draw order queues
 	mu               sync.RWMutex    // Protects concurrent access to Client fields (like Role)
-	lastMessageTime  time.Time
 	rateLimitEnabled bool // Enable rate limiting (disabled for tests)
 }
 
@@ -132,119 +135,60 @@ func (c *Client) SetRole(role RoleType) {
 // readPump continuously processes incoming WebSocket messages from the client.
 // This method runs in its own goroutine and handles the complete message lifecycle
 // from reception through routing to the appropriate room handlers.
-//
-// Message Processing Flow:
-//  1. Read raw message bytes from WebSocket connection
-//  2. Unmarshal JSON into Message struct with event and payload
-//  3. Route the parsed message to the room for handling
-//  4. Handle connection errors and cleanup
-//
-// Error Handling:
-//   - Connection errors trigger graceful disconnection and room cleanup
-//   - JSON unmarshaling errors are logged but don't close the connection
-//   - Unexpected close errors are logged with additional detail
-//
-// Cleanup Guarantee:
-// The defer statement ensures that regardless of how this method exits,
-// the client will be properly removed from the room and the connection
-// will be closed, preventing resource leaks.
-//
-// Concurrency:
-// This method is designed to run as a goroutine and handles the read side
-// of the client's bidirectional communication channel.
 func (c *Client) readPump() {
 	defer func() {
 		c.room.handleClientDisconnect(c)
 		c.conn.Close()
-
-		// Metrics: Track WebSocket disconnection
 		metrics.DecConnection()
 	}()
 
 	for {
-		const messageRateLimit = 100 * time.Millisecond // Max 10 messages/sec
-
-		if c.rateLimitEnabled && time.Since(c.lastMessageTime) < messageRateLimit {
-			slog.Warn("Rate limit exceeded", "id", c.ID)
-			continue // Drop the message silently
-		}
-		c.lastMessageTime = time.Now()
-
-		_, rawBytes, err := c.conn.ReadMessage()
+        // Read Binary
+		messageType, data, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				slog.Warn("Unexpected client close", "ClientId", c.ID, "error", err)
-			}
 			break
 		}
-
-		// We define a temporary struct here with json.RawMessage.
-		var incoming struct {
-			Event   Event
-			Payload json.RawMessage
-		}
-
-		if err := json.Unmarshal(rawBytes, &incoming); err != nil {
-			slog.Warn("Failed to unmarshal message", "ClientId", c.ID, "error", err)
+		if messageType != websocket.BinaryMessage {
 			continue
 		}
 
-		// Now we pass the optimized 'incoming' data to the router.
-		// We reconstruct the standard Message struct, but Payload is now []byte (fast!)
-		msg := Message{
-			Event:   incoming.Event,
-			Payload: incoming.Payload,
+        // Decode Proto
+		var msg pb.WebSocketMessage
+		if err := proto.Unmarshal(data, &msg); err != nil {
+			slog.Warn("Failed to unmarshal proto", "ClientId", c.ID, "error", err)
+			continue
 		}
 
-		// Create request-scoped context with timeout for handler chain
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		c.room.router(ctx, c, msg)
-		cancel() // Prevent memory leak
+		// PASS TO ROUTER
+		ctx := context.Background()
+		c.room.router(ctx, c, &msg)
 	}
 }
 
-// writePump continuously sends queued messages to the client's WebSocket connection.
-// This method runs in its own goroutine and handles the complete outgoing message
-// lifecycle from channel reception through WebSocket transmission.
-//
-// Message Flow:
-//  1. Read JSON message bytes from the buffered send channel
-//  2. Write message to WebSocket connection as text frame
-//  3. Handle write errors and connection cleanup
-//
-// Channel Design:
-// The method blocks on reading from the send channel, which is fed by the
-// room's broadcast mechanism and direct message sending. The buffered channel
-// design prevents blocking when multiple messages are queued simultaneously.
-//
-// Error Handling:
-// Any write error immediately terminates the pump and closes the connection.
-// This ensures that clients with broken connections are quickly disconnected
-// rather than accumulating in a broken state.
-//
-// Connection Cleanup:
-// The defer statement guarantees the WebSocket connection is closed when
-// the method exits, regardless of the exit condition (channel close or error).
-//
-// Concurrency:
-// This method is designed to run as a goroutine and handles the write side
-// of the client's bidirectional communication channel. It coordinates with
-// readPump to provide full-duplex communication.
 func (c *Client) writePump() {
 	defer c.conn.Close()
-
-	// Define a timeout duration (e.g., 10 seconds)
 	writeWait := 10 * time.Second
 
 	for message := range c.send {
 		c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-
-		if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+		if err := c.conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
 			slog.Error("error writing message", "error", err)
 			return
 		}
 	}
-	// Loop finishes naturally when 'close(c.send)' is called
-	// Send Close Message to client (polite websocket teardown)
 	c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+}
+
+func (c *Client) sendProto(msg *pb.WebSocketMessage) {
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		slog.Error("Failed to marshal proto response", "error", err)
+		return
+	}
+	// Thread-safe send
+	select {
+	case c.send <- data:
+	default:
+		slog.Warn("Client send channel full", "clientId", c.ID)
+	}
 }

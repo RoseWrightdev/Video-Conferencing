@@ -34,6 +34,8 @@ import (
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/pkg/sfu"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -101,6 +103,7 @@ type Hub struct {
 	bus                 BusService                 // Optional Redis pub/sub for cross-pod messaging
 	cleanupGracePeriod  time.Duration              // Optional grace period for room deletion w/ no users
 	devMode             bool                       // Disable rate limiting in development mode
+	sfu                 *sfu.SFUClient
 }
 
 // NewHub creates a new Hub and configures it with its dependencies.
@@ -109,6 +112,12 @@ type Hub struct {
 //   - bus: Optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
 //   - devMode: Disable rate limiting for development (allows rapid WebSocket messages)
 func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
+	sfuClient, err := sfu.NewSFUClient("localhost:50051")
+	if err != nil {
+		slog.Error("Failed to connect to SFU", "error", err)
+		panic("SFU connection failed")
+	}
+
 	return &Hub{
 		rooms:               make(map[RoomIdType]*Room),
 		validator:           validator,
@@ -116,6 +125,7 @@ func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
 		bus:                 bus,
 		cleanupGracePeriod:  5 * time.Second,
 		devMode:             devMode,
+		sfu:                 sfuClient,
 	}
 }
 
@@ -147,7 +157,7 @@ func (h *Hub) ServeWs(c *gin.Context) {
 		return
 	}
 
-	allowedOrigins := GetAllowedOriginsFromEnv("ALLOWED_ORIGINS", []string{"http://localhost:3000"})
+	allowedOrigins := auth.GetAllowedOriginsFromEnv("ALLOWED_ORIGINS", []string{"http://localhost:3000"})
 	upgrader := websocket.Upgrader{
 		// This is the secure way to check the origin.
 		CheckOrigin: func(r *http.Request) bool {
@@ -294,7 +304,7 @@ func (h *Hub) getOrCreateRoom(roomId RoomIdType) *Room {
 
 	slog.Info("Creating new session room", "roomroomId", roomId)
 	// Pass the bus interface directly - no type assertion needed
-	room := NewRoom(roomId, h.removeRoom, h.bus)
+	room := NewRoom(roomId, h.removeRoom, h.bus, h.sfu)
 	h.rooms[roomId] = room
 
 	// Metrics: Track room creation

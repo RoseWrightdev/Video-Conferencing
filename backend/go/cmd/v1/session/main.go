@@ -159,7 +159,7 @@ func main() {
 	router := gin.Default()
 	// Cors
 	config := cors.DefaultConfig()
-	allowedOrigins := session.GetAllowedOriginsFromEnv("ALLOWED_ORIGINS", []string{"http://localhost:3000"})
+	allowedOrigins := auth.GetAllowedOriginsFromEnv("ALLOWED_ORIGINS", []string{"http://localhost:3000"})
 	config.AllowOrigins = allowedOrigins
 	router.Use(cors.New(config))
 

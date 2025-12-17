@@ -18,10 +18,7 @@ export interface WebSocketMessage {
     | ReconnectRequest
     | undefined;
   /** --- Media Controls (Self) --- */
-  toggleMedia?:
-    | ToggleMediaRequest
-    | undefined;
-  /** Broadcast to room */
+  toggleMedia?: ToggleMediaRequest | undefined;
   mediaStateChanged?:
     | MediaStateEvent
     | undefined;
@@ -30,10 +27,22 @@ export interface WebSocketMessage {
   screenShareChanged?:
     | ScreenShareEvent
     | undefined;
+  /** Permission Flow */
+  requestScreenSharePermission?: RequestScreenSharePermission | undefined;
+  screenSharePermissionEvent?:
+    | ScreenSharePermissionEvent
+    | undefined;
   /** --- Chat --- */
   chat?: ChatRequest | undefined;
   chatEvent?:
     | ChatEvent
+    | undefined;
+  /** Chat History & Deletion */
+  getRecentChats?: GetRecentChatsRequest | undefined;
+  recentChats?: RecentChatsEvent | undefined;
+  deleteChat?: DeleteChatRequest | undefined;
+  deleteChatEvent?:
+    | DeleteChatEvent
     | undefined;
   /** --- Hand Raising --- */
   toggleHand?: ToggleHandRequest | undefined;
@@ -41,27 +50,18 @@ export interface WebSocketMessage {
     | HandUpdateEvent
     | undefined;
   /** --- Waiting Room (Host Only) --- */
-  waitingRoomNotification?:
-    | WaitingRoomEvent
-    | undefined;
-  /** Host sends this (Approve/Reject/Kick) */
-  adminAction?:
-    | AdminActionRequest
-    | undefined;
-  /** User sees "You were kicked" */
+  waitingRoomNotification?: WaitingRoomEvent | undefined;
+  adminAction?: AdminActionRequest | undefined;
   adminEvent?:
     | AdminActionEvent
     | undefined;
-  /** --- WebRTC Signaling (The Tunnel) --- */
+  /** --- WebRTC Signaling --- */
   signal?: SignalRequest | undefined;
   signalEvent?:
     | SignalEvent
     | undefined;
   /** --- State Sync --- */
-  roomState?:
-    | RoomStateEvent
-    | undefined;
-  /** --- Errors --- */
+  roomState?: RoomStateEvent | undefined;
   error?: ErrorEvent | undefined;
 }
 
@@ -73,7 +73,6 @@ export interface WebSocketMessage {
 export interface JoinRequest {
   token: string;
   roomId: string;
-  /** Fallback if not in token */
   displayName: string;
 }
 
@@ -129,6 +128,15 @@ export interface ScreenShareEvent {
   isSharing: boolean;
 }
 
+export interface RequestScreenSharePermission {
+}
+
+export interface ScreenSharePermissionEvent {
+  userId: string;
+  displayName: string;
+  isGranted: boolean;
+}
+
 /**
  * ---------------------------------------------------------
  * 4. Chat
@@ -136,7 +144,6 @@ export interface ScreenShareEvent {
  */
 export interface ChatRequest {
   content: string;
-  /** Empty = Public, Set = Private DM */
   targetId: string;
 }
 
@@ -149,29 +156,39 @@ export interface ChatEvent {
   isPrivate: boolean;
 }
 
+export interface GetRecentChatsRequest {
+}
+
+export interface RecentChatsEvent {
+  chats: ChatEvent[];
+}
+
+export interface DeleteChatRequest {
+  chatId: string;
+}
+
+export interface DeleteChatEvent {
+  chatId: string;
+}
+
 /**
  * ---------------------------------------------------------
  * 5. Admin / Waiting Room
  * ---------------------------------------------------------
- * Sent TO the Host when someone tries to join
  */
 export interface WaitingRoomEvent {
   userId: string;
   displayName: string;
-  /** "waiting" */
   status: string;
 }
 
-/** Host sends this to Server */
 export interface AdminActionRequest {
   targetUserId: string;
-  /** "approve", "reject", "kick", "mute_all" */
+  /** Actions: "approve", "reject", "kick", "mute", "unmute", "mute_all", "approve_screenshare", "reject_screenshare" */
   action: string;
 }
 
-/** Server sends this TO the target user (or room) */
 export interface AdminActionEvent {
-  /** "kicked", "muted" */
   action: string;
   reason: string;
 }
@@ -199,7 +216,6 @@ export interface SignalEvent {
  */
 export interface RoomStateEvent {
   participants: ParticipantInfo[];
-  /** Only sent to Host */
   waitingUsers: ParticipantInfo[];
 }
 
@@ -228,8 +244,14 @@ function createBaseWebSocketMessage(): WebSocketMessage {
     mediaStateChanged: undefined,
     screenShare: undefined,
     screenShareChanged: undefined,
+    requestScreenSharePermission: undefined,
+    screenSharePermissionEvent: undefined,
     chat: undefined,
     chatEvent: undefined,
+    getRecentChats: undefined,
+    recentChats: undefined,
+    deleteChat: undefined,
+    deleteChatEvent: undefined,
     toggleHand: undefined,
     handUpdate: undefined,
     waitingRoomNotification: undefined,
@@ -265,11 +287,29 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
     if (message.screenShareChanged !== undefined) {
       ScreenShareEvent.encode(message.screenShareChanged, writer.uint32(58).fork()).join();
     }
+    if (message.requestScreenSharePermission !== undefined) {
+      RequestScreenSharePermission.encode(message.requestScreenSharePermission, writer.uint32(162).fork()).join();
+    }
+    if (message.screenSharePermissionEvent !== undefined) {
+      ScreenSharePermissionEvent.encode(message.screenSharePermissionEvent, writer.uint32(170).fork()).join();
+    }
     if (message.chat !== undefined) {
       ChatRequest.encode(message.chat, writer.uint32(66).fork()).join();
     }
     if (message.chatEvent !== undefined) {
       ChatEvent.encode(message.chatEvent, writer.uint32(74).fork()).join();
+    }
+    if (message.getRecentChats !== undefined) {
+      GetRecentChatsRequest.encode(message.getRecentChats, writer.uint32(178).fork()).join();
+    }
+    if (message.recentChats !== undefined) {
+      RecentChatsEvent.encode(message.recentChats, writer.uint32(186).fork()).join();
+    }
+    if (message.deleteChat !== undefined) {
+      DeleteChatRequest.encode(message.deleteChat, writer.uint32(194).fork()).join();
+    }
+    if (message.deleteChatEvent !== undefined) {
+      DeleteChatEvent.encode(message.deleteChatEvent, writer.uint32(202).fork()).join();
     }
     if (message.toggleHand !== undefined) {
       ToggleHandRequest.encode(message.toggleHand, writer.uint32(82).fork()).join();
@@ -364,6 +404,22 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
           message.screenShareChanged = ScreenShareEvent.decode(reader, reader.uint32());
           continue;
         }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.requestScreenSharePermission = RequestScreenSharePermission.decode(reader, reader.uint32());
+          continue;
+        }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          message.screenSharePermissionEvent = ScreenSharePermissionEvent.decode(reader, reader.uint32());
+          continue;
+        }
         case 8: {
           if (tag !== 66) {
             break;
@@ -378,6 +434,38 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
           }
 
           message.chatEvent = ChatEvent.decode(reader, reader.uint32());
+          continue;
+        }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.getRecentChats = GetRecentChatsRequest.decode(reader, reader.uint32());
+          continue;
+        }
+        case 23: {
+          if (tag !== 186) {
+            break;
+          }
+
+          message.recentChats = RecentChatsEvent.decode(reader, reader.uint32());
+          continue;
+        }
+        case 24: {
+          if (tag !== 194) {
+            break;
+          }
+
+          message.deleteChat = DeleteChatRequest.decode(reader, reader.uint32());
+          continue;
+        }
+        case 25: {
+          if (tag !== 202) {
+            break;
+          }
+
+          message.deleteChatEvent = DeleteChatEvent.decode(reader, reader.uint32());
           continue;
         }
         case 10: {
@@ -487,11 +575,31 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
     message.screenShareChanged = (object.screenShareChanged !== undefined && object.screenShareChanged !== null)
       ? ScreenShareEvent.fromPartial(object.screenShareChanged)
       : undefined;
+    message.requestScreenSharePermission =
+      (object.requestScreenSharePermission !== undefined && object.requestScreenSharePermission !== null)
+        ? RequestScreenSharePermission.fromPartial(object.requestScreenSharePermission)
+        : undefined;
+    message.screenSharePermissionEvent =
+      (object.screenSharePermissionEvent !== undefined && object.screenSharePermissionEvent !== null)
+        ? ScreenSharePermissionEvent.fromPartial(object.screenSharePermissionEvent)
+        : undefined;
     message.chat = (object.chat !== undefined && object.chat !== null)
       ? ChatRequest.fromPartial(object.chat)
       : undefined;
     message.chatEvent = (object.chatEvent !== undefined && object.chatEvent !== null)
       ? ChatEvent.fromPartial(object.chatEvent)
+      : undefined;
+    message.getRecentChats = (object.getRecentChats !== undefined && object.getRecentChats !== null)
+      ? GetRecentChatsRequest.fromPartial(object.getRecentChats)
+      : undefined;
+    message.recentChats = (object.recentChats !== undefined && object.recentChats !== null)
+      ? RecentChatsEvent.fromPartial(object.recentChats)
+      : undefined;
+    message.deleteChat = (object.deleteChat !== undefined && object.deleteChat !== null)
+      ? DeleteChatRequest.fromPartial(object.deleteChat)
+      : undefined;
+    message.deleteChatEvent = (object.deleteChatEvent !== undefined && object.deleteChatEvent !== null)
+      ? DeleteChatEvent.fromPartial(object.deleteChatEvent)
       : undefined;
     message.toggleHand = (object.toggleHand !== undefined && object.toggleHand !== null)
       ? ToggleHandRequest.fromPartial(object.toggleHand)
@@ -1073,6 +1181,110 @@ export const ScreenShareEvent: MessageFns<ScreenShareEvent> = {
   },
 };
 
+function createBaseRequestScreenSharePermission(): RequestScreenSharePermission {
+  return {};
+}
+
+export const RequestScreenSharePermission: MessageFns<RequestScreenSharePermission> = {
+  encode(_: RequestScreenSharePermission, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RequestScreenSharePermission {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRequestScreenSharePermission();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<RequestScreenSharePermission>, I>>(base?: I): RequestScreenSharePermission {
+    return RequestScreenSharePermission.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RequestScreenSharePermission>, I>>(_: I): RequestScreenSharePermission {
+    const message = createBaseRequestScreenSharePermission();
+    return message;
+  },
+};
+
+function createBaseScreenSharePermissionEvent(): ScreenSharePermissionEvent {
+  return { userId: "", displayName: "", isGranted: false };
+}
+
+export const ScreenSharePermissionEvent: MessageFns<ScreenSharePermissionEvent> = {
+  encode(message: ScreenSharePermissionEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    if (message.isGranted !== false) {
+      writer.uint32(24).bool(message.isGranted);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenSharePermissionEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenSharePermissionEvent();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.displayName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.isGranted = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenSharePermissionEvent>, I>>(base?: I): ScreenSharePermissionEvent {
+    return ScreenSharePermissionEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenSharePermissionEvent>, I>>(object: I): ScreenSharePermissionEvent {
+    const message = createBaseScreenSharePermissionEvent();
+    message.userId = object.userId ?? "";
+    message.displayName = object.displayName ?? "";
+    message.isGranted = object.isGranted ?? false;
+    return message;
+  },
+};
+
 function createBaseChatRequest(): ChatRequest {
   return { content: "", targetId: "" };
 }
@@ -1233,6 +1445,178 @@ export const ChatEvent: MessageFns<ChatEvent> = {
     message.content = object.content ?? "";
     message.timestamp = object.timestamp ?? 0;
     message.isPrivate = object.isPrivate ?? false;
+    return message;
+  },
+};
+
+function createBaseGetRecentChatsRequest(): GetRecentChatsRequest {
+  return {};
+}
+
+export const GetRecentChatsRequest: MessageFns<GetRecentChatsRequest> = {
+  encode(_: GetRecentChatsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRecentChatsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetRecentChatsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<GetRecentChatsRequest>, I>>(base?: I): GetRecentChatsRequest {
+    return GetRecentChatsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetRecentChatsRequest>, I>>(_: I): GetRecentChatsRequest {
+    const message = createBaseGetRecentChatsRequest();
+    return message;
+  },
+};
+
+function createBaseRecentChatsEvent(): RecentChatsEvent {
+  return { chats: [] };
+}
+
+export const RecentChatsEvent: MessageFns<RecentChatsEvent> = {
+  encode(message: RecentChatsEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.chats) {
+      ChatEvent.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RecentChatsEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRecentChatsEvent();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.chats.push(ChatEvent.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<RecentChatsEvent>, I>>(base?: I): RecentChatsEvent {
+    return RecentChatsEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RecentChatsEvent>, I>>(object: I): RecentChatsEvent {
+    const message = createBaseRecentChatsEvent();
+    message.chats = object.chats?.map((e) => ChatEvent.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseDeleteChatRequest(): DeleteChatRequest {
+  return { chatId: "" };
+}
+
+export const DeleteChatRequest: MessageFns<DeleteChatRequest> = {
+  encode(message: DeleteChatRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.chatId !== "") {
+      writer.uint32(10).string(message.chatId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteChatRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteChatRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.chatId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteChatRequest>, I>>(base?: I): DeleteChatRequest {
+    return DeleteChatRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteChatRequest>, I>>(object: I): DeleteChatRequest {
+    const message = createBaseDeleteChatRequest();
+    message.chatId = object.chatId ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteChatEvent(): DeleteChatEvent {
+  return { chatId: "" };
+}
+
+export const DeleteChatEvent: MessageFns<DeleteChatEvent> = {
+  encode(message: DeleteChatEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.chatId !== "") {
+      writer.uint32(10).string(message.chatId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteChatEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteChatEvent();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.chatId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteChatEvent>, I>>(base?: I): DeleteChatEvent {
+    return DeleteChatEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteChatEvent>, I>>(object: I): DeleteChatEvent {
+    const message = createBaseDeleteChatEvent();
+    message.chatId = object.chatId ?? "";
     return message;
   },
 };
