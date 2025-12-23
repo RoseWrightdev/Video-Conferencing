@@ -79,6 +79,30 @@ func (r *Room) handleClientConnect(client *Client) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Check for duplicate connections with same client ID
+	// If the same user is connecting again (refresh, duplicate tab, etc),
+	// close the old connection before adding the new one
+	var existingClient *Client
+	if c, exists := r.hosts[client.ID]; exists {
+		existingClient = c
+	} else if c, exists := r.participants[client.ID]; exists {
+		existingClient = c
+	} else if c, exists := r.waiting[client.ID]; exists {
+		existingClient = c
+	}
+
+	if existingClient != nil {
+		slog.Info("Duplicate connection detected, disconnecting old client",
+			"room", r.ID,
+			"clientId", client.ID,
+			"oldRole", existingClient.Role,
+		)
+		// Synchronously disconnect the old client to prevent race conditions
+		// This ensures all cleanup happens before we add the new connection
+		r.disconnectClient(context.Background(), existingClient)
+		// Note: We don't broadcast here - we'll broadcast after adding the new client
+	}
+
 	// Logic for first user becoming host
 	if len(r.participants) == 0 && len(r.hosts) == 0 {
 		slog.Info("First user joined, making them host.", "room", r.ID, "ClientId", client.ID)
@@ -89,6 +113,11 @@ func (r *Room) handleClientConnect(client *Client) {
 	}
 	r.addWaiting(client)
 	r.sendRoomStateToClient(client)
+
+	// Broadcast the update to existing Hosts/Participants so they see the new waiting user
+	// We call this synchronously because we hold the lock, ensuring state consistency.
+	// Note: This sends state to everyone (hosts + participants).
+	r.BroadcastRoomState(context.Background())
 }
 
 func (r *Room) handleClientDisconnect(client *Client) {
@@ -119,7 +148,6 @@ func (r *Room) handleClientDisconnect(client *Client) {
 // Router delegates to handlers.go
 func (r *Room) router(ctx context.Context, client *Client, msg *pb.WebSocketMessage) {
 	switch payload := msg.Payload.(type) {
-
 	case *pb.WebSocketMessage_Join:
 		if err := r.CreateSFUSession(ctx, client); err != nil {
 			slog.Error("Failed to create SFU session", "error", err)
@@ -187,6 +215,7 @@ func (r *Room) Broadcast(msg *pb.WebSocketMessage) {
 
 func (r *Room) BroadcastRoomState(ctx context.Context) {
 	roomState := r.BuildRoomStateProto(ctx)
+	slog.Info("Broadcasting RoomState", "room", r.ID, "hosts", len(r.hosts), "waiting", len(r.waiting))
 	r.Broadcast(&pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_RoomState{
 			RoomState: roomState,

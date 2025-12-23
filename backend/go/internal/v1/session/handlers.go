@@ -215,7 +215,9 @@ func (r *Room) HandleAdminAction(ctx context.Context, client *Client, adminReq *
 			target.sendProto(kickMsg)
 
 			// Actually disconnect them
-			go r.disconnectClient(ctx, target)
+			// FIX: Do NOT call disconnectClient directly in a goroutine (race condition).
+			// Instead, close the connection, which triggers the readPump to exit and call handleClientDisconnect safely.
+			target.conn.Close()
 		}
 
 	case "approve":

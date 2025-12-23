@@ -13,6 +13,13 @@ import (
 // --- Participant Management ---
 
 func (r *Room) addParticipant(ctx context.Context, client *Client) {
+	slog.Info("Adding Participant", "room", r.ID, "clientId", client.ID)
+
+	// Remove from other role maps to prevent duplicate entries
+	// This ensures a client can only have one role at a time
+	delete(r.hosts, client.ID)
+	delete(r.waiting, client.ID)
+
 	client.Role = RoleTypeParticipant
 	element := r.clientDrawOrderQueue.PushBack(client)
 	client.drawOrderElement = element
@@ -29,6 +36,7 @@ func (r *Room) addParticipant(ctx context.Context, client *Client) {
 }
 
 func (r *Room) deleteParticipant(ctx context.Context, client *Client) {
+	slog.Info("Deleting Participant", "room", r.ID, "clientId", client.ID)
 	delete(r.participants, client.ID)
 	if client.drawOrderElement != nil {
 		r.clientDrawOrderQueue.Remove(client.drawOrderElement)
@@ -44,6 +52,13 @@ func (r *Room) deleteParticipant(ctx context.Context, client *Client) {
 }
 
 func (r *Room) addHost(ctx context.Context, client *Client) {
+	slog.Info("Adding Host", "room", r.ID, "clientId", client.ID)
+
+	// [FIX] Remove from other role maps to prevent duplicate entries
+	// This ensures a client can only have one role at a time
+	delete(r.participants, client.ID)
+	delete(r.waiting, client.ID)
+
 	client.Role = RoleTypeHost
 	element := r.clientDrawOrderQueue.PushBack(client)
 	client.drawOrderElement = element
@@ -58,6 +73,7 @@ func (r *Room) addHost(ctx context.Context, client *Client) {
 }
 
 func (r *Room) deleteHost(ctx context.Context, client *Client) {
+	slog.Info("Deleting Host", "room", r.ID, "clientId", client.ID)
 	delete(r.hosts, client.ID)
 	if client.drawOrderElement != nil {
 		r.clientDrawOrderQueue.Remove(client.drawOrderElement)
@@ -75,6 +91,13 @@ func (r *Room) deleteHost(ctx context.Context, client *Client) {
 // --- Waiting Room ---
 
 func (r *Room) addWaiting(client *Client) {
+	slog.Info("Adding Waiting User", "room", r.ID, "clientId", client.ID)
+
+	// [FIX] Remove from other role maps to prevent duplicate entries
+	// This ensures a client can only have one role at a time
+	delete(r.hosts, client.ID)
+	delete(r.participants, client.ID)
+
 	client.Role = RoleTypeWaiting
 	element := r.waitingDrawOrderStack.PushFront(client)
 	client.drawOrderElement = element
@@ -82,6 +105,7 @@ func (r *Room) addWaiting(client *Client) {
 }
 
 func (r *Room) deleteWaiting(client *Client) {
+	slog.Info("Deleting Waiting User", "room", r.ID, "clientId", client.ID)
 	delete(r.waiting, client.ID)
 	if client.drawOrderElement != nil {
 		r.waitingDrawOrderStack.Remove(client.drawOrderElement)
@@ -192,7 +216,12 @@ func (r *Room) disconnectClient(ctx context.Context, client *Client) {
 	delete(r.sharingScreen, client.ID)
 	delete(r.unmuted, client.ID)
 	delete(r.cameraOn, client.ID)
-	close(client.send)
+
+	// Use sync.Once to ensure channel is only closed once
+	// This prevents panic when duplicate connections are cleaned up
+	client.closeOnce.Do(func() {
+		close(client.send)
+	})
 
 	if client.drawOrderElement != nil {
 		r.handDrawOrderQueue.Remove(client.drawOrderElement)
@@ -230,8 +259,15 @@ func (r *Room) BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent {
 		pbParticipants = append(pbParticipants, makeProto(string(p.ClientId), string(p.DisplayName), false))
 	}
 
+	// 3. Fetch Waiting Users (Local only for now)
+	var pbWaitingUsers []*pb.ParticipantInfo
+	for _, w := range r.waiting {
+		pbWaitingUsers = append(pbWaitingUsers, makeProto(string(w.ID), string(w.DisplayName), false))
+	}
+
 	return &pb.RoomStateEvent{
 		Participants: pbParticipants,
+		WaitingUsers: pbWaitingUsers,
 	}
 }
 

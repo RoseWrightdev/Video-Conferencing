@@ -29,7 +29,8 @@ func (r *Room) CreateSFUSession(ctx context.Context, client *Client) error {
 				Success: true,
 				UserId:  string(client.ID),
 				IsHost:  client.Role == RoleTypeHost,
-				// You can populate InitialState here if you want
+				// Populate InitialState so the frontend can immediately determine if it is in Waiting Room
+				InitialState: r.BuildRoomStateProto(ctx),
 			},
 		},
 	}

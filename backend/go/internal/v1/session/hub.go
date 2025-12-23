@@ -250,6 +250,14 @@ func (h *Hub) ServeWs(c *gin.Context) {
 		rateLimitEnabled: !h.devMode,   // Disable rate limiting in dev mode for rapid messages
 	}
 
+	// In Dev Mode, if using MockValidator, multiple tabs will have same ID ("dev-user-123").
+	// This breaks waiting room logic (same user is both Host and Waiting).
+	// We override ID to be unique based on username if provided.
+	if h.devMode && usernameParam != "" {
+		client.ID = ClientIdType(usernameParam)
+		slog.Info("Dev Mode: Overriding ClientID to username for uniqueness", "newID", client.ID)
+	}
+
 	// Metrics: Track WebSocket connection (defer ensures cleanup on disconnect)
 	metrics.ActiveWebSocketConnections.Inc()
 

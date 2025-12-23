@@ -78,7 +78,7 @@ type wsConnection interface {
 // permission checking, and message broadcasting.
 type Roomer interface {
 	router(ctx context.Context, client *Client, msg *pb.WebSocketMessage)
-	handleClientDisconnect(c *Client)                // Handle client disconnection cleanup
+	handleClientDisconnect(c *Client) // Handle client disconnection cleanup
 	CreateSFUSession(ctx context.Context, client *Client) error
 	HandleSFUSignal(ctx context.Context, client *Client, signal *pb.SignalRequest)
 }
@@ -115,7 +115,8 @@ type Client struct {
 	Role             RoleType        // Current permission level in the room
 	drawOrderElement *list.Element   // Position reference in room draw order queues
 	mu               sync.RWMutex    // Protects concurrent access to Client fields (like Role)
-	rateLimitEnabled bool // Enable rate limiting (disabled for tests)
+	rateLimitEnabled bool            // Enable rate limiting (disabled for tests)
+	closeOnce        sync.Once       // Ensures send channel is only closed once
 }
 
 // Thread-safe reader
@@ -143,7 +144,7 @@ func (c *Client) readPump() {
 	}()
 
 	for {
-        // Read Binary
+		// Read Binary
 		messageType, data, err := c.conn.ReadMessage()
 		if err != nil {
 			break
@@ -152,7 +153,7 @@ func (c *Client) readPump() {
 			continue
 		}
 
-        // Decode Proto
+		// Decode Proto
 		var msg pb.WebSocketMessage
 		if err := proto.Unmarshal(data, &msg); err != nil {
 			slog.Warn("Failed to unmarshal proto", "ClientId", c.ID, "error", err)
