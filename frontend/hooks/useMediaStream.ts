@@ -1,53 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRoomStore } from '@/store/useRoomStore';
 
-/**
- * Media stream management hook for camera and microphone access.
- * 
- * Responsibilities:
- * - Request and manage getUserMedia permissions
- * - Initialize audio/video streams with constraints
- * - Handle device selection and switching
- * - Auto-restart streams on device changes
- * - Cleanup resources on unmount
- * - Provide stream statistics and diagnostics
- * 
- * State Management:
- * - Local state for initialization lifecycle
- * - Store state for stream references and enabled flags
- * - Ref for stable stream reference across renders
- * 
- * Permissions:
- * - Requests camera/microphone access via getUserMedia
- * - Handles permission denials gracefully
- * - Supports requesting permissions before stream initialization
- * 
- * @param options - Configuration for media stream initialization
- * @param options.autoStart - Start stream automatically on mount (default: false)
- * @param options.video - Video constraints or boolean (default: true)
- * @param options.audio - Audio constraints or boolean (default: true)
- * 
- * @returns Media stream state and control methods
- * 
- * @example
- * ```tsx
- * // Auto-start with custom constraints
- * const { isInitialized, toggleAudio, toggleVideo } = useMediaStream({
- *   autoStart: true,
- *   video: { width: 1280, height: 720, facingMode: 'user' },
- *   audio: { echoCancellation: true, noiseSuppression: true }
- * });
- * 
- * // Manual initialization
- * const { initializeStream, cleanup } = useMediaStream();
- * await initializeStream();
- * 
- * // Get diagnostics
- * const stats = getStreamStats();
- * console.log('Active tracks:', stats.video.count, stats.audio.count);
- * ```
- */
-
 interface MediaStreamState {
   isInitialized: boolean;
   isStarting: boolean;

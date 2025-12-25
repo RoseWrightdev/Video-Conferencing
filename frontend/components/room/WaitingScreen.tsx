@@ -18,31 +18,6 @@ interface WaitingScreenProps {
   isReconnecting?: boolean;
 }
 
-/**
- * WaitingScreen displays a friendly interface for users in the waiting room.
- * 
- * Shows:
- * - Room name and user's display name
- * - Connection status with animated indicators
- * - Informative message about host approval
- * - Reconnection state when network issues occur
- * 
- * Design:
- * - Uses shadcn Empty component for consistent empty state design
- * - Animated loading spinner
- * - Connection status badge with icon
- * - Responsive text sizing
- * 
- * @example
- * ```tsx
- * <WaitingScreen
- *   roomName="Team Standup"
- *   username="Alice"
- *   isConnected={true}
- *   isReconnecting={false}
- * />
- * ```
- */
 export function WaitingScreen({
   roomName,
   username,

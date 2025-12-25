@@ -1,0 +1,61 @@
+---
+# Gateway API Gateway Configuration
+# This is the main entry point for all external traffic
+# Uses Envoy Gateway for L4-L7 load balancing
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: video-conferencing-gateway
+  namespace: video-conferencing
+  annotations:
+    # Enable cert-manager integration for automatic TLS
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/part-of: video-conferencing-platform
+spec:
+  gatewayClassName: envoy
+  
+  listeners:
+  # HTTP Listener (Port 80) - Redirects to HTTPS
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+    # HTTP to HTTPS redirect is configured in HTTPRoute
+  
+  # HTTPS Listener (Port 443) - TLS Termination
+  - name: https
+    protocol: HTTPS
+    port: 443
+    hostname: "*.rosewright.dev"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: rosewright-wildcard-tls
+        kind: Secret
+    allowedRoutes:
+      namespaces:
+        from: Same
+  
+  # WebSocket Listener (Port 8080) - For WebSocket signaling
+  - name: websocket
+    protocol: HTTP
+    port: 8080
+    hostname: "api.rosewright.dev"
+    allowedRoutes:
+      namespaces:
+        from: Same
+
+---
+# Gateway Class (optional - usually pre-installed with Envoy Gateway)
+# Uncomment if you need to customize the gateway class
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: GatewayClass
+# metadata:
+#   name: envoy
+# spec:
+#   controllerName: gateway.envoyproxy.io/gatewayclass-controller

@@ -4,7 +4,7 @@
 pub struct WebSocketMessage {
     #[prost(
         oneof = "web_socket_message::Payload",
-        tags = "1, 2, 3, 4, 5, 6, 7, 20, 21, 8, 9, 22, 23, 24, 25, 10, 11, 12, 13, 14, 15, 16, 17, 18"
+        tags = "1, 2, 3, 4, 5, 6, 7, 20, 21, 8, 9, 22, 23, 24, 25, 10, 11, 12, 13, 14, 15, 16, 17, 18, 26"
     )]
     pub payload: ::core::option::Option<web_socket_message::Payload>,
 }
@@ -71,6 +71,9 @@ pub mod web_socket_message {
         RoomState(super::RoomStateEvent),
         #[prost(message, tag = "18")]
         Error(super::ErrorEvent),
+        /// --- Stream Mapping ---
+        #[prost(message, tag = "26")]
+        TrackAdded(super::TrackAddedEvent),
     }
 }
 /// ---------------------------------------------------------
@@ -256,7 +259,7 @@ pub struct AdminActionEvent {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalRequest {
-    #[prost(oneof = "signal_request::Signal", tags = "1, 2, 3")]
+    #[prost(oneof = "signal_request::Signal", tags = "1, 2, 3, 4")]
     pub signal: ::core::option::Option<signal_request::Signal>,
 }
 /// Nested message and enum types in `SignalRequest`.
@@ -270,12 +273,14 @@ pub mod signal_request {
         IceCandidate(::prost::alloc::string::String),
         #[prost(bool, tag = "3")]
         Renegotiate(bool),
+        #[prost(string, tag = "4")]
+        SdpOffer(::prost::alloc::string::String),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalEvent {
-    #[prost(oneof = "signal_event::Signal", tags = "1, 2")]
+    #[prost(oneof = "signal_event::Signal", tags = "1, 2, 3")]
     pub signal: ::core::option::Option<signal_event::Signal>,
 }
 /// Nested message and enum types in `SignalEvent`.
@@ -287,6 +292,8 @@ pub mod signal_event {
         SdpOffer(::prost::alloc::string::String),
         #[prost(string, tag = "2")]
         IceCandidate(::prost::alloc::string::String),
+        #[prost(string, tag = "3")]
+        SdpAnswer(::prost::alloc::string::String),
     }
 }
 /// ---------------------------------------------------------
@@ -327,4 +334,18 @@ pub struct ErrorEvent {
     pub message: ::prost::alloc::string::String,
     #[prost(bool, tag = "3")]
     pub fatal: bool,
+}
+/// ---------------------------------------------------------
+/// 8. Stream Mapping
+/// ---------------------------------------------------------
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TrackAddedEvent {
+    #[prost(string, tag = "1")]
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub stream_id: ::prost::alloc::string::String,
+    /// "video" or "audio"
+    #[prost(string, tag = "3")]
+    pub track_kind: ::prost::alloc::string::String,
 }

@@ -6,6 +6,8 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { Observable } from "rxjs";
+import { TrackAddedEvent } from "./signaling";
 
 export const protobufPackage = "sfu";
 
@@ -24,6 +26,7 @@ export interface SignalMessage {
   userId: string;
   sdpAnswer?: string | undefined;
   iceCandidate?: string | undefined;
+  sdpOffer?: string | undefined;
 }
 
 export interface SignalResponse {
@@ -37,6 +40,24 @@ export interface DeleteSessionRequest {
 
 export interface DeleteSessionResponse {
   success: boolean;
+}
+
+export interface ListenRequest {
+  roomId: string;
+  userId: string;
+}
+
+export interface SfuEvent {
+  /** DEPRECATED: Use track_event */
+  trackAddedUserId?:
+    | string
+    | undefined;
+  /** DEPRECATED: Use track_event */
+  trackAddedStreamId?: string | undefined;
+  trackEvent?: TrackAddedEvent | undefined;
+  renegotiateSdpOffer?: string | undefined;
+  sdpAnswer?: string | undefined;
+  iceCandidate?: string | undefined;
 }
 
 function createBaseCreateSessionRequest(): CreateSessionRequest {
@@ -144,7 +165,7 @@ export const CreateSessionResponse: MessageFns<CreateSessionResponse> = {
 };
 
 function createBaseSignalMessage(): SignalMessage {
-  return { roomId: "", userId: "", sdpAnswer: undefined, iceCandidate: undefined };
+  return { roomId: "", userId: "", sdpAnswer: undefined, iceCandidate: undefined, sdpOffer: undefined };
 }
 
 export const SignalMessage: MessageFns<SignalMessage> = {
@@ -160,6 +181,9 @@ export const SignalMessage: MessageFns<SignalMessage> = {
     }
     if (message.iceCandidate !== undefined) {
       writer.uint32(34).string(message.iceCandidate);
+    }
+    if (message.sdpOffer !== undefined) {
+      writer.uint32(42).string(message.sdpOffer);
     }
     return writer;
   },
@@ -203,6 +227,14 @@ export const SignalMessage: MessageFns<SignalMessage> = {
           message.iceCandidate = reader.string();
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.sdpOffer = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -221,6 +253,7 @@ export const SignalMessage: MessageFns<SignalMessage> = {
     message.userId = object.userId ?? "";
     message.sdpAnswer = object.sdpAnswer ?? undefined;
     message.iceCandidate = object.iceCandidate ?? undefined;
+    message.sdpOffer = object.sdpOffer ?? undefined;
     return message;
   },
 };
@@ -375,6 +408,179 @@ export const DeleteSessionResponse: MessageFns<DeleteSessionResponse> = {
   },
 };
 
+function createBaseListenRequest(): ListenRequest {
+  return { roomId: "", userId: "" };
+}
+
+export const ListenRequest: MessageFns<ListenRequest> = {
+  encode(message: ListenRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.roomId !== "") {
+      writer.uint32(10).string(message.roomId);
+    }
+    if (message.userId !== "") {
+      writer.uint32(18).string(message.userId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListenRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListenRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.roomId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<ListenRequest>, I>>(base?: I): ListenRequest {
+    return ListenRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListenRequest>, I>>(object: I): ListenRequest {
+    const message = createBaseListenRequest();
+    message.roomId = object.roomId ?? "";
+    message.userId = object.userId ?? "";
+    return message;
+  },
+};
+
+function createBaseSfuEvent(): SfuEvent {
+  return {
+    trackAddedUserId: undefined,
+    trackAddedStreamId: undefined,
+    trackEvent: undefined,
+    renegotiateSdpOffer: undefined,
+    sdpAnswer: undefined,
+    iceCandidate: undefined,
+  };
+}
+
+export const SfuEvent: MessageFns<SfuEvent> = {
+  encode(message: SfuEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.trackAddedUserId !== undefined) {
+      writer.uint32(10).string(message.trackAddedUserId);
+    }
+    if (message.trackAddedStreamId !== undefined) {
+      writer.uint32(18).string(message.trackAddedStreamId);
+    }
+    if (message.trackEvent !== undefined) {
+      TrackAddedEvent.encode(message.trackEvent, writer.uint32(26).fork()).join();
+    }
+    if (message.renegotiateSdpOffer !== undefined) {
+      writer.uint32(34).string(message.renegotiateSdpOffer);
+    }
+    if (message.sdpAnswer !== undefined) {
+      writer.uint32(42).string(message.sdpAnswer);
+    }
+    if (message.iceCandidate !== undefined) {
+      writer.uint32(50).string(message.iceCandidate);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SfuEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSfuEvent();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.trackAddedUserId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.trackAddedStreamId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.trackEvent = TrackAddedEvent.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.renegotiateSdpOffer = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.sdpAnswer = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.iceCandidate = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SfuEvent>, I>>(base?: I): SfuEvent {
+    return SfuEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SfuEvent>, I>>(object: I): SfuEvent {
+    const message = createBaseSfuEvent();
+    message.trackAddedUserId = object.trackAddedUserId ?? undefined;
+    message.trackAddedStreamId = object.trackAddedStreamId ?? undefined;
+    message.trackEvent = (object.trackEvent !== undefined && object.trackEvent !== null)
+      ? TrackAddedEvent.fromPartial(object.trackEvent)
+      : undefined;
+    message.renegotiateSdpOffer = object.renegotiateSdpOffer ?? undefined;
+    message.sdpAnswer = object.sdpAnswer ?? undefined;
+    message.iceCandidate = object.iceCandidate ?? undefined;
+    return message;
+  },
+};
+
 /**
  * SfuService defines the gRPC interface for the Rust Selective Forwarding Unit (SFU).
  * It handles peer session management, signaling, and media routing in the Data Plane.
@@ -389,6 +595,8 @@ export interface SfuService {
   HandleSignal(request: SignalMessage): Promise<SignalResponse>;
   /** 3. Cleanup when a user leaves */
   DeleteSession(request: DeleteSessionRequest): Promise<DeleteSessionResponse>;
+  /** 4. Listen for asynchronous events from SFU (Tracks, Renegotiation) */
+  ListenEvents(request: ListenRequest): Observable<SfuEvent>;
 }
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;

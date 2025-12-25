@@ -29,7 +29,7 @@ func (s *SFUClient) CreateSession(ctx context.Context, uid string, roomID string
 		UserId: uid,    // Correct field name from sfu.proto [cite: 84]
 		RoomId: roomID, // Correct field name from sfu.proto [cite: 84]
 	})
-return resp, err
+	return resp, err
 }
 
 // HandleSignal forwards WebRTC messages (Answer/ICE) from the Frontend to Rust
@@ -43,15 +43,18 @@ func (s *SFUClient) HandleSignal(ctx context.Context, uid string, roomID string,
 
 	// 2. Map the 'oneof' fields from WebSocket (SignalRequest) to gRPC (SignalMessage)
 	// We use the Get*() helpers to safely access oneof fields.
-	
+
 	if val := signal.GetSdpAnswer(); val != "" {
 		// Client sent an Answer
 		rpcReq.Payload = &pb.SignalMessage_SdpAnswer{SdpAnswer: val}
 	} else if val := signal.GetIceCandidate(); val != "" {
 		// Client sent an ICE Candidate
 		rpcReq.Payload = &pb.SignalMessage_IceCandidate{IceCandidate: val}
-	} 
-	// Note: 'Renegotiate' is in signaling.proto [cite: 73] but NOT in sfu.proto[cite: 86], 
+	} else if val := signal.GetSdpOffer(); val != "" {
+		// Client sent an Offer (Renegotiation)
+		rpcReq.Payload = &pb.SignalMessage_SdpOffer{SdpOffer: val}
+	}
+	// Note: 'Renegotiate' is in signaling.proto [cite: 73] but NOT in sfu.proto[cite: 86],
 	// so we cannot forward it to Rust yet.
 
 	return s.client.HandleSignal(ctx, rpcReq)
@@ -64,4 +67,12 @@ func (s *SFUClient) DeleteSession(ctx context.Context, uid string, roomID string
 		RoomId: roomID,
 	})
 	return err
+}
+
+// ListenEvents subscribes to asynchronous events from the SFU (TrackAdded, Renegotiation)
+func (s *SFUClient) ListenEvents(ctx context.Context, uid string, roomID string) (pb.SfuService_ListenEventsClient, error) {
+	return s.client.ListenEvents(ctx, &pb.ListenRequest{
+		UserId: uid,
+		RoomId: roomID,
+	})
 }

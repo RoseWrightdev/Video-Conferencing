@@ -1,5 +1,6 @@
 import { StateCreator } from 'zustand';
 import { type ParticipantSlice, type RoomStoreState, type Participant } from '../types';
+import { loggers } from '@/lib/logger';
 
 export const createParticipantSlice: StateCreator<
   RoomStoreState,
@@ -97,6 +98,7 @@ export const createParticipantSlice: StateCreator<
 
   // --- State Setters (Helpers) ---
   setAudioEnabled: (participantId, enabled) => {
+    loggers.media.debug('setAudioEnabled', { participantId, enabled });
     set((state) => {
       const newUnmuted = new Set(state.unmutedParticipants);
       if (enabled) newUnmuted.add(participantId);
@@ -106,6 +108,7 @@ export const createParticipantSlice: StateCreator<
   },
 
   setVideoEnabled: (participantId, enabled) => {
+    loggers.media.debug('setVideoEnabled', { participantId, enabled });
     set((state) => {
       const newCameraOn = new Set(state.cameraOnParticipants);
       if (enabled) newCameraOn.add(participantId);
@@ -115,6 +118,7 @@ export const createParticipantSlice: StateCreator<
   },
 
   setScreenSharing: (participantId, sharing) => {
+    loggers.media.debug('setScreenSharing', { participantId, sharing });
     set((state) => {
       const newSharing = new Set(state.sharingScreenParticipants);
       if (sharing) newSharing.add(participantId);
@@ -124,6 +128,7 @@ export const createParticipantSlice: StateCreator<
   },
 
   setHandRaised: (participantId, raised) => {
+    loggers.room.debug('setHandRaised', { participantId, raised });
     set((state) => {
       const newRaising = new Set(state.raisingHandParticipants);
       if (raised) newRaising.add(participantId);
@@ -133,6 +138,7 @@ export const createParticipantSlice: StateCreator<
   },
 
   selectParticipant: (participantId) => {
+    loggers.room.debug('selectParticipant', { participantId });
     set({ selectedParticipantId: participantId });
   },
 

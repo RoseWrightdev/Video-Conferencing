@@ -19,19 +19,17 @@ export const useRoom = (params?: {
     updateRoomSettings,
     handleError,
     clearError,
-    // The new Actions
     initializeRoom,
     leaveRoom
   } = useRoomStore();
-
-  const mountedRef = useRef(false);
 
   const joinRoomWithAuth = useCallback(async (
     roomId: string,
     username: string,
     token: string,
   ) => {
-    if (connectionState.isInitializing) return;
+    // If we are already initializing or joined, don't try again
+    if (connectionState.isInitializing || isJoined) return;
 
     if (!token) {
       handleError('Authentication token is required.');
@@ -39,18 +37,19 @@ export const useRoom = (params?: {
     }
 
     try {
-      // Directly call the Store Action (which sets up SFU + WS)
       await initializeRoom(roomId, username, token);
     } catch (error) {
       handleError(`Failed to join room: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [connectionState.isInitializing, initializeRoom, handleError]);
+  }, [connectionState.isInitializing, isJoined, initializeRoom, handleError]);
 
   // Auto-join effect
   useEffect(() => {
-    // Prevent double-firing in Strict Mode
-    if (mountedRef.current) return;
-    mountedRef.current = true;
+    // Logic:
+    // 1. Must check autoJoin param
+    // 2. Must have all required params (roomId, username, token)
+    // 3. Must NOT be already joined
+    // 4. Must NOT be currently initializing
 
     if (
       params?.autoJoin &&
@@ -60,19 +59,30 @@ export const useRoom = (params?: {
       !isJoined &&
       !connectionState.isInitializing
     ) {
+      // NOTE: React Strict Mode will run this effect twice.
+      // The first call sets isInitializing=true synchronously (mostly) in the store
+      // or at least kicks off the async process.
+      // We rely on the store's state to prevent the second call from doing duplicated work.
+
       joinRoomWithAuth(params.roomId, params.username, params.token);
     }
-
-    // Cleanup on unmount
-    return () => {
-      if (isJoined) {
-        leaveRoom();
-      }
-    };
-  }, []); // Run once on mount
+  }, [
+    params?.autoJoin,
+    params?.roomId,
+    params?.username,
+    params?.token,
+    isJoined,
+    connectionState.isInitializing,
+    joinRoomWithAuth
+  ]);
 
   const isRoomReady = connectionState.wsConnected && isJoined && !isWaitingRoom;
   const hasConnectionIssues = connectionState.wsReconnecting || (!connectionState.wsConnected && isJoined);
+
+  // Expose exit method that cleans up everything
+  const exitRoom = useCallback(() => {
+    leaveRoom();
+  }, [leaveRoom]);
 
   return {
     roomId: storeRoomId,
@@ -86,7 +96,7 @@ export const useRoom = (params?: {
     hasConnectionIssues,
     connectionState,
     joinRoomWithAuth,
-    exitRoom: leaveRoom, // Map directly to store action
+    exitRoom,
     updateRoomSettings,
     clearError,
   };

@@ -1,0 +1,238 @@
+---
+# ConfigMap for Rust SFU configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rust-sfu-config
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: rust-sfu
+    app.kubernetes.io/component: media
+data:
+  RUST_LOG: "info"
+  RUST_BACKTRACE: "1"
+  GRPC_PORT: "50051"
+  WEBRTC_UDP_PORT_MIN: "10000"
+  WEBRTC_UDP_PORT_MAX: "20000"
+  
+---
+# StatefulSet for Rust SFU (requires stable network identities for WebRTC)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rust-sfu
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: rust-sfu
+    app.kubernetes.io/component: media
+    app.kubernetes.io/part-of: video-conferencing-platform
+spec:
+  serviceName: rust-sfu-service
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rust-sfu
+      app.kubernetes.io/component: media
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rust-sfu
+        app.kubernetes.io/component: media
+        app.kubernetes.io/part-of: video-conferencing-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "50051"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Use host network for WebRTC UDP port access
+      # WARNING: This bypasses NetworkPolicy - consider using Agones for production
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      
+      serviceAccountName: video-conferencing-backend-sa
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      
+      containers:
+      - name: sfu
+        image: video-conferencing/rust-sfu:latest
+        imagePullPolicy: Always
+        
+        ports:
+        # gRPC port for Go backend communication
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        
+        # WebRTC UDP port range (when using hostNetwork)
+        # Note: These are not directly exposed as container ports in hostNetwork mode
+        
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        
+        envFrom:
+        - configMapRef:
+            name: rust-sfu-config
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        
+        # Health checks for gRPC
+        livenessProbe:
+          exec:
+            command: ["/bin/grpc_health_probe", "-addr=:50051"]
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          exec:
+            command: ["/bin/grpc_health_probe", "-addr=:50051"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+            # Required for binding to privileged ports if needed
+            # add:
+            # - NET_BIND_SERVICE
+        
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+---
+# Headless Service for StatefulSet DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-sfu-service
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: rust-sfu
+    app.kubernetes.io/component: media
+spec:
+  clusterIP: None  # Headless service
+  selector:
+    app.kubernetes.io/name: rust-sfu
+    app.kubernetes.io/component: media
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: grpc
+    protocol: TCP
+
+---
+# LoadBalancer Service for each SFU pod (for UDP WebRTC traffic)
+# This is a template - you'll need one per pod if not using hostNetwork
+# Alternative: Use Agones for dynamic port allocation
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-sfu-lb-0
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: rust-sfu-lb
+    app.kubernetes.io/component: media
+spec:
+  type: LoadBalancer
+  selector:
+    statefulset.kubernetes.io/pod-name: rust-sfu-0
+  ports:
+  - name: webrtc-udp-range
+    port: 10000
+    targetPort: 10000
+    protocol: UDP
+  # Note: This only exposes port 10000. For the full range (10000-20000),
+  # you'd need to either:
+  # 1. Use hostNetwork (current approach)
+  # 2. Deploy Agones for game server-style port allocation
+  # 3. Create multiple services or use a custom LoadBalancer controller
+
+---
+# HorizontalPodAutoscaler for Rust SFU
+# Note: For media servers, you might want to scale based on custom metrics
+# like active WebRTC connections or CPU usage
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rust-sfu-hpa
+  namespace: video-conferencing
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: rust-sfu
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 600  # 10 minutes - be conservative with media servers
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 120
+
+---
+# PodDisruptionBudget for Rust SFU
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rust-sfu-pdb
+  namespace: video-conferencing
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rust-sfu
+      app.kubernetes.io/component: media
+  minAvailable: 2  # Always keep at least 2 SFU pods running

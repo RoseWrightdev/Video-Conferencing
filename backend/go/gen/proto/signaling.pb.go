@@ -4,7 +4,7 @@
 // 	protoc        v6.33.1
 // source: signaling.proto
 
-package sfu
+package proto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -50,6 +50,7 @@ type WebSocketMessage struct {
 	//	*WebSocketMessage_SignalEvent
 	//	*WebSocketMessage_RoomState
 	//	*WebSocketMessage_Error
+	//	*WebSocketMessage_TrackAdded
 	Payload       isWebSocketMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -308,6 +309,15 @@ func (x *WebSocketMessage) GetError() *ErrorEvent {
 	return nil
 }
 
+func (x *WebSocketMessage) GetTrackAdded() *TrackAddedEvent {
+	if x != nil {
+		if x, ok := x.Payload.(*WebSocketMessage_TrackAdded); ok {
+			return x.TrackAdded
+		}
+	}
+	return nil
+}
+
 type isWebSocketMessage_Payload interface {
 	isWebSocketMessage_Payload()
 }
@@ -418,6 +428,11 @@ type WebSocketMessage_Error struct {
 	Error *ErrorEvent `protobuf:"bytes,18,opt,name=error,proto3,oneof"`
 }
 
+type WebSocketMessage_TrackAdded struct {
+	// --- Stream Mapping ---
+	TrackAdded *TrackAddedEvent `protobuf:"bytes,26,opt,name=track_added,json=trackAdded,proto3,oneof"`
+}
+
 func (*WebSocketMessage_Join) isWebSocketMessage_Payload() {}
 
 func (*WebSocketMessage_JoinResponse) isWebSocketMessage_Payload() {}
@@ -465,6 +480,8 @@ func (*WebSocketMessage_SignalEvent) isWebSocketMessage_Payload() {}
 func (*WebSocketMessage_RoomState) isWebSocketMessage_Payload() {}
 
 func (*WebSocketMessage_Error) isWebSocketMessage_Payload() {}
+
+func (*WebSocketMessage_TrackAdded) isWebSocketMessage_Payload() {}
 
 // ---------------------------------------------------------
 // 1. Auth & Connection
@@ -1540,6 +1557,7 @@ type SignalRequest struct {
 	//	*SignalRequest_SdpAnswer
 	//	*SignalRequest_IceCandidate
 	//	*SignalRequest_Renegotiate
+	//	*SignalRequest_SdpOffer
 	Signal        isSignalRequest_Signal `protobuf_oneof:"signal"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1609,6 +1627,15 @@ func (x *SignalRequest) GetRenegotiate() bool {
 	return false
 }
 
+func (x *SignalRequest) GetSdpOffer() string {
+	if x != nil {
+		if x, ok := x.Signal.(*SignalRequest_SdpOffer); ok {
+			return x.SdpOffer
+		}
+	}
+	return ""
+}
+
 type isSignalRequest_Signal interface {
 	isSignalRequest_Signal()
 }
@@ -1625,11 +1652,17 @@ type SignalRequest_Renegotiate struct {
 	Renegotiate bool `protobuf:"varint,3,opt,name=renegotiate,proto3,oneof"`
 }
 
+type SignalRequest_SdpOffer struct {
+	SdpOffer string `protobuf:"bytes,4,opt,name=sdp_offer,json=sdpOffer,proto3,oneof"`
+}
+
 func (*SignalRequest_SdpAnswer) isSignalRequest_Signal() {}
 
 func (*SignalRequest_IceCandidate) isSignalRequest_Signal() {}
 
 func (*SignalRequest_Renegotiate) isSignalRequest_Signal() {}
+
+func (*SignalRequest_SdpOffer) isSignalRequest_Signal() {}
 
 type SignalEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1637,6 +1670,7 @@ type SignalEvent struct {
 	//
 	//	*SignalEvent_SdpOffer
 	//	*SignalEvent_IceCandidate
+	//	*SignalEvent_SdpAnswer
 	Signal        isSignalEvent_Signal `protobuf_oneof:"signal"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1697,6 +1731,15 @@ func (x *SignalEvent) GetIceCandidate() string {
 	return ""
 }
 
+func (x *SignalEvent) GetSdpAnswer() string {
+	if x != nil {
+		if x, ok := x.Signal.(*SignalEvent_SdpAnswer); ok {
+			return x.SdpAnswer
+		}
+	}
+	return ""
+}
+
 type isSignalEvent_Signal interface {
 	isSignalEvent_Signal()
 }
@@ -1709,9 +1752,15 @@ type SignalEvent_IceCandidate struct {
 	IceCandidate string `protobuf:"bytes,2,opt,name=ice_candidate,json=iceCandidate,proto3,oneof"`
 }
 
+type SignalEvent_SdpAnswer struct {
+	SdpAnswer string `protobuf:"bytes,3,opt,name=sdp_answer,json=sdpAnswer,proto3,oneof"`
+}
+
 func (*SignalEvent_SdpOffer) isSignalEvent_Signal() {}
 
 func (*SignalEvent_IceCandidate) isSignalEvent_Signal() {}
+
+func (*SignalEvent_SdpAnswer) isSignalEvent_Signal() {}
 
 // ---------------------------------------------------------
 // 7. Global State
@@ -1920,11 +1969,74 @@ func (x *ErrorEvent) GetFatal() bool {
 	return false
 }
 
+// ---------------------------------------------------------
+// 8. Stream Mapping
+// ---------------------------------------------------------
+type TrackAddedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	StreamId      string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	TrackKind     string                 `protobuf:"bytes,3,opt,name=track_kind,json=trackKind,proto3" json:"track_kind,omitempty"` // "video" or "audio"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrackAddedEvent) Reset() {
+	*x = TrackAddedEvent{}
+	mi := &file_signaling_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrackAddedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrackAddedEvent) ProtoMessage() {}
+
+func (x *TrackAddedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_signaling_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrackAddedEvent.ProtoReflect.Descriptor instead.
+func (*TrackAddedEvent) Descriptor() ([]byte, []int) {
+	return file_signaling_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *TrackAddedEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *TrackAddedEvent) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
+}
+
+func (x *TrackAddedEvent) GetTrackKind() string {
+	if x != nil {
+		return x.TrackKind
+	}
+	return ""
+}
+
 var File_signaling_proto protoreflect.FileDescriptor
 
 const file_signaling_proto_rawDesc = "" +
 	"\n" +
-	"\x0fsignaling.proto\x12\tsignaling\"\x88\r\n" +
+	"\x0fsignaling.proto\x12\tsignaling\"\xc7\r\n" +
 	"\x10WebSocketMessage\x12,\n" +
 	"\x04join\x18\x01 \x01(\v2\x16.signaling.JoinRequestH\x00R\x04join\x12>\n" +
 	"\rjoin_response\x18\x02 \x01(\v2\x17.signaling.JoinResponseH\x00R\fjoinResponse\x12;\n" +
@@ -1956,7 +2068,9 @@ const file_signaling_proto_rawDesc = "" +
 	"\fsignal_event\x18\x10 \x01(\v2\x16.signaling.SignalEventH\x00R\vsignalEvent\x12:\n" +
 	"\n" +
 	"room_state\x18\x11 \x01(\v2\x19.signaling.RoomStateEventH\x00R\troomState\x12-\n" +
-	"\x05error\x18\x12 \x01(\v2\x15.signaling.ErrorEventH\x00R\x05errorB\t\n" +
+	"\x05error\x18\x12 \x01(\v2\x15.signaling.ErrorEventH\x00R\x05error\x12=\n" +
+	"\vtrack_added\x18\x1a \x01(\v2\x1a.signaling.TrackAddedEventH\x00R\n" +
+	"trackAddedB\t\n" +
 	"\apayload\"_\n" +
 	"\vJoinRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
@@ -2024,16 +2138,19 @@ const file_signaling_proto_rawDesc = "" +
 	"\x06action\x18\x02 \x01(\tR\x06action\"B\n" +
 	"\x10AdminActionEvent\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x85\x01\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xa4\x01\n" +
 	"\rSignalRequest\x12\x1f\n" +
 	"\n" +
 	"sdp_answer\x18\x01 \x01(\tH\x00R\tsdpAnswer\x12%\n" +
 	"\rice_candidate\x18\x02 \x01(\tH\x00R\ficeCandidate\x12\"\n" +
-	"\vrenegotiate\x18\x03 \x01(\bH\x00R\vrenegotiateB\b\n" +
-	"\x06signal\"]\n" +
+	"\vrenegotiate\x18\x03 \x01(\bH\x00R\vrenegotiate\x12\x1d\n" +
+	"\tsdp_offer\x18\x04 \x01(\tH\x00R\bsdpOfferB\b\n" +
+	"\x06signal\"~\n" +
 	"\vSignalEvent\x12\x1d\n" +
 	"\tsdp_offer\x18\x01 \x01(\tH\x00R\bsdpOffer\x12%\n" +
-	"\rice_candidate\x18\x02 \x01(\tH\x00R\ficeCandidateB\b\n" +
+	"\rice_candidate\x18\x02 \x01(\tH\x00R\ficeCandidate\x12\x1f\n" +
+	"\n" +
+	"sdp_answer\x18\x03 \x01(\tH\x00R\tsdpAnswerB\b\n" +
 	"\x06signal\"\x91\x01\n" +
 	"\x0eRoomStateEvent\x12>\n" +
 	"\fparticipants\x18\x01 \x03(\v2\x1a.signaling.ParticipantInfoR\fparticipants\x12?\n" +
@@ -2050,7 +2167,12 @@ const file_signaling_proto_rawDesc = "" +
 	"ErrorEvent\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
-	"\x05fatal\x18\x03 \x01(\bR\x05fatalBGZEgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; sfub\x06proto3"
+	"\x05fatal\x18\x03 \x01(\bR\x05fatal\"f\n" +
+	"\x0fTrackAddedEvent\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
+	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1d\n" +
+	"\n" +
+	"track_kind\x18\x03 \x01(\tR\ttrackKindBIZGgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; protob\x06proto3"
 
 var (
 	file_signaling_proto_rawDescOnce sync.Once
@@ -2064,7 +2186,7 @@ func file_signaling_proto_rawDescGZIP() []byte {
 	return file_signaling_proto_rawDescData
 }
 
-var file_signaling_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_signaling_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_signaling_proto_goTypes = []any{
 	(*WebSocketMessage)(nil),             // 0: signaling.WebSocketMessage
 	(*JoinRequest)(nil),                  // 1: signaling.JoinRequest
@@ -2092,6 +2214,7 @@ var file_signaling_proto_goTypes = []any{
 	(*RoomStateEvent)(nil),               // 23: signaling.RoomStateEvent
 	(*ParticipantInfo)(nil),              // 24: signaling.ParticipantInfo
 	(*ErrorEvent)(nil),                   // 25: signaling.ErrorEvent
+	(*TrackAddedEvent)(nil),              // 26: signaling.TrackAddedEvent
 }
 var file_signaling_proto_depIdxs = []int32{
 	1,  // 0: signaling.WebSocketMessage.join:type_name -> signaling.JoinRequest
@@ -2118,15 +2241,16 @@ var file_signaling_proto_depIdxs = []int32{
 	22, // 21: signaling.WebSocketMessage.signal_event:type_name -> signaling.SignalEvent
 	23, // 22: signaling.WebSocketMessage.room_state:type_name -> signaling.RoomStateEvent
 	25, // 23: signaling.WebSocketMessage.error:type_name -> signaling.ErrorEvent
-	23, // 24: signaling.JoinResponse.initial_state:type_name -> signaling.RoomStateEvent
-	13, // 25: signaling.RecentChatsEvent.chats:type_name -> signaling.ChatEvent
-	24, // 26: signaling.RoomStateEvent.participants:type_name -> signaling.ParticipantInfo
-	24, // 27: signaling.RoomStateEvent.waiting_users:type_name -> signaling.ParticipantInfo
-	28, // [28:28] is the sub-list for method output_type
-	28, // [28:28] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	26, // 24: signaling.WebSocketMessage.track_added:type_name -> signaling.TrackAddedEvent
+	23, // 25: signaling.JoinResponse.initial_state:type_name -> signaling.RoomStateEvent
+	13, // 26: signaling.RecentChatsEvent.chats:type_name -> signaling.ChatEvent
+	24, // 27: signaling.RoomStateEvent.participants:type_name -> signaling.ParticipantInfo
+	24, // 28: signaling.RoomStateEvent.waiting_users:type_name -> signaling.ParticipantInfo
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_signaling_proto_init() }
@@ -2159,15 +2283,18 @@ func file_signaling_proto_init() {
 		(*WebSocketMessage_SignalEvent)(nil),
 		(*WebSocketMessage_RoomState)(nil),
 		(*WebSocketMessage_Error)(nil),
+		(*WebSocketMessage_TrackAdded)(nil),
 	}
 	file_signaling_proto_msgTypes[21].OneofWrappers = []any{
 		(*SignalRequest_SdpAnswer)(nil),
 		(*SignalRequest_IceCandidate)(nil),
 		(*SignalRequest_Renegotiate)(nil),
+		(*SignalRequest_SdpOffer)(nil),
 	}
 	file_signaling_proto_msgTypes[22].OneofWrappers = []any{
 		(*SignalEvent_SdpOffer)(nil),
 		(*SignalEvent_IceCandidate)(nil),
+		(*SignalEvent_SdpAnswer)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2175,7 +2302,7 @@ func file_signaling_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_signaling_proto_rawDesc), len(file_signaling_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

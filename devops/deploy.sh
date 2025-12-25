@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-# Social Media Platform Kubernetes Deployment Script
+# Video Conferencing Platform Kubernetes Deployment Script
 # This script deploys the entire platform using Gateway API and Envoy
 
-NAMESPACE="social-media"
+NAMESPACE="video-conferencing"
 KUBECTL_CONTEXT=${KUBECTL_CONTEXT:-""}
 DRY_RUN=${DRY_RUN:-false}
 
@@ -70,11 +70,15 @@ build_images() {
     
     # Build frontend image
     log_info "Building frontend image..."
-    docker build -f devops/docker/frontend.dockerfile -t social-media/frontend:latest .
+    docker build -f devops/docker/frontend.dockerfile -t video-conferencing/frontend:latest .
     
     # Build backend image
     log_info "Building backend image..."
-    docker build -f devops/docker/backend.dockerfile -t social-media/backend:latest .
+    docker build -f devops/docker/backend.dockerfile -t video-conferencing/backend:latest .
+    
+    # Build Rust SFU image
+    log_info "Building Rust SFU image..."
+    docker build -f devops/docker/rust-sfu.dockerfile -t video-conferencing/rust-sfu:latest .
     
     log_success "Docker images built successfully"
 }
@@ -95,56 +99,60 @@ deploy() {
 
 # Main deployment function
 deploy_platform() {
-    log_info "Starting Social Media Platform deployment..."
+    log_info "Starting Video Conferencing Platform deployment..."
     
     # Set kubectl context if provided
     if [ -n "$KUBECTL_CONTEXT" ]; then
         kubectl config use-context "$KUBECTL_CONTEXT"
     fi
     
-    # Deploy in order (minimal stack - no ELK logging infrastructure)
+    # Deploy in order
+    deploy "devops/kubernetes/frontend-deployment.yaml" "Namespace and Frontend Services"
     deploy "devops/kubernetes/security-policies.yaml" "Security Policies and RBAC"
+    deploy "devops/kubernetes/backend-secrets.yaml" "Backend Secrets"
     deploy "devops/kubernetes/backend-deployment.yaml" "Backend Services"
-    deploy "devops/kubernetes/frontend-deployment.yaml" "Frontend Services"
+    deploy "devops/kubernetes/rust-sfu-deployment.yaml" "Rust SFU Services"
     deploy "devops/kubernetes/gateway/gateway.yaml" "Gateway Configuration"
     deploy "devops/kubernetes/gateway/envoy-config.yaml" "Envoy Configuration"
     deploy "devops/kubernetes/gateway/routes.yaml" "HTTP Routes"
     deploy "devops/kubernetes/monitoring.yaml" "Monitoring and Autoscaling"
+    deploy "devops/kubernetes/alertmanager.yaml" "Alertmanager Configuration"
     
     if [ "$DRY_RUN" = "false" ]; then
         # Wait for backend and frontend to be ready
         log_info "Waiting for services to be ready..."
-        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=backend -n social-media
-        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=frontend -n social-media
+        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=backend -n $NAMESPACE || true
+        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=frontend -n $NAMESPACE || true
+        kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=rust-sfu -n $NAMESPACE || true
         
         # Wait for deployments
         log_info "Waiting for deployments to be ready..."
-        kubectl wait --for=condition=available --timeout=300s deployment/frontend-deployment -n $NAMESPACE
-        kubectl wait --for=condition=available --timeout=300s deployment/backend-deployment -n $NAMESPACE
+        kubectl wait --for=condition=available --timeout=300s deployment/frontend-deployment -n $NAMESPACE || true
+        kubectl wait --for=condition=available --timeout=300s deployment/backend-deployment -n $NAMESPACE || true
+        kubectl wait --for=condition=available --timeout=300s statefulset/rust-sfu -n $NAMESPACE || true
         
         # Check Gateway status
         log_info "Checking Gateway status..."
-        kubectl get gateway social-media-gateway -n $NAMESPACE
-        kubectl get httproute -n $NAMESPACE
+        kubectl get gateway video-conferencing-gateway -n $NAMESPACE || true
+        kubectl get httproute -n $NAMESPACE || true
         
-        log_success "Social Media Platform deployed successfully!"
+        log_success "Video Conferencing Platform deployed successfully!"
         
         # Show access information
         log_info "Access Information:"
-        echo "Frontend: https://social-media.example.com"
-        echo "WebSocket: wss://ws.social-media.example.com/ws"
-        echo "Kibana (Logs): http://kibana.logging.svc.cluster.local:5601"
-        echo "Grafana (Metrics): https://social-media.example.com/grafana"
-        echo "Gateway IP: $(kubectl get gateway social-media-gateway -n $NAMESPACE -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || echo 'Not available')"
+        echo "Frontend: https://meet.rosewright.dev"
+        echo "Backend API: https://api.rosewright.dev"
+        echo "WebSocket: wss://api.rosewright.dev/ws"
+        echo "Monitoring: https://monitor.rosewright.dev"
+        echo "Gateway IP: $(kubectl get gateway video-conferencing-gateway -n $NAMESPACE -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || echo 'Not available yet')"
     fi
 }
 
 # Cleanup function
 cleanup() {
-    log_info "Cleaning up Social Media Platform..."
+    log_info "Cleaning up Video Conferencing Platform..."
     
     kubectl delete namespace $NAMESPACE --ignore-not-found=true
-    kubectl delete namespace logging --ignore-not-found=true
     
     log_success "Cleanup completed"
 }
@@ -153,56 +161,39 @@ cleanup() {
 health_check() {
     log_info "Performing health checks..."
     
-    # Check namespaces
+    # Check namespace
     if ! kubectl get namespace $NAMESPACE &> /dev/null; then
         log_error "Namespace $NAMESPACE not found"
-        return 1
-    fi
-    
-    if ! kubectl get namespace logging &> /dev/null; then
-        log_error "Namespace logging not found"
         return 1
     fi
     
     # Check deployments
     local frontend_ready=$(kubectl get deployment frontend-deployment -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
     local backend_ready=$(kubectl get deployment backend-deployment -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-    local kibana_ready=$(kubectl get deployment kibana -n logging -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+    local rust_sfu_ready=$(kubectl get statefulset rust-sfu -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
     
     log_info "Frontend pods ready: $frontend_ready"
     log_info "Backend pods ready: $backend_ready"
-    log_info "Kibana pods ready: $kibana_ready"
-    
-    # Check Elasticsearch cluster
-    local elasticsearch_pods=$(kubectl get pods -n logging -l app.kubernetes.io/name=elasticsearch --no-headers 2>/dev/null | wc -l)
-    local elasticsearch_ready=$(kubectl get pods -n logging -l app.kubernetes.io/name=elasticsearch --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
-    log_info "Elasticsearch pods: $elasticsearch_ready/$elasticsearch_pods"
+    log_info "Rust SFU pods ready: $rust_sfu_ready"
     
     # Check gateway
-    if kubectl get gateway social-media-gateway -n $NAMESPACE &> /dev/null; then
-        local gateway_status=$(kubectl get gateway social-media-gateway -n $NAMESPACE -o jsonpath='{.status.conditions[0].status}' 2>/dev/null || echo "Unknown")
-        log_info "Gateway status: $gateway_status"
+    if kubectl get gateway video-conferencing-gateway -n $NAMESPACE &> /dev/null; then
+        local gateway_status=$(kubectl get gateway video-conferencing-gateway -n $NAMESPACE -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}' 2>/dev/null || echo "Unknown")
+        log_info "Gateway Programmed status: $gateway_status"
+        
+        local gateway_ip=$(kubectl get gateway video-conferencing-gateway -n $NAMESPACE -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || echo "Not assigned")
+        log_info "Gateway IP: $gateway_ip"
     else
         log_warning "Gateway not found"
     fi
     
-    # Check logging sidecars
-    local fluent_bit_containers=$(kubectl get pods -n $NAMESPACE -o jsonpath='{.items[*].spec.containers[?(@.name=="fluent-bit")].name}' 2>/dev/null | wc -w)
-    local vector_containers=$(kubectl get pods -n $NAMESPACE -o jsonpath='{.items[*].spec.containers[?(@.name=="vector")].name}' 2>/dev/null | wc -w)
-    log_info "Fluent Bit sidecars: $fluent_bit_containers"
-    log_info "Vector sidecars: $vector_containers"
+    # Check services
+    log_info "Services:"
+    kubectl get svc -n $NAMESPACE
     
-    # Test Elasticsearch connectivity
-    if [ "$elasticsearch_ready" -gt "0" ]; then
-        local es_health=$(kubectl exec -n logging deployment/elasticsearch -- curl -s http://localhost:9200/_cluster/health | grep -o '"status":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "unknown")
-        log_info "Elasticsearch cluster health: $es_health"
-    fi
-    
-    # Test Kibana connectivity
-    if [ "$kibana_ready" -gt "0" ]; then
-        local kibana_status=$(kubectl exec -n logging deployment/kibana -- curl -s http://localhost:5601/api/status | grep -o '"overall":{"level":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "unknown")
-        log_info "Kibana status: $kibana_status"
-    fi
+    # Check pods
+    log_info "Pods:"
+    kubectl get pods -n $NAMESPACE
     
     log_success "Health check completed"
 }

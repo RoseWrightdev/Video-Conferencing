@@ -4,7 +4,7 @@
 // - protoc             v6.33.1
 // source: sfu.proto
 
-package sfu
+package proto
 
 import (
 	context "context"
@@ -22,6 +22,7 @@ const (
 	SfuService_CreateSession_FullMethodName = "/sfu.SfuService/CreateSession"
 	SfuService_HandleSignal_FullMethodName  = "/sfu.SfuService/HandleSignal"
 	SfuService_DeleteSession_FullMethodName = "/sfu.SfuService/DeleteSession"
+	SfuService_ListenEvents_FullMethodName  = "/sfu.SfuService/ListenEvents"
 )
 
 // SfuServiceClient is the client API for SfuService service.
@@ -38,6 +39,8 @@ type SfuServiceClient interface {
 	HandleSignal(ctx context.Context, in *SignalMessage, opts ...grpc.CallOption) (*SignalResponse, error)
 	// 3. Cleanup when a user leaves
 	DeleteSession(ctx context.Context, in *DeleteSessionRequest, opts ...grpc.CallOption) (*DeleteSessionResponse, error)
+	// 4. Listen for asynchronous events from SFU (Tracks, Renegotiation)
+	ListenEvents(ctx context.Context, in *ListenRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SfuEvent], error)
 }
 
 type sfuServiceClient struct {
@@ -78,6 +81,25 @@ func (c *sfuServiceClient) DeleteSession(ctx context.Context, in *DeleteSessionR
 	return out, nil
 }
 
+func (c *sfuServiceClient) ListenEvents(ctx context.Context, in *ListenRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SfuEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SfuService_ServiceDesc.Streams[0], SfuService_ListenEvents_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ListenRequest, SfuEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SfuService_ListenEventsClient = grpc.ServerStreamingClient[SfuEvent]
+
 // SfuServiceServer is the server API for SfuService service.
 // All implementations must embed UnimplementedSfuServiceServer
 // for forward compatibility.
@@ -92,6 +114,8 @@ type SfuServiceServer interface {
 	HandleSignal(context.Context, *SignalMessage) (*SignalResponse, error)
 	// 3. Cleanup when a user leaves
 	DeleteSession(context.Context, *DeleteSessionRequest) (*DeleteSessionResponse, error)
+	// 4. Listen for asynchronous events from SFU (Tracks, Renegotiation)
+	ListenEvents(*ListenRequest, grpc.ServerStreamingServer[SfuEvent]) error
 	mustEmbedUnimplementedSfuServiceServer()
 }
 
@@ -110,6 +134,9 @@ func (UnimplementedSfuServiceServer) HandleSignal(context.Context, *SignalMessag
 }
 func (UnimplementedSfuServiceServer) DeleteSession(context.Context, *DeleteSessionRequest) (*DeleteSessionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteSession not implemented")
+}
+func (UnimplementedSfuServiceServer) ListenEvents(*ListenRequest, grpc.ServerStreamingServer[SfuEvent]) error {
+	return status.Error(codes.Unimplemented, "method ListenEvents not implemented")
 }
 func (UnimplementedSfuServiceServer) mustEmbedUnimplementedSfuServiceServer() {}
 func (UnimplementedSfuServiceServer) testEmbeddedByValue()                    {}
@@ -186,6 +213,17 @@ func _SfuService_DeleteSession_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SfuService_ListenEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ListenRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SfuServiceServer).ListenEvents(m, &grpc.GenericServerStream[ListenRequest, SfuEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SfuService_ListenEventsServer = grpc.ServerStreamingServer[SfuEvent]
+
 // SfuService_ServiceDesc is the grpc.ServiceDesc for SfuService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -206,6 +244,12 @@ var SfuService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SfuService_DeleteSession_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ListenEvents",
+			Handler:       _SfuService_ListenEvents_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "sfu.proto",
 }

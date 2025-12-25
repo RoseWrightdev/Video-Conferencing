@@ -117,6 +117,7 @@ type Client struct {
 	mu               sync.RWMutex    // Protects concurrent access to Client fields (like Role)
 	rateLimitEnabled bool            // Enable rate limiting (disabled for tests)
 	closeOnce        sync.Once       // Ensures send channel is only closed once
+	closed           bool            // Track if client has been disconnected
 }
 
 // Thread-safe reader
@@ -181,15 +182,32 @@ func (c *Client) writePump() {
 }
 
 func (c *Client) sendProto(msg *pb.WebSocketMessage) {
+	// Check if client is closed before attempting to send
+	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		slog.Debug("Skipping send to closed client", "clientId", c.ID)
+		return
+	}
+	c.mu.RUnlock()
+
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		slog.Error("Failed to marshal proto response", "error", err)
 		return
 	}
+
+	// Add panic recovery as a safety net
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Warn("Recovered from panic in sendProto", "clientId", c.ID, "panic", r)
+		}
+	}()
+
 	// Thread-safe send
 	select {
 	case c.send <- data:
 	default:
-		slog.Warn("Client send channel full", "clientId", c.ID)
+		slog.Warn("Client send channel full or closed", "clientId", c.ID)
 	}
 }

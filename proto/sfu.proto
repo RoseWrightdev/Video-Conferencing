@@ -1,7 +1,9 @@
 syntax = "proto3";
 package sfu;
 
-option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto/sfu";
+import "signaling.proto";
+
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; proto";
 
 // SfuService defines the gRPC interface for the Rust Selective Forwarding Unit (SFU).
 // It handles peer session management, signaling, and media routing in the Data Plane.
@@ -15,6 +17,9 @@ service SfuService {
 
   // 3. Cleanup when a user leaves
   rpc DeleteSession (DeleteSessionRequest) returns (DeleteSessionResponse);
+
+  // 4. Listen for asynchronous events from SFU (Tracks, Renegotiation)
+  rpc ListenEvents (ListenRequest) returns (stream SfuEvent);
 }
 
 message CreateSessionRequest {
@@ -32,6 +37,7 @@ message SignalMessage {
   oneof payload {
     string sdp_answer = 3;
     string ice_candidate = 4;
+    string sdp_offer = 5;
   }
 }
 
@@ -46,4 +52,20 @@ message DeleteSessionRequest {
 
 message DeleteSessionResponse {
   bool success = 1;
+}
+
+message ListenRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message SfuEvent {
+  oneof payload {
+    string track_added_user_id = 1; // DEPRECATED: Use track_event
+    string track_added_stream_id = 2; // DEPRECATED: Use track_event
+    signaling.TrackAddedEvent track_event = 3;
+    string renegotiate_sdp_offer = 4;
+    string sdp_answer = 5;
+    string ice_candidate = 6;
+  }
 }

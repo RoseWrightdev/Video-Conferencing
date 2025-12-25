@@ -1,19 +1,23 @@
 ---
-# Namespace for the Social Media application
+# Namespace for the Video Conferencing application
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: social-media
+  name: video-conferencing
   labels:
-    app.kubernetes.io/name: social-media
-    app.kubernetes.io/part-of: social-media-platform
+    app.kubernetes.io/name: video-conferencing
+    app.kubernetes.io/part-of: video-conferencing-platform
+    # Pod Security Standards (Kubernetes 1.25+)
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 # ConfigMap for frontend configuration
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: frontend-config
-  namespace: social-media
+  namespace: video-conferencing
   labels:
     app.kubernetes.io/name: frontend
     app.kubernetes.io/component: config
@@ -27,7 +31,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend-deployment
-  namespace: social-media
+  namespace: video-conferencing
   labels:
     app.kubernetes.io/name: frontend
     app.kubernetes.io/component: web
@@ -48,8 +52,22 @@ spec:
       labels:
         app.kubernetes.io/name: frontend
         app.kubernetes.io/component: web
-        app.kubernetes.io/part-of: social-media-platform
+        app.kubernetes.io/part-of: video-conferencing-platform
     spec:
+      # Pod anti-affinity to spread pods across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - frontend
+              topologyKey: kubernetes.io/hostname
+      
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -106,7 +124,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend-service
-  namespace: social-media
+  namespace: video-conferencing
   labels:
     app.kubernetes.io/name: frontend
     app.kubernetes.io/component: web

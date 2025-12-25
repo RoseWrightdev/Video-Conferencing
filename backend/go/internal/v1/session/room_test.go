@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 )
 
 // MockWSConnection implements wsConnection interface for testing
@@ -58,6 +60,52 @@ func (m *MockWSConnection) IsClosed() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.closed
+}
+
+// MockListenEventsClient mocks the gRPC stream
+type MockListenEventsClient struct {
+	grpc.ClientStream
+	RecvFunc func() (*pb.SfuEvent, error)
+}
+
+func (m *MockListenEventsClient) Recv() (*pb.SfuEvent, error) {
+	if m.RecvFunc != nil {
+		return m.RecvFunc()
+	}
+	return nil, nil
+}
+
+// MockSFUProvider implements SFUProvider for testing
+type MockSFUProvider struct {
+	CreateSessionCalled bool
+	HandleSignalCalled  bool
+	DeleteSessionCalled bool
+	ListenEventsCalled  bool
+}
+
+func (m *MockSFUProvider) CreateSession(ctx context.Context, uid string, roomID string) (*pb.CreateSessionResponse, error) {
+	m.CreateSessionCalled = true
+	return &pb.CreateSessionResponse{SdpOffer: "v=0\r\ntest-offer"}, nil
+}
+
+func (m *MockSFUProvider) HandleSignal(ctx context.Context, uid string, roomID string, signal *pb.SignalRequest) (*pb.SignalResponse, error) {
+	m.HandleSignalCalled = true
+	return &pb.SignalResponse{Success: true}, nil
+}
+
+func (m *MockSFUProvider) DeleteSession(ctx context.Context, uid string, roomID string) error {
+	m.DeleteSessionCalled = true
+	return nil
+}
+
+func (m *MockSFUProvider) ListenEvents(ctx context.Context, uid string, roomID string) (pb.SfuService_ListenEventsClient, error) {
+	m.ListenEventsCalled = true
+	return &MockListenEventsClient{
+		RecvFunc: func() (*pb.SfuEvent, error) {
+			// By default, just block or return error to stop the loop in tests
+			return nil, fmt.Errorf("EOF")
+		},
+	}, nil
 }
 
 func TestNewRoom(t *testing.T) {
@@ -117,6 +165,7 @@ func TestHandleClientConnect_SubsequentUsers(t *testing.T) {
 	// Add first user as host
 	host := createTestClient("host1", "Host", RoleTypeHost)
 	room.addHost(ctx, host)
+	room.ownerID = host.ID // [FIX] Manually set owner since we bypassed handleClientConnect
 
 	// Second user should go to waiting
 	client := createTestClient("user2", "User 2", RoleTypeWaiting)
@@ -135,6 +184,7 @@ func TestHandleClientConnect_DuplicateConnection(t *testing.T) {
 	// Add first client as host
 	oldClient := createTestClient("user1", "Old Client", RoleTypeHost)
 	room.addHost(ctx, oldClient)
+	room.ownerID = oldClient.ID // [FIX] Set owner
 	assert.Contains(t, room.hosts, oldClient.ID)
 
 	// Connect second client with same ID (simulating refresh)
@@ -282,12 +332,29 @@ func TestRouter(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Join (SFU Session)",
+			message: &pb.WebSocketMessage{
+				Payload: &pb.WebSocketMessage_Join{
+					Join: &pb.JoinRequest{
+						Token:       "test-token",
+						RoomId:      "test-room",
+						DisplayName: "User",
+					},
+				},
+			},
+		},
 	}
+
+	mockSfu := &MockSFUProvider{}
+	room.sfu = mockSfu
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Should not panic
 			room.router(ctx, client, tt.message)
+			if tt.name == "Join (SFU Session)" {
+				assert.True(t, mockSfu.CreateSessionCalled)
+			}
 		})
 	}
 }

@@ -208,6 +208,13 @@ func (r *Room) raiseHand(client *Client, raised bool) {
 // --- Cleanup ---
 
 func (r *Room) disconnectClient(ctx context.Context, client *Client) {
+	// Clean up SFU session if it exists
+	if r.sfu != nil {
+		if err := r.sfu.DeleteSession(ctx, string(client.ID), string(r.ID)); err != nil {
+			slog.Warn("Failed to delete SFU session on disconnect", "clientId", client.ID, "error", err)
+		}
+	}
+
 	r.deleteHost(ctx, client)
 	r.deleteParticipant(ctx, client)
 	r.deleteWaiting(client)
@@ -216,6 +223,12 @@ func (r *Room) disconnectClient(ctx context.Context, client *Client) {
 	delete(r.sharingScreen, client.ID)
 	delete(r.unmuted, client.ID)
 	delete(r.cameraOn, client.ID)
+
+	// Mark client as closed BEFORE closing the channel
+	// This allows sendProto to detect and skip closed clients
+	client.mu.Lock()
+	client.closed = true
+	client.mu.Unlock()
 
 	// Use sync.Once to ensure channel is only closed once
 	// This prevents panic when duplicate connections are cleaned up

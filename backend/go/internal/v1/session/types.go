@@ -22,6 +22,7 @@ const (
 	RoleTypeParticipant RoleType = "participant" // Active participants
 	RoleTypeScreenshare RoleType = "screenshare" // Participants sharing screen
 	RoleTypeHost        RoleType = "host"        // Administrators
+	RoleTypeUnknown     RoleType = "unknown"     // Default/Unknown state
 )
 
 // --- Internal Storage Types (Chat History) ---

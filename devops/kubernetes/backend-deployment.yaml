@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: backend-config
-  namespace: social-media
+  namespace: video-conferencing
   labels:
     app.kubernetes.io/name: backend
     app.kubernetes.io/component: config
@@ -20,7 +20,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-deployment
-  namespace: social-media
+  namespace: video-conferencing
   labels:
     app.kubernetes.io/name: backend
     app.kubernetes.io/component: api
@@ -47,7 +47,22 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: social-media-backend-sa
+      serviceAccountName: video-conferencing-backend-sa
+      
+      # Pod anti-affinity to spread pods across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - backend
+              topologyKey: kubernetes.io/hostname
+      
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -110,7 +125,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: backend-service
-  namespace: social-media
+  namespace: video-conferencing
   labels:
     app.kubernetes.io/name: backend
     app.kubernetes.io/component: api

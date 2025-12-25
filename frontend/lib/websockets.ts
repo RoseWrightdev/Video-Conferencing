@@ -34,6 +34,7 @@ export class WebSocketClient {
           const message = WebSocketMessage.decode(data);
 
           // 3. Broadcast to all listeners (Store, SFUClient)
+          console.log('[WS-DEBUG] Decoded Message:', JSON.stringify(message, null, 2));
           this.handlers.forEach(h => h(message));
         } catch (e) {
           this.logger.error('Failed to decode message', e);

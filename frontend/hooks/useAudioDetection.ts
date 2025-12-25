@@ -1,14 +1,5 @@
 import { useEffect, useState } from 'react';
 
-/**
- * Hook to detect audio activity on a MediaStream.
- * Uses Web Audio API to analyze volume levels and detect speech.
- * 
- * @param stream - The MediaStream to monitor for audio activity
- * @param threshold - Volume threshold for detecting speech (0-1, default 0.02)
- * @param enabled - Whether audio detection is active (default true)
- * @returns boolean indicating if audio activity is detected
- */
 export function useAudioDetection(
   stream: MediaStream | null | undefined,
   threshold: number = 0.02,

@@ -62,7 +62,11 @@ export interface WebSocketMessage {
     | undefined;
   /** --- State Sync --- */
   roomState?: RoomStateEvent | undefined;
-  error?: ErrorEvent | undefined;
+  error?:
+    | ErrorEvent
+    | undefined;
+  /** --- Stream Mapping --- */
+  trackAdded?: TrackAddedEvent | undefined;
 }
 
 /**
@@ -202,11 +206,13 @@ export interface SignalRequest {
   sdpAnswer?: string | undefined;
   iceCandidate?: string | undefined;
   renegotiate?: boolean | undefined;
+  sdpOffer?: string | undefined;
 }
 
 export interface SignalEvent {
   sdpOffer?: string | undefined;
   iceCandidate?: string | undefined;
+  sdpAnswer?: string | undefined;
 }
 
 /**
@@ -235,6 +241,18 @@ export interface ErrorEvent {
   fatal: boolean;
 }
 
+/**
+ * ---------------------------------------------------------
+ * 8. Stream Mapping
+ * ---------------------------------------------------------
+ */
+export interface TrackAddedEvent {
+  userId: string;
+  streamId: string;
+  /** "video" or "audio" */
+  trackKind: string;
+}
+
 function createBaseWebSocketMessage(): WebSocketMessage {
   return {
     join: undefined,
@@ -261,6 +279,7 @@ function createBaseWebSocketMessage(): WebSocketMessage {
     signalEvent: undefined,
     roomState: undefined,
     error: undefined,
+    trackAdded: undefined,
   };
 }
 
@@ -337,6 +356,9 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
     }
     if (message.error !== undefined) {
       ErrorEvent.encode(message.error, writer.uint32(146).fork()).join();
+    }
+    if (message.trackAdded !== undefined) {
+      TrackAddedEvent.encode(message.trackAdded, writer.uint32(210).fork()).join();
     }
     return writer;
   },
@@ -540,6 +562,14 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
           message.error = ErrorEvent.decode(reader, reader.uint32());
           continue;
         }
+        case 26: {
+          if (tag !== 210) {
+            break;
+          }
+
+          message.trackAdded = TrackAddedEvent.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -628,6 +658,9 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
       : undefined;
     message.error = (object.error !== undefined && object.error !== null)
       ? ErrorEvent.fromPartial(object.error)
+      : undefined;
+    message.trackAdded = (object.trackAdded !== undefined && object.trackAdded !== null)
+      ? TrackAddedEvent.fromPartial(object.trackAdded)
       : undefined;
     return message;
   },
@@ -1808,7 +1841,7 @@ export const AdminActionEvent: MessageFns<AdminActionEvent> = {
 };
 
 function createBaseSignalRequest(): SignalRequest {
-  return { sdpAnswer: undefined, iceCandidate: undefined, renegotiate: undefined };
+  return { sdpAnswer: undefined, iceCandidate: undefined, renegotiate: undefined, sdpOffer: undefined };
 }
 
 export const SignalRequest: MessageFns<SignalRequest> = {
@@ -1821,6 +1854,9 @@ export const SignalRequest: MessageFns<SignalRequest> = {
     }
     if (message.renegotiate !== undefined) {
       writer.uint32(24).bool(message.renegotiate);
+    }
+    if (message.sdpOffer !== undefined) {
+      writer.uint32(34).string(message.sdpOffer);
     }
     return writer;
   },
@@ -1856,6 +1892,14 @@ export const SignalRequest: MessageFns<SignalRequest> = {
           message.renegotiate = reader.bool();
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.sdpOffer = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1873,12 +1917,13 @@ export const SignalRequest: MessageFns<SignalRequest> = {
     message.sdpAnswer = object.sdpAnswer ?? undefined;
     message.iceCandidate = object.iceCandidate ?? undefined;
     message.renegotiate = object.renegotiate ?? undefined;
+    message.sdpOffer = object.sdpOffer ?? undefined;
     return message;
   },
 };
 
 function createBaseSignalEvent(): SignalEvent {
-  return { sdpOffer: undefined, iceCandidate: undefined };
+  return { sdpOffer: undefined, iceCandidate: undefined, sdpAnswer: undefined };
 }
 
 export const SignalEvent: MessageFns<SignalEvent> = {
@@ -1888,6 +1933,9 @@ export const SignalEvent: MessageFns<SignalEvent> = {
     }
     if (message.iceCandidate !== undefined) {
       writer.uint32(18).string(message.iceCandidate);
+    }
+    if (message.sdpAnswer !== undefined) {
+      writer.uint32(26).string(message.sdpAnswer);
     }
     return writer;
   },
@@ -1915,6 +1963,14 @@ export const SignalEvent: MessageFns<SignalEvent> = {
           message.iceCandidate = reader.string();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.sdpAnswer = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1931,6 +1987,7 @@ export const SignalEvent: MessageFns<SignalEvent> = {
     const message = createBaseSignalEvent();
     message.sdpOffer = object.sdpOffer ?? undefined;
     message.iceCandidate = object.iceCandidate ?? undefined;
+    message.sdpAnswer = object.sdpAnswer ?? undefined;
     return message;
   },
 };
@@ -2185,6 +2242,76 @@ export const ErrorEvent: MessageFns<ErrorEvent> = {
     message.code = object.code ?? "";
     message.message = object.message ?? "";
     message.fatal = object.fatal ?? false;
+    return message;
+  },
+};
+
+function createBaseTrackAddedEvent(): TrackAddedEvent {
+  return { userId: "", streamId: "", trackKind: "" };
+}
+
+export const TrackAddedEvent: MessageFns<TrackAddedEvent> = {
+  encode(message: TrackAddedEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.streamId !== "") {
+      writer.uint32(18).string(message.streamId);
+    }
+    if (message.trackKind !== "") {
+      writer.uint32(26).string(message.trackKind);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TrackAddedEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTrackAddedEvent();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.streamId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.trackKind = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<TrackAddedEvent>, I>>(base?: I): TrackAddedEvent {
+    return TrackAddedEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TrackAddedEvent>, I>>(object: I): TrackAddedEvent {
+    const message = createBaseTrackAddedEvent();
+    message.userId = object.userId ?? "";
+    message.streamId = object.streamId ?? "";
+    message.trackKind = object.trackKind ?? "";
     return message;
   },
 };

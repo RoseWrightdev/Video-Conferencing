@@ -1,0 +1,191 @@
+---
+# Alertmanager Configuration for Video Conferencing Platform
+# Handles alert routing and notifications
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      # Slack webhook URL (set via secret or env var)
+      slack_api_url: '${SLACK_WEBHOOK_URL}'
+    
+    # Route tree for alerts
+    route:
+      group_by: ['alertname', 'severity', 'service']
+      group_wait: 10s        # Wait before sending first notification
+      group_interval: 10s     # How often to send about new alerts
+      repeat_interval: 1h     # How often to resend same alert
+      receiver: 'default-receiver'
+      
+      # Child routes for specific alert types
+      routes:
+      # Critical alerts go to PagerDuty/on-call
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        continue: true
+      
+      # Warning alerts go to Slack
+      - match:
+          severity: warning
+        receiver: 'slack-warnings'
+      
+      # WebRTC-specific alerts
+      - match:
+          category: webrtc
+        receiver: 'webrtc-team'
+    
+    receivers:
+    # Default receiver (logs only)
+    - name: 'default-receiver'
+      webhook_configs:
+      - url: 'http://localhost:9093/webhook'
+    
+    # Critical alerts (would integrate with PagerDuty in production)
+    - name: 'critical-alerts'
+      slack_configs:
+      - channel: '#alerts-critical'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Service:* {{ .Labels.service }}
+          {{ end }}
+        send_resolved: true
+      # Uncomment for PagerDuty integration:
+      # pagerduty_configs:
+      # - service_key: '${PAGERDUTY_SERVICE_KEY}'
+      #   description: '{{ .GroupLabels.alertname }}'
+    
+    # Warning alerts
+    - name: 'slack-warnings'
+      slack_configs:
+      - channel: '#alerts-warnings'
+        title: '⚠️ Warning: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+    
+    # WebRTC team notifications
+    - name: 'webrtc-team'
+      slack_configs:
+      - channel: '#webrtc-monitoring'
+        title: '📊 WebRTC Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Service:* Video Conferencing
+          *Issue:* {{ .Annotations.summary }}
+          *Details:* {{ .Annotations.description }}
+          *Current Value:* {{ .Annotations.value }}
+          {{ end }}
+        send_resolved: true
+
+---
+# Alertmanager Secret for sensitive values
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-secrets
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: alertmanager
+type: Opaque
+data:
+  # Base64 encode your webhook URLs
+  # echo -n "https://hooks.slack.com/services/YOUR/WEBHOOK/URL" | base64
+  SLACK_WEBHOOK_URL: aHR0cHM6Ly9ob29rcy5zbGFjay5jb20vc2VydmljZXMvWU9VUi9XRUJPSy9VUkw=  # CHANGE THIS
+  # Optional PagerDuty service key
+  PAGERDUTY_SERVICE_KEY: ""  # Add if using PagerDuty
+
+---
+# Alertmanager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertmanager
+        app.kubernetes.io/component: monitoring
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        args:
+        - '--config.file=/etc/alertmanager/alertmanager.yml'
+        - '--storage.path=/alertmanager'
+        - '--web.listen-address=:9093'
+        ports:
+        - name: web
+          containerPort: 9093
+        env:
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: alertmanager-secrets
+              key: SLACK_WEBHOOK_URL
+        - name: PAGERDUTY_SERVICE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: alertmanager-secrets
+              key: PAGERDUTY_SERVICE_KEY
+              optional: true
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+        - name: storage
+          mountPath: /alertmanager
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: config
+        configMap:
+          name: alertmanager-config
+      - name: storage
+        emptyDir: {}
+
+---
+# Alertmanager Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: alertmanager
+spec:
+  type: ClusterIP
+  ports:
+  - name: web
+    port: 9093
+    targetPort: web
+  selector:
+    app.kubernetes.io/name: alertmanager

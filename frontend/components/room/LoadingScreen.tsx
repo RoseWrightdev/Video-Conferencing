@@ -7,19 +7,6 @@ interface LoadingScreenProps {
   message?: string;
 }
 
-/**
- * Loading screen displayed during initial room connection.
- * 
- * Prevents the flash of waiting room content when refreshing or first loading the room page.
- * Shows while:
- * - Establishing WebSocket connection
- * - Authenticating with JWT token
- * - Receiving initial room state
- * - Determining waiting room vs. active room status
- * 
- * @param status - Current loading phase for appropriate messaging
- * @param message - Optional custom message to display
- */
 export function LoadingScreen({ status = 'loading', message }: LoadingScreenProps) {
   const statusMessages = {
     authenticating: 'Authenticating...',

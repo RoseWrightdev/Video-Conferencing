@@ -4,7 +4,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: backend-metrics
-  namespace: social-media
+  namespace: video-conferencing
   labels:
     app.kubernetes.io/name: backend-metrics
 spec:
@@ -23,7 +23,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: webrtc-alerts
-  namespace: social-media
+  namespace: video-conferencing
   labels:
     app.kubernetes.io/name: webrtc-alerts
 spec:
@@ -35,43 +35,75 @@ spec:
       for: 2m
       labels:
         severity: warning
+        category: webrtc
+        service: backend
       annotations:
         summary: "High WebSocket connection failure rate"
         description: "WebSocket connection failure rate is {{ $value | humanizePercentage }}"
+        value: "{{ $value | humanizePercentage }}"
     
     - alert: BackendDown
       expr: up{job="backend"} == 0
       for: 1m
       labels:
         severity: critical
+        service: backend
       annotations:
         summary: "Backend service is down"
-        description: "Backend API is not responding"
+        description: "Backend API is not responding - all video conferencing features are unavailable"
+    
+    - alert: RustSFUDown
+      expr: up{job="rust-sfu"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        category: webrtc
+        service: rust-sfu
+      annotations:
+        summary: "Rust SFU service is down"
+        description: "Media routing is unavailable - users cannot establish WebRTC connections"
     
     - alert: HighRoomCount
       expr: webrtc_rooms_active > 100
       for: 5m
       labels:
         severity: warning
+        category: webrtc
+        service: backend
       annotations:
         summary: "High number of active rooms"
-        description: "Active rooms count is {{ $value }}"
+        description: "Active rooms count is {{ $value }} - consider scaling"
+        value: "{{ $value }}"
     
     - alert: HighMessageProcessingLatency
       expr: histogram_quantile(0.95, rate(message_processing_duration_seconds_bucket[5m])) > 1
       for: 5m
       labels:
         severity: warning
+        category: webrtc
+        service: backend
       annotations:
         summary: "High message processing latency"
-        description: "95th percentile message processing latency is {{ $value }}s"
+        description: "95th percentile message processing latency is {{ $value }}s - users may experience delays"
+        value: "{{ $value }}s"
+    
+    - alert: HighPodMemoryUsage
+      expr: container_memory_usage_bytes{namespace="video-conferencing"} / container_spec_memory_limit_bytes{namespace="video-conferencing"} > 0.9
+      for: 5m
+      labels:
+        severity: warning
+        service: infrastructure
+      annotations:
+        summary: "High memory usage detected"
+        description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of memory limit"
+
 ---
 # HorizontalPodAutoscaler for frontend
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: frontend-hpa
-  namespace: social-media
+  namespace: video-conferencing
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -111,7 +143,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: backend-hpa
-  namespace: social-media
+  namespace: video-conferencing
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -151,7 +183,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: frontend-pdb
-  namespace: social-media
+  namespace: video-conferencing
 spec:
   selector:
     matchLabels:
@@ -164,7 +196,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: backend-pdb
-  namespace: social-media
+  namespace: video-conferencing
 spec:
   selector:
     matchLabels:

@@ -4,9 +4,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { useRoom, useParticipants, useChat, useMediaControls } from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
+import { useAudioVisualizer } from '@/hooks/useAudioVisualizer';
 import { createLogger } from '@/lib/logger';
 import ChatPanel from '@/components/chat-panel/components/ChatPanel';
-import ControlsPanel from '@/components/room/components/Controls';
+import ControlBar from '@/components/room/components/Controls';
 import PermissionsScreen from '@/components/room/components/PermissionsScreen';
 import { WaitingScreen } from '@/components/room/WaitingScreen';
 import { LoadingScreen } from '@/components/room/LoadingScreen';
@@ -36,12 +37,12 @@ export default function RoomPage() {
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const { requestPermissions, initializeStream, refreshDevices } = useMediaStream();
-  const { 
-    localStream, 
+  const {
+    localStream,
     screenShareStream,
-    leaveRoom, 
-    wsClient, 
-    clientInfo, 
+    leaveRoom,
+    wsClient,
+    clientInfo,
     raisingHandParticipants,
     setHandRaised,
     participants,
@@ -64,10 +65,10 @@ export default function RoomPage() {
     pinParticipant,
   } = useRoomStore();
 
-  const { 
-    currentUserId, 
+  const {
+    currentUserId,
     connectionState,
-    isHost 
+    isHost
   } = useRoom({
     roomId,
     username: session?.user?.name || session?.user?.email || 'Anonymous',
@@ -77,14 +78,66 @@ export default function RoomPage() {
 
   const { messages, sendTextMessage, closeChat, isChatPanelOpen, toggleChatPanel, unreadCount, markMessagesRead } = useChat();
   const { getParticipant } = useParticipants();
-  const { 
-    isAudioEnabled, 
-    isVideoEnabled, 
+
+  // DEBUG: Track waiting participants updates
+  useEffect(() => {
+    logger.debug('RoomPage: Waiting Participants Updated', {
+      count: waitingParticipants.size,
+      participants: Array.from(waitingParticipants.values()).map(p => p.username),
+      isHost,
+      isParticipantsPanelOpen
+    });
+  }, [waitingParticipants, isHost, isParticipantsPanelOpen]);
+
+  const {
+    isAudioEnabled,
+    isVideoEnabled,
     isScreenSharing,
     toggleAudio,
     toggleVideo,
-    toggleScreenShare
+    toggleScreenShare,
   } = useMediaControls();
+
+  // Permission-aware toggles
+  const handleAudioToggle = async () => {
+    // Always ensure localStream is initialized before toggling
+    if (!localStream) {
+      let granted = permissionsGranted;
+      if (!permissionsGranted) {
+        granted = await requestPermissions();
+        if (granted) {
+          setPermissionsGranted(true);
+          localStorage.setItem('media-permissions-granted', 'true');
+        }
+      }
+      if (granted) {
+        await initializeStream();
+      } else {
+        return;
+      }
+    }
+    await toggleAudio();
+  };
+
+  const handleVideoToggle = async () => {
+    // Always ensure localStream is initialized before toggling
+    if (!localStream) {
+      let granted = permissionsGranted;
+      if (!permissionsGranted) {
+        granted = await requestPermissions();
+        if (granted) {
+          setPermissionsGranted(true);
+          localStorage.setItem('media-permissions-granted', 'true');
+        }
+      }
+      if (granted) {
+        await initializeStream();
+      } else {
+        return;
+      }
+    }
+    await toggleVideo();
+  };
 
 
   const handleRequestPermissions = async () => {
@@ -103,11 +156,11 @@ export default function RoomPage() {
   useEffect(() => {
     const checkBrowserPermissions = async () => {
       if (typeof navigator === 'undefined' || !navigator.permissions) return;
-      
+
       try {
         const cameraPermission = await navigator.permissions.query({ name: 'camera' as PermissionName });
         const microphonePermission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-        
+
         // If both are granted, just set permissions flag (don't create stream yet)
         if (cameraPermission.state === 'granted' && microphonePermission.state === 'granted') {
           setPermissionsGranted(true);
@@ -124,121 +177,29 @@ export default function RoomPage() {
     }
   }, [status, permissionsGranted, isWaitingRoom]);
 
-  // Audio level detection for speaking indicator (Local + Remote)
-  useEffect(() => {
-    if (!currentUserId) return;
-
-    // Single AudioContext for all participants to avoid browser limits
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const analysers = new Map<string, AnalyserNode>();
-    const sources = new Map<string, MediaStreamAudioSourceNode>();
-    const clonedTracks = new Map<string, MediaStreamTrack>();
-
-    // Helper to setup detection for a stream
-    const setupAudioDetection = (id: string, stream: MediaStream) => {
-      if (analysers.has(id)) return; // Already setup
-
-      const audioTracks = stream.getAudioTracks();
-      if (audioTracks.length === 0) return;
-
-      try {
-        // Clone track to avoid interfering with video playback
-        const track = audioTracks[0];
-        const clonedTrack = track.clone();
-        clonedTracks.set(id, clonedTrack);
-
-        const sourceStream = new MediaStream([clonedTrack]);
-        const source = audioContext.createMediaStreamSource(sourceStream);
-        const analyser = audioContext.createAnalyser();
-        
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.5;
-        source.connect(analyser);
-
-        sources.set(id, source);
-        analysers.set(id, analyser);
-      } catch (err) {
-        logger.error('Failed to setup audio detection', { participantId: id, error: err });
-      }
-    };
-
-    // 1. Setup Local Stream
-    if (localStream && isAudioEnabled) {
-      setupAudioDetection(currentUserId, localStream);
-    }
-
-    // 2. Setup Remote Streams
-    participants.forEach((p) => {
-      if (p.id !== currentUserId && p.stream && unmutedParticipants.has(p.id)) {
-        setupAudioDetection(p.id, p.stream);
-      }
-    });
-
-    // Detection Loop
-    const dataArray = new Uint8Array(256);
-    const threshold = 0.02; // Sensitivity threshold
-    let animationFrameId: number;
-
-    const checkAudioLevels = () => {
-      const speakingNow = new Set<string>();
-
-      analysers.forEach((analyser, id) => {
-        analyser.getByteFrequencyData(dataArray);
-        const sum = dataArray.reduce((a, b) => a + b, 0);
-        const average = sum / dataArray.length / 255;
-        
-        if (average > threshold) {
-          speakingNow.add(id);
-        }
-      });
-
-      setSpeakingParticipants(prev => {
-        // Only update if changed to avoid re-renders
-        let changed = false;
-        if (prev.size !== speakingNow.size) changed = true;
-        else {
-          for (const id of speakingNow) {
-            if (!prev.has(id)) {
-              changed = true;
-              break;
-            }
-          }
-        }
-        return changed ? speakingNow : prev;
-      });
-
-      animationFrameId = requestAnimationFrame(checkAudioLevels);
-    };
-
-    checkAudioLevels();
-
-    // Cleanup
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      
-      sources.forEach(source => source.disconnect());
-      analysers.forEach(analyser => analyser.disconnect());
-      clonedTracks.forEach(track => track.stop());
-      
-      if (audioContext.state !== 'closed') {
-        audioContext.close();
-      }
-    };
-  }, [localStream, isAudioEnabled, currentUserId, participants, unmutedParticipants]);
+  // Audio Level Detection (Refactored to Hook)
+  useAudioVisualizer({
+    currentUserId,
+    localStream,
+    isAudioEnabled,
+    participants,
+    unmutedParticipants,
+    setSpeakingParticipants,
+  });
 
   // Auto-hide controls on mouse inactivity (freeze when settings panel is open)
   useEffect(() => {
     const handleMouseMove = () => {
       setShowControls(true);
-      
+
       // Don't set hide timeout if settings panel is open
       if (isSettingsPanelOpen) return;
-      
+
       // Clear existing timeout
       if (hideControlsTimeout.current) {
         clearTimeout(hideControlsTimeout.current);
       }
-      
+
       // Set new timeout to hide controls after 3 seconds of inactivity
       hideControlsTimeout.current = setTimeout(() => {
         setShowControls(false);
@@ -247,16 +208,16 @@ export default function RoomPage() {
 
     // Show controls initially or when settings panel opens
     setShowControls(true);
-    
+
     // Clear timeout when settings panel opens
     if (isSettingsPanelOpen && hideControlsTimeout.current) {
       clearTimeout(hideControlsTimeout.current);
       hideControlsTimeout.current = null;
     }
-    
+
     // Add mouse move listener
     window.addEventListener('mousemove', handleMouseMove);
-    
+
     // Initial timeout (only if settings panel is closed)
     if (!isSettingsPanelOpen) {
       hideControlsTimeout.current = setTimeout(() => {
@@ -291,8 +252,8 @@ export default function RoomPage() {
       isAudioEnabled,
       isVideoEnabled,
       isScreenSharing,
-      toggleAudio,
-      toggleVideo,
+      toggleAudio: handleAudioToggle,
+      toggleVideo: handleVideoToggle,
       startScreenShare: toggleScreenShare,
       stopScreenShare: toggleScreenShare,
       requestScreenShare: async () => {
@@ -305,6 +266,7 @@ export default function RoomPage() {
       isMuted: !isAudioEnabled,
       isHandRaised: currentUserId ? raisingHandParticipants.has(currentUserId) : false,
       canScreenShare: true,
+      waitingParticipantsCount: waitingParticipants.size,
       leaveRoom: () => {
         leaveRoom();
         router.push('/');
@@ -314,14 +276,14 @@ export default function RoomPage() {
       toggleChatPanel: toggleChatPanel,
       toggleHand: () => {
         if (!wsClient || !clientInfo || !currentUserId) return;
-        
+
         const isCurrentlyRaised = raisingHandParticipants.has(currentUserId);
-        
+
         if (isCurrentlyRaised) {
-          wsClient.lowerHand(clientInfo);
+          // wsClient.lowerHand(clientInfo);
           setHandRaised(currentUserId, false);
         } else {
-          wsClient.raiseHand(clientInfo);
+          // wsClient.raiseHand(clientInfo);
           setHandRaised(currentUserId, true);
         }
       },
@@ -338,8 +300,8 @@ export default function RoomPage() {
   }
 
   // Show loading screen while initializing room connection (prevents waiting room flash)
-  // Also show loading if we're authenticated but haven't received room state yet (currentUserId not set)
-  if (status === 'authenticated' && (connectionState.isInitializing || !currentUserId)) {
+  // Don't block on currentUserId alone - user might be in waiting room with a valid userId
+  if (status === 'authenticated' && connectionState.isInitializing) {
     return <LoadingScreen status="connecting" />;
   }
 
@@ -411,20 +373,19 @@ export default function RoomPage() {
               }}
             />
           </div>
-          
+
           {/* Controls at bottom of video - auto-hide on inactivity */}
-          <div 
-            className={`absolute bottom-0 left-0 right-0 z-30 flex justify-center py-4 transition-all duration-300 ${
-              showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-            }`}
+          <div
+            className={`absolute bottom-0 left-0 right-0 z-30 flex justify-center py-4 transition-all duration-300 ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+              }`}
           >
-            <ControlsPanel dependencies={controlDependencies} />
+            <ControlBar dependencies={controlDependencies} />
           </div>
         </div>
 
         {/* Chat Panel - Right Side */}
         {isChatPanelOpen && (
-            <ChatPanel dependencies={chatDependencies} />
+          <ChatPanel dependencies={chatDependencies} />
         )}
 
         {/* Participants Panel - Left Side */}

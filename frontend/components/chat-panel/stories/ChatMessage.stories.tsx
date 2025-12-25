@@ -1,5 +1,25 @@
 import ChatMessage from "@/components/chat-panel/components/ChatMessage";
 import { type Meta, type StoryObj } from "@storybook/nextjs-vite";
+import { type ChatDependencies } from "@/components/chat-panel/types/ChatDependencies";
+
+// Helper to create mock dependencies
+const createMockDependencies = (isHost: boolean = false): ChatDependencies => ({
+  chatService: {
+    messages: [],
+    sendChat: () => { },
+    closeChat: () => { },
+  },
+  participantService: {
+    getParticipant: (id: string) => ({
+      id,
+      username: "User",
+      role: isHost ? "host" as const : "participant" as const
+    })
+  },
+  roomService: {
+    currentUserId: "1"
+  }
+});
 
 const meta: Meta<typeof ChatMessage> = {
   title: "Chat/ChatMessage",
@@ -22,7 +42,7 @@ export const Default: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies()
   },
 };
 
@@ -37,7 +57,7 @@ export const FromOtherUser: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies()
   },
 };
 
@@ -52,7 +72,7 @@ export const LongMessage: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -67,7 +87,7 @@ export const SystemMessage: Story = {
       type: "system"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -82,7 +102,7 @@ export const PrivateMessage: Story = {
       type: "private"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -97,7 +117,7 @@ export const HostMessage: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: true,
+    dependencies: createMockDependencies(true),
   },
 };
 
@@ -112,7 +132,7 @@ export const HostPrivateMessage: Story = {
       type: "private"
     },
     currentUserId: "1",
-    isHost: true,
+    dependencies: createMockDependencies(true),
   },
 };
 
@@ -127,7 +147,7 @@ export const CurrentUserHost: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: true,
+    dependencies: createMockDependencies(true),
   },
 };
 
@@ -142,7 +162,7 @@ export const ShortMessage: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -157,7 +177,7 @@ export const EmptyMessage: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -172,7 +192,7 @@ export const MessageWithEmojis: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -187,7 +207,7 @@ export const MessageWithNumbers: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -202,7 +222,7 @@ export const MessageWithSpecialCharacters: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -217,7 +237,7 @@ export const MessageWithLinks: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -232,7 +252,7 @@ export const MessageWithEmail: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -247,7 +267,7 @@ export const MessageWithMixedContent: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -262,7 +282,7 @@ export const MessageWithEveryoneMention: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -277,7 +297,7 @@ export const MessageWithUserMentions: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -292,7 +312,7 @@ export const MessageWithAllFeatures: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: true,
+    dependencies: createMockDependencies(true),
   },
 };
 
@@ -307,7 +327,7 @@ export const VeryLongUsernameMessage: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -322,7 +342,7 @@ export const OldTimestamp: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };
 
@@ -337,6 +357,6 @@ export const MultilineMessage: Story = {
       type: "text"
     },
     currentUserId: "1",
-    isHost: false,
+    dependencies: createMockDependencies(),
   },
 };

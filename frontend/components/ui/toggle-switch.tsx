@@ -101,6 +101,13 @@ export const ToggleSwitch = React.forwardRef<HTMLInputElement, ToggleSwitchProps
   ) => {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!disabled) {
+        // eslint-disable-next-line no-console
+        console.log('[ToggleSwitch] onCheckedChange fired', {
+          checked: e.target.checked,
+          ariaLabel,
+          before,
+          after,
+        });
         onCheckedChange?.(e.target.checked);
       }
     };

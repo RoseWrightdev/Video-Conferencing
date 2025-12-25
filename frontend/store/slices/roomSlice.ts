@@ -1,166 +1,117 @@
 import { StateCreator } from 'zustand';
-import { WebSocketClient } from '@/lib/websockets';
-import { SFUClient } from '@/lib/webrtc';
-import { type RoomSlice, type RoomStoreState, type Participant, type ChatMessage } from '../types';
-import { WebSocketMessage } from '@/types/proto/signaling'; // Ensure this path matches your structure
+import { RoomClient } from '@/lib/RoomClient';
+import { type RoomSlice, type RoomStoreState } from '../types';
 
 export const createRoomSlice: StateCreator<
   RoomStoreState,
   [],
   [],
   RoomSlice
-> = (set, get) => ({
-  roomId: null,
-  roomName: null,
-  roomSettings: null,
-  isJoined: false,
-  isWaitingRoom: false,
-  currentUserId: null,
-  currentUsername: null,
-  clientInfo: null,
-  wsClient: null,
-  sfuClient: null, // Initialized as null
+> = (set, get) => {
 
-  initializeRoom: async (roomId, username, token) => {
-    const state = get();
-    if (state.wsClient) state.wsClient.disconnect();
+  // Create callback to sync state from RoomClient to Zustand
+  const onRoomStateChange = (stateUpdate: any) => {
+    // Direct merge for now
+    set(stateUpdate);
 
-    // 1. Setup WebSocket (Signal Transport)
-    // Ensure URL is correct for your Go server
-    const wsUrl = `ws://localhost:8080/ws/hub/${roomId}`;
-    const wsClient = new WebSocketClient(wsUrl, token);
+    // Also update connection state if join was successful
+    if (stateUpdate.isJoined) {
+      get().updateConnectionState({ isInitializing: false, webrtcConnected: true });
+    }
+    if (stateUpdate.error) {
+      get().handleError(stateUpdate.error);
+      get().updateConnectionState({ isInitializing: false });
+    }
+  };
 
-    // 2. Setup SFU Client (Media Transport)
-    // We pass a callback to handle incoming tracks from the SFU
-    const sfuClient = new SFUClient(wsClient, (stream, track) => {
-      // When SFU sends a track, we need to map it to a user.
-      // For the MVP, we assume the stream.id matches the userId.
-      const userId = stream.id;
-      get().setParticipantStream(userId, stream);
-    });
+  const onMediaTrackAdded = (userId: string, stream: MediaStream) => {
+    get().setParticipantStream(userId, stream);
+    // Also update local tracks if it's us (redundant but safe)
+    if (userId === get().currentUserId) {
+      // Logic for local stream usually handled by mediaSlice, but this ensures consistency
+    }
+  };
 
-    // 3. Register Protobuf Event Listeners
-    wsClient.onMessage((msg: WebSocketMessage) => {
-      // A. Handle Chat
-      if (msg.chatEvent) {
-        const chat = msg.chatEvent;
-        const newMsg: ChatMessage = {
-          id: chat.id,
-          participantId: chat.senderId,
-          username: chat.senderName,
-          content: chat.content,
-          timestamp: new Date(Number(chat.timestamp)), // Convert Long/string to date
-          type: chat.isPrivate ? 'private' : 'text',
-        };
-        get().addMessage(newMsg);
-      }
+  // Lazy initialization of RoomClient to avoid side effects during module load
+  // But we need a persistent instance. We can store it in the closure or on the store.
+  // Storing on the store (state.roomClient) is better for access.
+  // However, types say `wsClient` and `sfuClient`. We need to update types or just use internal.
+  // For this refactor, let's keep it simple and instantiate on first need or use a singleton pattern if appropriate.
+  // Actually, standard pattern is to store the client instance in a ref or outside, but here we can put it in the store if we add it to the type.
+  // The Type `RoomSlice` expects `wsClient` etc. We will break that contract if we aren't careful.
+  // Plan: Modify `RoomSlice` type in next step. For now, we will store `roomClient` as `any` in the store or just closure.
+  // Let's use a closure variable for the slice.
 
-      // B. Handle Room State (Participants List)
-      if (msg.roomState) {
-        const newParticipants = new Map<string, Participant>();
+  const roomClient = new RoomClient(onRoomStateChange, onMediaTrackAdded);
 
-        msg.roomState.participants.forEach((p) => {
-          newParticipants.set(p.id, {
-            id: p.id,
-            username: p.displayName,
-            role: p.isHost ? 'host' : 'participant',
-            // Preserve existing stream if we already have it
-            stream: get().participants.get(p.id)?.stream,
-          });
+  return {
+    roomId: null,
+    roomName: null,
+    roomSettings: null,
+    isJoined: false,
+    isWaitingRoom: false,
+    currentUserId: null,
+    currentUsername: null,
+    clientInfo: null,
+    wsClient: null, // Legacy, will be null
+    sfuClient: null, // Legacy, will be null
+    roomClient: roomClient, // Exposed for other slices
+    streamToUserMap: new Map(), // Legacy/Unused by Slice logic but kept for type compat
 
-          // Sync Media State
-          get().setAudioEnabled(p.id, p.isAudioEnabled);
-          get().setVideoEnabled(p.id, p.isVideoEnabled);
-          get().setScreenSharing(p.id, p.isScreenSharing);
-          get().setHandRaised(p.id, p.isHandRaised);
-        });
+    initializeRoom: async (roomId, username, token) => {
+      get().updateConnectionState({ isInitializing: true });
 
-        set({ participants: newParticipants });
-      }
-
-      // C. Handle Join Response (Success/Fail)
-      if (msg.joinResponse) {
-        if (msg.joinResponse.success) {
-          set({
-            isJoined: true,
-            currentUserId: msg.joinResponse.userId,
-            isHost: msg.joinResponse.isHost
-          });
-        } else {
-          get().handleError('Failed to join room');
-        }
-      }
-
-      // D. Handle Recent Chats (On Join)
-      if (msg.recentChats) {
-        msg.recentChats.chats.forEach((chat) => {
-          const newMsg: ChatMessage = {
-            id: chat.id,
-            participantId: chat.senderId,
-            username: chat.senderName,
-            content: chat.content,
-            timestamp: new Date(Number(chat.timestamp)),
-            type: chat.isPrivate ? 'private' : 'text',
-          };
-          // Helper to add without duplicates could go here, 
-          // but for now simple add works if list is empty
-          get().addMessage(newMsg);
-        });
-      }
-
-      // E. Handle Errors
-      if (msg.error) {
-        get().handleError(msg.error.message);
-      }
-    });
-
-    // 4. Connect
-    try {
-      await wsClient.connect();
-
+      // Reset state
       set({
         roomId,
         currentUsername: username,
-        wsClient,
-        sfuClient,
-        clientInfo: { clientId: 'temp', displayName: username }
+        connectionState: { ...get().connectionState, isInitializing: true } // Ensure clean state
       });
 
-      // 5. Send Join Request (Protobuf)
-      wsClient.send({
-        join: {
-          token: token,
-          roomId: roomId,
-          displayName: username
-        }
+      await roomClient.connect(roomId, username, token);
+
+      // Patch Legacy Clients into Store
+      set({
+        wsClient: roomClient.ws,
+        sfuClient: roomClient.sfu
       });
+    },
 
-    } catch (error) {
-      get().handleError(`Connection failed: ${error}`);
-    }
-  },
+    joinRoom: async () => {
+      // Legacy
+    },
 
-  joinRoom: async () => {
-    // Legacy support: logic moved to initializeRoom for smoother flow
-  },
+    leaveRoom: () => {
+      roomClient.disconnect();
+      get().setLocalStream(null); // Cleanup media
+      set({
+        roomId: null,
+        isJoined: false,
+        isWaitingRoom: false,
+        participants: new Map(),
+        waitingParticipants: new Map(),
+        messages: []
+      });
+    },
 
-  leaveRoom: () => {
-    const { sfuClient, wsClient, localStream } = get();
-    localStream?.getTracks().forEach(t => t.stop());
+    updateRoomSettings: () => { },
 
-    // Cleanup SFU
-    if (sfuClient) sfuClient.close();
-    if (wsClient) wsClient.disconnect();
+    // Expose client for other slices (hacky but works for now without changing all types immediately)
+    // We might need to add `roomClient` to the Store type to access `toggleAudio` etc properly.
+    // For now, let's attach the actions that delegate to roomClient.
+  };
+};
 
-    set({
-      roomId: null,
-      isJoined: false,
-      wsClient: null,
-      sfuClient: null,
-      participants: new Map(),
-      messages: []
-    });
-  },
-
-  updateRoomSettings: () => { },
-});
+/* 
+   NOTE: Other slices (mediaSlice, etc) call `wsClient.send` directly. 
+   We need to fix that or `roomClient` needs to expose `wsClient`.
+   RoomClient exposes `ws` internally. We should probably expose it for compatibility 
+   OR update MediaSlice to use RoomClient methods. 
+   
+   UPDATED PLAN: 
+   1. `RoomClient` should expose `ws` publically or we wrap the methods.
+   2. Current `RoomSlice` type has `wsClient` and `sfuClient`. 
+   3. We can just set `state.wsClient = roomClient.ws` in initialization if we make them public.
+   
+   Let's modify `RoomClient.ts` to make `ws` public or at least accessible.
+*/

@@ -104,7 +104,7 @@ type Hub struct {
 	bus                 BusService                 // Optional Redis pub/sub for cross-pod messaging
 	cleanupGracePeriod  time.Duration              // Optional grace period for room deletion w/ no users
 	devMode             bool                       // Disable rate limiting in development mode
-	sfu                 *sfu.SFUClient
+	sfu                 SFUProvider
 }
 
 // NewHub creates a new Hub and configures it with its dependencies.
@@ -113,7 +113,7 @@ type Hub struct {
 //   - bus: Optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
 //   - devMode: Disable rate limiting for development (allows rapid WebSocket messages)
 func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
-	var sfuClient *sfu.SFUClient
+	var sfuClient SFUProvider
 	var err error
 
 	// 1. Check Flag

@@ -1,5 +1,6 @@
 import type { WebSocketClient } from '@/lib/websockets';
 import type { SFUClient } from '@/lib/webrtc';
+import type { RoomClient } from '@/lib/RoomClient';
 
 export type GridLayout = 'gallery' | 'speaker' | 'sidebar';
 
@@ -12,6 +13,12 @@ export interface Participant {
   username: string;
   role: 'host' | 'participant' | 'screenshare' | 'waiting';
   stream?: MediaStream; // The MediaStream object from the SFU
+
+  // Media State Flags
+  isAudioEnabled?: boolean;
+  isVideoEnabled?: boolean;
+  isScreenSharing?: boolean;
+  isHandRaised?: boolean;
 }
 
 /**
@@ -147,6 +154,8 @@ export interface RoomSlice {
   clientInfo: LocalClientInfo | null;
   wsClient: WebSocketClient | null;
   sfuClient: SFUClient | null;
+  roomClient: RoomClient | null; // Added
+  streamToUserMap: Map<string, string>;
 
   initializeRoom: (roomId: string, username: string, token: string) => Promise<void>;
   joinRoom: (approvalToken?: string) => Promise<void>;

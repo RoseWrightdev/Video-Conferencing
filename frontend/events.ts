@@ -125,14 +125,14 @@ export interface WebRTCRenegotiatePayload extends ClientInfo {
 
 // room_state
 export interface RoomStatePayload {
-    roomId: string;
-    hosts: ClientInfo[];
-    participants: ClientInfo[];
-    handsRaised: ClientInfo[];
-    waitingUsers: ClientInfo[];
-    sharingScreen: ClientInfo[];
-    unmuted: ClientInfo[];
-    cameraOn: ClientInfo[];
+  roomId: string;
+  hosts: ClientInfo[];
+  participants: ClientInfo[];
+  handsRaised: ClientInfo[];
+  waitingUsers: ClientInfo[];
+  sharingScreen: ClientInfo[];
+  unmuted: ClientInfo[];
+  cameraOn: ClientInfo[];
 }
 
 // ----------------
@@ -161,4 +161,91 @@ export type AnyPayload =
 export interface WebSocketMessage {
   event: EventType;
   payload: AnyPayload;
+}
+
+// ----------------
+// Event Emitter
+// ----------------
+
+type EventHandler<T = any> = (data: T) => void;
+
+export class EventEmitter {
+  private events: Map<string, EventHandler[]>;
+
+  constructor() {
+    this.events = new Map();
+  }
+
+  /**
+   * Register an event listener
+   */
+  on(event: string, handler: EventHandler): void {
+    if (!this.events.has(event)) {
+      this.events.set(event, []);
+    }
+    this.events.get(event)!.push(handler);
+  }
+
+  /**
+   * Register a one-time event listener
+   */
+  once(event: string, handler: EventHandler): void {
+    const onceWrapper: EventHandler = (data) => {
+      handler(data);
+      this.off(event, onceWrapper);
+    };
+    this.on(event, onceWrapper);
+  }
+
+  /**
+   * Remove a specific event listener
+   */
+  off(event: string, handler: EventHandler): void {
+    if (!this.events.has(event)) {
+      return;
+    }
+
+    const handlers = this.events.get(event)!;
+    const index = handlers.indexOf(handler);
+
+    if (index !== -1) {
+      handlers.splice(index, 1);
+    }
+
+    // Clean up empty event arrays
+    if (handlers.length === 0) {
+      this.events.delete(event);
+    }
+  }
+
+  /**
+   * Emit an event with optional data
+   */
+  emit(event: string, data?: any): void {
+    if (!this.events.has(event)) {
+      return;
+    }
+
+    const handlers = this.events.get(event)!.slice(); // Create a copy to avoid issues if handlers are removed during emit
+
+    for (const handler of handlers) {
+      try {
+        handler(data);
+      } catch (error) {
+        // Catch errors to prevent one handler from breaking others
+        console.error(`Error in event handler for "${event}":`, error);
+      }
+    }
+  }
+
+  /**
+   * Remove all listeners for a specific event, or all listeners if no event is specified
+   */
+  removeAllListeners(event?: string): void {
+    if (event) {
+      this.events.delete(event);
+    } else {
+      this.events.clear();
+    }
+  }
 }

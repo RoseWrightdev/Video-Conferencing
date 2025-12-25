@@ -20,7 +20,7 @@ pub struct SignalMessage {
     pub room_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub user_id: ::prost::alloc::string::String,
-    #[prost(oneof = "signal_message::Payload", tags = "3, 4")]
+    #[prost(oneof = "signal_message::Payload", tags = "3, 4, 5")]
     pub payload: ::core::option::Option<signal_message::Payload>,
 }
 /// Nested message and enum types in `SignalMessage`.
@@ -32,6 +32,8 @@ pub mod signal_message {
         SdpAnswer(::prost::alloc::string::String),
         #[prost(string, tag = "4")]
         IceCandidate(::prost::alloc::string::String),
+        #[prost(string, tag = "5")]
+        SdpOffer(::prost::alloc::string::String),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -53,6 +55,41 @@ pub struct DeleteSessionRequest {
 pub struct DeleteSessionResponse {
     #[prost(bool, tag = "1")]
     pub success: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListenRequest {
+    #[prost(string, tag = "1")]
+    pub room_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub user_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SfuEvent {
+    #[prost(oneof = "sfu_event::Payload", tags = "1, 2, 3, 4, 5, 6")]
+    pub payload: ::core::option::Option<sfu_event::Payload>,
+}
+/// Nested message and enum types in `SfuEvent`.
+pub mod sfu_event {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Payload {
+        /// DEPRECATED: Use track_event
+        #[prost(string, tag = "1")]
+        TrackAddedUserId(::prost::alloc::string::String),
+        /// DEPRECATED: Use track_event
+        #[prost(string, tag = "2")]
+        TrackAddedStreamId(::prost::alloc::string::String),
+        #[prost(message, tag = "3")]
+        TrackEvent(super::super::signaling::TrackAddedEvent),
+        #[prost(string, tag = "4")]
+        RenegotiateSdpOffer(::prost::alloc::string::String),
+        #[prost(string, tag = "5")]
+        SdpAnswer(::prost::alloc::string::String),
+        #[prost(string, tag = "6")]
+        IceCandidate(::prost::alloc::string::String),
+    }
 }
 /// Generated server implementations.
 pub mod sfu_service_server {
@@ -81,6 +118,20 @@ pub mod sfu_service_server {
             request: tonic::Request<super::DeleteSessionRequest>,
         ) -> std::result::Result<
             tonic::Response<super::DeleteSessionResponse>,
+            tonic::Status,
+        >;
+        /// Server streaming response type for the ListenEvents method.
+        type ListenEventsStream: futures_core::Stream<
+                Item = std::result::Result<super::SfuEvent, tonic::Status>,
+            >
+            + Send
+            + 'static;
+        /// 4. Listen for asynchronous events from SFU (Tracks, Renegotiation)
+        async fn listen_events(
+            &self,
+            request: tonic::Request<super::ListenRequest>,
+        ) -> std::result::Result<
+            tonic::Response<Self::ListenEventsStream>,
             tonic::Status,
         >;
     }
@@ -297,6 +348,53 @@ pub mod sfu_service_server {
                                 max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/sfu.SfuService/ListenEvents" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListenEventsSvc<T: SfuService>(pub Arc<T>);
+                    impl<
+                        T: SfuService,
+                    > tonic::server::ServerStreamingService<super::ListenRequest>
+                    for ListenEventsSvc<T> {
+                        type Response = super::SfuEvent;
+                        type ResponseStream = T::ListenEventsStream;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListenRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                (*inner).listen_events(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = ListenEventsSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

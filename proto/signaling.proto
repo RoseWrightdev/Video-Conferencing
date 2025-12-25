@@ -1,7 +1,7 @@
 syntax = "proto3";
 package signaling;
 
-option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; sfu";
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; proto";
 
 // The Master Envelope
 message WebSocketMessage {
@@ -49,6 +49,9 @@ message WebSocketMessage {
     // --- State Sync ---
     RoomStateEvent room_state = 17;
     ErrorEvent error = 18;
+
+    // --- Stream Mapping ---
+    TrackAddedEvent track_added = 26;
   }
 }
 
@@ -175,6 +178,7 @@ message SignalRequest {
     string sdp_answer = 1;
     string ice_candidate = 2;
     bool renegotiate = 3;
+    string sdp_offer = 4;
   }
 }
 
@@ -182,6 +186,7 @@ message SignalEvent {
   oneof signal {
     string sdp_offer = 1;
     string ice_candidate = 2;
+    string sdp_answer = 3;
   }
 }
 
@@ -207,4 +212,13 @@ message ErrorEvent {
   string code = 1;
   string message = 2;
   bool fatal = 3;
+}
+
+// ---------------------------------------------------------
+// 8. Stream Mapping
+// ---------------------------------------------------------
+message TrackAddedEvent {
+  string user_id = 1;
+  string stream_id = 2;
+  string track_kind = 3; // "video" or "audio"
 }

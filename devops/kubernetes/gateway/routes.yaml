@@ -1,0 +1,169 @@
+---
+# HTTPRoute for Frontend (meet.rosewright.dev)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: frontend-route
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: frontend-route
+    app.kubernetes.io/component: routing
+spec:
+  parentRefs:
+  - name: video-conferencing-gateway
+    sectionName: https
+  
+  hostnames:
+  - "meet.rosewright.dev"
+  
+  rules:
+  # Main application routes
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: frontend-service
+      port: 80
+      weight: 100
+
+---
+# HTTPRoute for Backend API (api.rosewright.dev)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: backend-api-route
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: backend-route
+    app.kubernetes.io/component: routing
+spec:
+  parentRefs:
+  - name: video-conferencing-gateway
+    sectionName: https
+  
+  hostnames:
+  - "api.rosewright.dev"
+  
+  rules:
+  # WebSocket route (must come first for precedence)
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /ws
+      headers:
+      - name: Upgrade
+        value: websocket
+    backendRefs:
+    - name: backend-service
+      port: 8080
+      weight: 100
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        set:
+        - name: X-Forwarded-Proto
+          value: "wss"
+  
+  # REST API routes
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - name: backend-service
+      port: 8080
+      weight: 100
+  
+  # Health check endpoint (public)
+  - matches:
+    - path:
+        type: Exact
+        value: /health
+    backendRefs:
+    - name: backend-service
+      port: 8080
+      weight: 100
+  
+  # Metrics endpoint (public for Prometheus scraping)
+  - matches:
+    - path:
+        type: Exact
+        value: /metrics
+    backendRefs:
+    - name: backend-service
+      port: 8080
+      weight: 100
+
+---
+# HTTPRoute for Grafana Monitoring (monitor.rosewright.dev)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: monitoring-route
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: monitoring-route
+    app.kubernetes.io/component: routing
+spec:
+  parentRefs:
+  - name: video-conferencing-gateway
+    sectionName: https
+  
+  hostnames:
+  - "monitor.rosewright.dev"
+  
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: prometheus-grafana
+      namespace: monitoring
+      port: 80
+      weight: 100
+
+---
+# ReferenceGrant to allow cross-namespace service references
+# Required for monitoring-route to access Grafana in 'monitoring' namespace
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-video-conferencing-to-monitoring
+  namespace: monitoring
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: video-conferencing
+  to:
+  - group: ""
+    kind: Service
+
+---
+# HTTP to HTTPS Redirect Route
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-redirect
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: http-redirect
+    app.kubernetes.io/component: routing
+spec:
+  parentRefs:
+  - name: video-conferencing-gateway
+    sectionName: http
+  
+  hostnames:
+  - "meet.rosewright.dev"
+  - "api.rosewright.dev"
+  - "monitor.rosewright.dev"
+  
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301

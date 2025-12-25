@@ -4,7 +4,7 @@
 // 	protoc        v6.33.1
 // source: sfu.proto
 
-package sfu
+package proto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -125,6 +125,7 @@ type SignalMessage struct {
 	//
 	//	*SignalMessage_SdpAnswer
 	//	*SignalMessage_IceCandidate
+	//	*SignalMessage_SdpOffer
 	Payload       isSignalMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -199,6 +200,15 @@ func (x *SignalMessage) GetIceCandidate() string {
 	return ""
 }
 
+func (x *SignalMessage) GetSdpOffer() string {
+	if x != nil {
+		if x, ok := x.Payload.(*SignalMessage_SdpOffer); ok {
+			return x.SdpOffer
+		}
+	}
+	return ""
+}
+
 type isSignalMessage_Payload interface {
 	isSignalMessage_Payload()
 }
@@ -211,9 +221,15 @@ type SignalMessage_IceCandidate struct {
 	IceCandidate string `protobuf:"bytes,4,opt,name=ice_candidate,json=iceCandidate,proto3,oneof"`
 }
 
+type SignalMessage_SdpOffer struct {
+	SdpOffer string `protobuf:"bytes,5,opt,name=sdp_offer,json=sdpOffer,proto3,oneof"`
+}
+
 func (*SignalMessage_SdpAnswer) isSignalMessage_Payload() {}
 
 func (*SignalMessage_IceCandidate) isSignalMessage_Payload() {}
+
+func (*SignalMessage_SdpOffer) isSignalMessage_Payload() {}
 
 type SignalResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -355,22 +371,221 @@ func (x *DeleteSessionResponse) GetSuccess() bool {
 	return false
 }
 
+type ListenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListenRequest) Reset() {
+	*x = ListenRequest{}
+	mi := &file_sfu_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListenRequest) ProtoMessage() {}
+
+func (x *ListenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sfu_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListenRequest.ProtoReflect.Descriptor instead.
+func (*ListenRequest) Descriptor() ([]byte, []int) {
+	return file_sfu_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListenRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *ListenRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type SfuEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*SfuEvent_TrackAddedUserId
+	//	*SfuEvent_TrackAddedStreamId
+	//	*SfuEvent_TrackEvent
+	//	*SfuEvent_RenegotiateSdpOffer
+	//	*SfuEvent_SdpAnswer
+	//	*SfuEvent_IceCandidate
+	Payload       isSfuEvent_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SfuEvent) Reset() {
+	*x = SfuEvent{}
+	mi := &file_sfu_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SfuEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SfuEvent) ProtoMessage() {}
+
+func (x *SfuEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_sfu_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SfuEvent.ProtoReflect.Descriptor instead.
+func (*SfuEvent) Descriptor() ([]byte, []int) {
+	return file_sfu_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SfuEvent) GetPayload() isSfuEvent_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *SfuEvent) GetTrackAddedUserId() string {
+	if x != nil {
+		if x, ok := x.Payload.(*SfuEvent_TrackAddedUserId); ok {
+			return x.TrackAddedUserId
+		}
+	}
+	return ""
+}
+
+func (x *SfuEvent) GetTrackAddedStreamId() string {
+	if x != nil {
+		if x, ok := x.Payload.(*SfuEvent_TrackAddedStreamId); ok {
+			return x.TrackAddedStreamId
+		}
+	}
+	return ""
+}
+
+func (x *SfuEvent) GetTrackEvent() *TrackAddedEvent {
+	if x != nil {
+		if x, ok := x.Payload.(*SfuEvent_TrackEvent); ok {
+			return x.TrackEvent
+		}
+	}
+	return nil
+}
+
+func (x *SfuEvent) GetRenegotiateSdpOffer() string {
+	if x != nil {
+		if x, ok := x.Payload.(*SfuEvent_RenegotiateSdpOffer); ok {
+			return x.RenegotiateSdpOffer
+		}
+	}
+	return ""
+}
+
+func (x *SfuEvent) GetSdpAnswer() string {
+	if x != nil {
+		if x, ok := x.Payload.(*SfuEvent_SdpAnswer); ok {
+			return x.SdpAnswer
+		}
+	}
+	return ""
+}
+
+func (x *SfuEvent) GetIceCandidate() string {
+	if x != nil {
+		if x, ok := x.Payload.(*SfuEvent_IceCandidate); ok {
+			return x.IceCandidate
+		}
+	}
+	return ""
+}
+
+type isSfuEvent_Payload interface {
+	isSfuEvent_Payload()
+}
+
+type SfuEvent_TrackAddedUserId struct {
+	TrackAddedUserId string `protobuf:"bytes,1,opt,name=track_added_user_id,json=trackAddedUserId,proto3,oneof"` // DEPRECATED: Use track_event
+}
+
+type SfuEvent_TrackAddedStreamId struct {
+	TrackAddedStreamId string `protobuf:"bytes,2,opt,name=track_added_stream_id,json=trackAddedStreamId,proto3,oneof"` // DEPRECATED: Use track_event
+}
+
+type SfuEvent_TrackEvent struct {
+	TrackEvent *TrackAddedEvent `protobuf:"bytes,3,opt,name=track_event,json=trackEvent,proto3,oneof"`
+}
+
+type SfuEvent_RenegotiateSdpOffer struct {
+	RenegotiateSdpOffer string `protobuf:"bytes,4,opt,name=renegotiate_sdp_offer,json=renegotiateSdpOffer,proto3,oneof"`
+}
+
+type SfuEvent_SdpAnswer struct {
+	SdpAnswer string `protobuf:"bytes,5,opt,name=sdp_answer,json=sdpAnswer,proto3,oneof"`
+}
+
+type SfuEvent_IceCandidate struct {
+	IceCandidate string `protobuf:"bytes,6,opt,name=ice_candidate,json=iceCandidate,proto3,oneof"`
+}
+
+func (*SfuEvent_TrackAddedUserId) isSfuEvent_Payload() {}
+
+func (*SfuEvent_TrackAddedStreamId) isSfuEvent_Payload() {}
+
+func (*SfuEvent_TrackEvent) isSfuEvent_Payload() {}
+
+func (*SfuEvent_RenegotiateSdpOffer) isSfuEvent_Payload() {}
+
+func (*SfuEvent_SdpAnswer) isSfuEvent_Payload() {}
+
+func (*SfuEvent_IceCandidate) isSfuEvent_Payload() {}
+
 var File_sfu_proto protoreflect.FileDescriptor
 
 const file_sfu_proto_rawDesc = "" +
 	"\n" +
-	"\tsfu.proto\x12\x03sfu\"H\n" +
+	"\tsfu.proto\x12\x03sfu\x1a\x0fsignaling.proto\"H\n" +
 	"\x14CreateSessionRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"4\n" +
 	"\x15CreateSessionResponse\x12\x1b\n" +
-	"\tsdp_offer\x18\x01 \x01(\tR\bsdpOffer\"\x94\x01\n" +
+	"\tsdp_offer\x18\x01 \x01(\tR\bsdpOffer\"\xb3\x01\n" +
 	"\rSignalMessage\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1f\n" +
 	"\n" +
 	"sdp_answer\x18\x03 \x01(\tH\x00R\tsdpAnswer\x12%\n" +
-	"\rice_candidate\x18\x04 \x01(\tH\x00R\ficeCandidateB\t\n" +
+	"\rice_candidate\x18\x04 \x01(\tH\x00R\ficeCandidate\x12\x1d\n" +
+	"\tsdp_offer\x18\x05 \x01(\tH\x00R\bsdpOfferB\t\n" +
 	"\apayload\"*\n" +
 	"\x0eSignalResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"H\n" +
@@ -378,12 +593,26 @@ const file_sfu_proto_rawDesc = "" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"1\n" +
 	"\x15DeleteSessionResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2\xd5\x01\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"A\n" +
+	"\rListenRequest\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"\xb8\x02\n" +
+	"\bSfuEvent\x12/\n" +
+	"\x13track_added_user_id\x18\x01 \x01(\tH\x00R\x10trackAddedUserId\x123\n" +
+	"\x15track_added_stream_id\x18\x02 \x01(\tH\x00R\x12trackAddedStreamId\x12=\n" +
+	"\vtrack_event\x18\x03 \x01(\v2\x1a.signaling.TrackAddedEventH\x00R\n" +
+	"trackEvent\x124\n" +
+	"\x15renegotiate_sdp_offer\x18\x04 \x01(\tH\x00R\x13renegotiateSdpOffer\x12\x1f\n" +
+	"\n" +
+	"sdp_answer\x18\x05 \x01(\tH\x00R\tsdpAnswer\x12%\n" +
+	"\rice_candidate\x18\x06 \x01(\tH\x00R\ficeCandidateB\t\n" +
+	"\apayload2\x8a\x02\n" +
 	"\n" +
 	"SfuService\x12F\n" +
 	"\rCreateSession\x12\x19.sfu.CreateSessionRequest\x1a\x1a.sfu.CreateSessionResponse\x127\n" +
 	"\fHandleSignal\x12\x12.sfu.SignalMessage\x1a\x13.sfu.SignalResponse\x12F\n" +
-	"\rDeleteSession\x12\x19.sfu.DeleteSessionRequest\x1a\x1a.sfu.DeleteSessionResponseBFZDgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto/sfub\x06proto3"
+	"\rDeleteSession\x12\x19.sfu.DeleteSessionRequest\x1a\x1a.sfu.DeleteSessionResponse\x123\n" +
+	"\fListenEvents\x12\x12.sfu.ListenRequest\x1a\r.sfu.SfuEvent0\x01BIZGgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; protob\x06proto3"
 
 var (
 	file_sfu_proto_rawDescOnce sync.Once
@@ -397,7 +626,7 @@ func file_sfu_proto_rawDescGZIP() []byte {
 	return file_sfu_proto_rawDescData
 }
 
-var file_sfu_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_sfu_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_sfu_proto_goTypes = []any{
 	(*CreateSessionRequest)(nil),  // 0: sfu.CreateSessionRequest
 	(*CreateSessionResponse)(nil), // 1: sfu.CreateSessionResponse
@@ -405,19 +634,25 @@ var file_sfu_proto_goTypes = []any{
 	(*SignalResponse)(nil),        // 3: sfu.SignalResponse
 	(*DeleteSessionRequest)(nil),  // 4: sfu.DeleteSessionRequest
 	(*DeleteSessionResponse)(nil), // 5: sfu.DeleteSessionResponse
+	(*ListenRequest)(nil),         // 6: sfu.ListenRequest
+	(*SfuEvent)(nil),              // 7: sfu.SfuEvent
+	(*TrackAddedEvent)(nil),       // 8: signaling.TrackAddedEvent
 }
 var file_sfu_proto_depIdxs = []int32{
-	0, // 0: sfu.SfuService.CreateSession:input_type -> sfu.CreateSessionRequest
-	2, // 1: sfu.SfuService.HandleSignal:input_type -> sfu.SignalMessage
-	4, // 2: sfu.SfuService.DeleteSession:input_type -> sfu.DeleteSessionRequest
-	1, // 3: sfu.SfuService.CreateSession:output_type -> sfu.CreateSessionResponse
-	3, // 4: sfu.SfuService.HandleSignal:output_type -> sfu.SignalResponse
-	5, // 5: sfu.SfuService.DeleteSession:output_type -> sfu.DeleteSessionResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	8, // 0: sfu.SfuEvent.track_event:type_name -> signaling.TrackAddedEvent
+	0, // 1: sfu.SfuService.CreateSession:input_type -> sfu.CreateSessionRequest
+	2, // 2: sfu.SfuService.HandleSignal:input_type -> sfu.SignalMessage
+	4, // 3: sfu.SfuService.DeleteSession:input_type -> sfu.DeleteSessionRequest
+	6, // 4: sfu.SfuService.ListenEvents:input_type -> sfu.ListenRequest
+	1, // 5: sfu.SfuService.CreateSession:output_type -> sfu.CreateSessionResponse
+	3, // 6: sfu.SfuService.HandleSignal:output_type -> sfu.SignalResponse
+	5, // 7: sfu.SfuService.DeleteSession:output_type -> sfu.DeleteSessionResponse
+	7, // 8: sfu.SfuService.ListenEvents:output_type -> sfu.SfuEvent
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_sfu_proto_init() }
@@ -425,9 +660,19 @@ func file_sfu_proto_init() {
 	if File_sfu_proto != nil {
 		return
 	}
+	file_signaling_proto_init()
 	file_sfu_proto_msgTypes[2].OneofWrappers = []any{
 		(*SignalMessage_SdpAnswer)(nil),
 		(*SignalMessage_IceCandidate)(nil),
+		(*SignalMessage_SdpOffer)(nil),
+	}
+	file_sfu_proto_msgTypes[7].OneofWrappers = []any{
+		(*SfuEvent_TrackAddedUserId)(nil),
+		(*SfuEvent_TrackAddedStreamId)(nil),
+		(*SfuEvent_TrackEvent)(nil),
+		(*SfuEvent_RenegotiateSdpOffer)(nil),
+		(*SfuEvent_SdpAnswer)(nil),
+		(*SfuEvent_IceCandidate)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -435,7 +680,7 @@ func file_sfu_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sfu_proto_rawDesc), len(file_sfu_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

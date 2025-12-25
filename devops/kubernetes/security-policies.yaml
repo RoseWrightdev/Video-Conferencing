@@ -3,18 +3,18 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: social-media-sa
-  namespace: social-media
+  name: video-conferencing-backend-sa
+  namespace: video-conferencing
   labels:
-    app.kubernetes.io/name: social-media-sa
+    app.kubernetes.io/name: video-conferencing-backend-sa
 automountServiceAccountToken: false
 ---
 # RBAC Role for application permissions
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: social-media-role
-  namespace: social-media
+  name: video-conferencing-role
+  namespace: video-conferencing
 rules:
 - apiGroups: [""]
   resources: ["configmaps", "secrets"]
@@ -30,27 +30,27 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: social-media-rolebinding
-  namespace: social-media
+  name: video-conferencing-rolebinding
+  namespace: video-conferencing
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: social-media-role
+  name: video-conferencing-role
 subjects:
 - kind: ServiceAccount
-  name: social-media-sa
-  namespace: social-media
+  name: video-conferencing-backend-sa
+  namespace: video-conferencing
 ---
 # Network Policy for security
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: social-media-netpol
-  namespace: social-media
+  name: video-conferencing-netpol
+  namespace: video-conferencing
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/part-of: social-media-platform
+      app.kubernetes.io/part-of: video-conferencing-platform
   policyTypes:
   - Ingress
   - Egress
@@ -69,12 +69,14 @@ spec:
   - from:
     - podSelector:
         matchLabels:
-          app.kubernetes.io/part-of: social-media-platform
+          app.kubernetes.io/part-of: video-conferencing-platform
     ports:
     - protocol: TCP
       port: 3000
     - protocol: TCP
       port: 8080
+    - protocol: TCP
+      port: 50051  # gRPC for Go -> Rust
   egress:
   # Allow DNS resolution
   - to: []
@@ -85,44 +87,25 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app.kubernetes.io/part-of: social-media-platform
+          app.kubernetes.io/part-of: video-conferencing-platform
     ports:
     - protocol: TCP
       port: 3000
     - protocol: TCP
       port: 8080
+    - protocol: TCP
+      port: 50051  # gRPC
   # Allow external HTTPS (for Auth0, etc.)
   - to: []
     ports:
     - protocol: TCP
       port: 443
 ---
-# Pod Security Policy (if PSP is enabled)
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
-metadata:
-  name: social-media-psp
-  namespace: social-media
-spec:
-  privileged: false
-  allowPrivilegeEscalation: false
-  requiredDropCapabilities:
-    - ALL
-  volumes:
-    - 'configMap'
-    - 'emptyDir'
-    - 'projected'
-    - 'secret'
-    - 'downwardAPI'
-    - 'persistentVolumeClaim'
-  runAsUser:
-    rule: 'MustRunAsNonRoot'
-  runAsGroup:
-    rule: 'MustRunAs'
-    ranges:
-      - min: 1
-        max: 65535
-  seLinux:
-    rule: 'RunAsAny'
-  fsGroup:
-    rule: 'RunAsAny'
+# Pod Security Standards (replaces deprecated PodSecurityPolicy)
+# Apply to namespace via labels instead of PSP
+# The namespace should have these labels:
+#   pod-security.kubernetes.io/enforce: restricted
+#   pod-security.kubernetes.io/audit: restricted
+#   pod-security.kubernetes.io/warn: restricted
+#
+# These are applied in frontend-deployment.yaml where the namespace is created
