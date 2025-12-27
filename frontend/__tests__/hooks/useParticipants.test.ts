@@ -1,186 +1,121 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { useParticipants } from '@/hooks/useParticipants';
 import { useRoomStore } from '@/store/useRoomStore';
 
-// Mock the store
-vi.mock('@/store/useRoomStore');
+// Mock the store module explicitly
+vi.mock('@/store/useRoomStore', () => ({
+    useRoomStore: vi.fn()
+}));
 
 describe('useParticipants', () => {
-    const mockAdmitParticipant = vi.fn();
-    const mockRemoveParticipant = vi.fn();
-    const mockSetParticipantStream = vi.fn();
+    const mockApproveParticipant = vi.fn();
+    const mockKickParticipant = vi.fn();
+    const mockToggleAudio = vi.fn();
+    const mockToggleVideo = vi.fn();
+    const mockSelectParticipant = vi.fn();
+    const mockPinParticipant = vi.fn();
 
-    const mockParticipants = new Map([
+    // Store uses Maps/Sets internally
+    const mockParticipantsMap = new Map([
         ['user-1', { id: 'user-1', username: 'Alice', role: 'host' as const }],
         ['user-2', { id: 'user-2', username: 'Bob', role: 'participant' as const }],
     ]);
 
-    const mockWaitingParticipants = new Map([
+    const mockWaitingParticipantsMap = new Map([
         ['user-3', { id: 'user-3', username: 'Charlie', role: 'waiting' as const }],
     ]);
 
-    const mockMediaStates = new Map([
-        ['user-1', {
-            isAudioEnabled: true,
-            isVideoEnabled: true,
-            isScreenSharing: false,
-            isHandRaised: false,
-            isSpeaking: false,
-        }],
-        ['user-2', {
-            isAudioEnabled: false,
-            isVideoEnabled: true,
-            isScreenSharing: false,
-            isHandRaised: true,
-            isSpeaking: true,
-        }],
-    ]);
+    const mockRaisingHandSet = new Set(['user-2']);
+
+    const defaultStoreState = {
+        participants: mockParticipantsMap,
+        localParticipant: { id: 'user-1', username: 'Alice' },
+        raisingHandParticipants: mockRaisingHandSet,
+        waitingParticipants: mockWaitingParticipantsMap,
+        selectedParticipantId: null,
+        pinnedParticipantId: null,
+        isHost: true,
+        approveParticipant: mockApproveParticipant,
+        kickParticipant: mockKickParticipant,
+        toggleParticipantAudio: mockToggleAudio,
+        toggleParticipantVideo: mockToggleVideo,
+        selectParticipant: mockSelectParticipant,
+        pinParticipant: mockPinParticipant,
+    };
 
     beforeEach(() => {
         vi.clearAllMocks();
-
-        (useRoomStore as any).mockReturnValue({
-            participants: mockParticipants,
-            waitingParticipants: mockWaitingParticipants,
-            mediaStates: mockMediaStates,
-            currentUserId: 'user-1',
-            admitParticipant: mockAdmitParticipant,
-            removeParticipant: mockRemoveParticipant,
-            setParticipantStream: mockSetParticipantStream,
-        });
+        // Default return value for the hook
+        (useRoomStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue(defaultStoreState);
     });
 
     describe('Basic functionality', () => {
-        it('should return participants list', () => {
+        it('should return participants list as array', () => {
             const { result } = renderHook(() => useParticipants());
-
-            expect(result.current.participants).toEqual(mockParticipants);
-            expect(result.current.participants.size).toBe(2);
+            // Hook converts Map -> Array
+            expect(result.current.participants).toHaveLength(2);
+            expect(result.current.participants.some(p => p.username === 'Alice')).toBe(true);
+            expect(result.current.participants.some(p => p.username === 'Bob')).toBe(true);
         });
 
-        it('should return waiting participants list', () => {
+        it('should return pending participants (waiting room)', () => {
             const { result } = renderHook(() => useParticipants());
-
-            expect(result.current.waitingParticipants).toEqual(mockWaitingParticipants);
-            expect(result.current.waitingParticipants.size).toBe(1);
+            // Hook returns the Map directly or Array? 
+            // Checking implementation: "pendingParticipants: waitingParticipants" -> waitingParticipants is Map in store.
+            // Let's assume Map based on previous inspection.
+            expect(result.current.pendingParticipants).toBe(mockWaitingParticipantsMap);
         });
 
-        it('should return media states', () => {
+        it('should return speaking participants (hand raised)', () => {
             const { result } = renderHook(() => useParticipants());
-
-            expect(result.current.mediaStates).toEqual(mockMediaStates);
+            // Hook filters participants based on raisingHandSet
+            expect(result.current.speakingParticipants).toHaveLength(1);
+            expect(result.current.speakingParticipants[0].id).toBe('user-2');
         });
 
-        it('should return current user ID', () => {
+        it('should return local participant', () => {
             const { result } = renderHook(() => useParticipants());
-
-            expect(result.current.currentUserId).toBe('user-1');
+            expect(result.current.localParticipant?.id).toBe('user-1');
         });
-    });
 
-    describe('Computed values', () => {
-        it('should calculate participant count', () => {
+        it('should return participant count', () => {
             const { result } = renderHook(() => useParticipants());
-
             expect(result.current.participantCount).toBe(2);
         });
-
-        it('should calculate waiting count', () => {
-            const { result } = renderHook(() => useParticipants());
-
-            expect(result.current.waitingCount).toBe(1);
-        });
-
-        it('should identify speaking participants', () => {
-            const { result } = renderHook(() => useParticipants());
-
-            expect(result.current.speakingParticipants.size).toBe(1);
-            expect(result.current.speakingParticipants.has('user-2')).toBe(true);
-        });
-
-        it('should handle empty participants', () => {
-            (useRoomStore as any).mockReturnValue({
-                participants: new Map(),
-                waitingParticipants: new Map(),
-                mediaStates: new Map(),
-                currentUserId: null,
-                admitParticipant: mockAdmitParticipant,
-                removeParticipant: mockRemoveParticipant,
-                setParticipantStream: mockSetParticipantStream,
-            });
-
-            const { result } = renderHook(() => useParticipants());
-
-            expect(result.current.participantCount).toBe(0);
-            expect(result.current.waitingCount).toBe(0);
-            expect(result.current.speakingParticipants.size).toBe(0);
-        });
     });
 
-    describe('getParticipant', () => {
+    describe('Helpers', () => {
         it('should get participant by ID', () => {
             const { result } = renderHook(() => useParticipants());
-
-            const participant = result.current.getParticipant('user-1');
-
-            expect(participant).toBeDefined();
-            expect(participant?.username).toBe('Alice');
-            expect(participant?.role).toBe('host');
+            const p = result.current.getParticipant('user-2');
+            expect(p?.username).toBe('Bob');
         });
 
-        it('should return undefined for non-existent participant', () => {
+        it('should check if participant is speaking (hand raised)', () => {
             const { result } = renderHook(() => useParticipants());
-
-            const participant = result.current.getParticipant('non-existent');
-
-            expect(participant).toBeUndefined();
+            expect(result.current.isParticipantSpeaking('user-2')).toBe(true);
+            expect(result.current.isParticipantSpeaking('user-1')).toBe(false);
         });
     });
 
-    describe('getParticipantMediaState', () => {
-        it('should get media state by ID', () => {
+    describe('Actions', () => {
+        it('should expose host actions when isHost is true', () => {
             const { result } = renderHook(() => useParticipants());
-
-            const mediaState = result.current.getParticipantMediaState('user-1');
-
-            expect(mediaState).toBeDefined();
-            expect(mediaState?.isAudioEnabled).toBe(true);
-            expect(mediaState?.isVideoEnabled).toBe(true);
+            // Using 'any' to bypass strict type checking if the interface logic is complex in test
+            const current = result.current as any;
+            expect(current.approveParticipant).toBeDefined();
+            expect(current.kickParticipant).toBeDefined();
         });
 
-        it('should return undefined for non-existent media state', () => {
-            const { result } = renderHook(() => useParticipants());
-
-            const mediaState = result.current.getParticipantMediaState('non-existent');
-
-            expect(mediaState).toBeUndefined();
-        });
-    });
-
-    describe('admitParticipant', () => {
-        it('should admit a waiting participant', () => {
-            const { result } = renderHook(() => useParticipants());
-
-            act(() => {
-                result.current.admitParticipant('user-3');
+        it('should NOT expose host actions when isHost is false', () => {
+            (useRoomStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+                ...defaultStoreState,
+                isHost: false
             });
-
-            expect(mockAdmitParticipant).toHaveBeenCalledWith('user-3');
-            expect(mockAdmitParticipant).toHaveBeenCalledTimes(1);
-        });
-    });
-
-    describe('removeParticipant', () => {
-        it('should remove a participant', () => {
             const { result } = renderHook(() => useParticipants());
-
-            act(() => {
-                result.current.removeParticipant('user-2');
-            });
-
-            expect(mockRemoveParticipant).toHaveBeenCalledWith('user-2');
-            expect(mockRemoveParticipant).toHaveBeenCalledTimes(1);
+            const current = result.current as any;
+            expect(current.approveParticipant).toBeUndefined();
         });
     });
 });

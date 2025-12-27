@@ -3,13 +3,6 @@
 import { cn } from '@/lib/utils';
 import ParticipantTile from './ParticipantTile';
 import type { Participant } from '@/store/types';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 export type GridLayout = 'gallery' | 'speaker' | 'sidebar';
@@ -64,7 +57,6 @@ export default function ParticipantGrid({
   pinnedParticipantId,
   layout = 'gallery',
   onPinParticipant,
-  onLayoutChange,
   className,
   unmutedParticipants = new Set(),
   cameraOnParticipants = new Set(),
@@ -79,13 +71,13 @@ export default function ParticipantGrid({
     if (pinnedParticipantId) {
       return participants.find(p => p.id === pinnedParticipantId) || null;
     }
-    
+
     const screenSharer = participants.find(p => sharingScreenParticipants.has(p.id));
     if (screenSharer) return screenSharer;
-    
+
     const speaker = participants.find(p => speakingParticipants.has(p.id));
     if (speaker) return speaker;
-    
+
     return participants[0] || null;
   };
 
@@ -124,10 +116,10 @@ export default function ParticipantGrid({
               <ParticipantTile
                 key={participants[0].id}
                 participant={participants[0]}
-                isAudioEnabled={unmutedParticipants.has(participants[0].id)}
-                isVideoEnabled={cameraOnParticipants.has(participants[0].id)}
-                isScreenSharing={sharingScreenParticipants.has(participants[0].id)}
-                isHandRaised={raisingHandParticipants.has(participants[0].id)}
+                isAudioEnabled={participants[0].isAudioEnabled}
+                isVideoEnabled={participants[0].isVideoEnabled}
+                isScreenSharing={participants[0].isScreenSharing}
+                isHandRaised={participants[0].isHandRaised}
                 isSpeaking={speakingParticipants.has(participants[0].id)}
                 isLocal={participants[0].id === currentUserId}
                 isPinned={participants[0].id === pinnedParticipantId}
@@ -148,10 +140,10 @@ export default function ParticipantGrid({
             <ParticipantTile
               key={participant.id}
               participant={participant}
-              isAudioEnabled={unmutedParticipants.has(participant.id)}
-              isVideoEnabled={cameraOnParticipants.has(participant.id)}
-              isScreenSharing={sharingScreenParticipants.has(participant.id)}
-              isHandRaised={raisingHandParticipants.has(participant.id)}
+              isAudioEnabled={participant.isAudioEnabled}
+              isVideoEnabled={participant.isVideoEnabled}
+              isScreenSharing={participant.isScreenSharing}
+              isHandRaised={participant.isHandRaised}
               isSpeaking={speakingParticipants.has(participant.id)}
               isLocal={participant.id === currentUserId}
               isPinned={participant.id === pinnedParticipantId}
@@ -176,10 +168,10 @@ export default function ParticipantGrid({
           <div className="flex-1 min-h-0">
             <ParticipantTile
               participant={featured}
-              isAudioEnabled={unmutedParticipants.has(featured.id)}
-              isVideoEnabled={cameraOnParticipants.has(featured.id)}
-              isScreenSharing={sharingScreenParticipants.has(featured.id)}
-              isHandRaised={raisingHandParticipants.has(featured.id)}
+              isAudioEnabled={featured.isAudioEnabled}
+              isVideoEnabled={featured.isVideoEnabled}
+              isScreenSharing={featured.isScreenSharing}
+              isHandRaised={featured.isHandRaised}
               isSpeaking={speakingParticipants.has(featured.id)}
               isLocal={featured.id === currentUserId}
               isPinned={featured.id === pinnedParticipantId}
@@ -197,10 +189,10 @@ export default function ParticipantGrid({
               <ParticipantTile
                 key={participant.id}
                 participant={participant}
-                isAudioEnabled={unmutedParticipants.has(participant.id)}
-                isVideoEnabled={cameraOnParticipants.has(participant.id)}
-                isScreenSharing={sharingScreenParticipants.has(participant.id)}
-                isHandRaised={raisingHandParticipants.has(participant.id)}
+                isAudioEnabled={participant.isAudioEnabled}
+                isVideoEnabled={participant.isVideoEnabled}
+                isScreenSharing={participant.isScreenSharing}
+                isHandRaised={participant.isHandRaised}
                 isSpeaking={speakingParticipants.has(participant.id)}
                 isLocal={participant.id === currentUserId}
                 isPinned={participant.id === pinnedParticipantId}
@@ -226,10 +218,10 @@ export default function ParticipantGrid({
           <div className="flex-1 min-w-0">
             <ParticipantTile
               participant={featured}
-              isAudioEnabled={unmutedParticipants.has(featured.id)}
-              isVideoEnabled={cameraOnParticipants.has(featured.id)}
-              isScreenSharing={sharingScreenParticipants.has(featured.id)}
-              isHandRaised={raisingHandParticipants.has(featured.id)}
+              isAudioEnabled={featured.isAudioEnabled}
+              isVideoEnabled={featured.isVideoEnabled}
+              isScreenSharing={featured.isScreenSharing}
+              isHandRaised={featured.isHandRaised}
               isSpeaking={speakingParticipants.has(featured.id)}
               isLocal={featured.id === currentUserId}
               isPinned={featured.id === pinnedParticipantId}
@@ -247,10 +239,10 @@ export default function ParticipantGrid({
               <ParticipantTile
                 key={participant.id}
                 participant={participant}
-                isAudioEnabled={unmutedParticipants.has(participant.id)}
-                isVideoEnabled={cameraOnParticipants.has(participant.id)}
-                isScreenSharing={sharingScreenParticipants.has(participant.id)}
-                isHandRaised={raisingHandParticipants.has(participant.id)}
+                isAudioEnabled={participant.isAudioEnabled}
+                isVideoEnabled={participant.isVideoEnabled}
+                isScreenSharing={participant.isScreenSharing}
+                isHandRaised={participant.isHandRaised}
                 isSpeaking={speakingParticipants.has(participant.id)}
                 isLocal={participant.id === currentUserId}
                 isPinned={participant.id === pinnedParticipantId}

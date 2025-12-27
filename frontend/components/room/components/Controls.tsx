@@ -23,15 +23,63 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import * as Typo from "@/components/ui/typography";
-import { ControlDependencies } from "../types/ControlsDependcies";
+import { useRoomStore } from "@/store/useRoomStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export interface ControlBarProps {
-  dependencies: ControlDependencies;
+  // empty now
 }
 
-const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
-  const { mediaService, roomControlService, chatService } = dependencies;
+const ControlBar = memo(function ControlBar() {
+  const {
+    isAudioEnabled,
+    isVideoEnabled,
+    isScreenSharing,
+    toggleAudio,
+    toggleVideo,
+    startScreenShare,
+    stopScreenShare
+  } = useRoomStore(useShallow(state => ({
+    isAudioEnabled: state.isAudioEnabled,
+    isVideoEnabled: state.isVideoEnabled,
+    isScreenSharing: state.isScreenSharing,
+    toggleAudio: state.toggleAudio,
+    toggleVideo: state.toggleVideo,
+    startScreenShare: state.startScreenShare,
+    stopScreenShare: state.stopScreenShare
+  })));
+
+  const {
+    isHost,
+    toggleParticipantsPanel,
+    toggleSettingsPanel,
+    toggleChatPanel,
+  } = useRoomStore(useShallow(state => ({
+    isHost: state.isHost,
+    toggleParticipantsPanel: state.toggleParticipantsPanel,
+    toggleSettingsPanel: state.toggleSettingsPanel,
+    toggleChatPanel: state.toggleChatPanel,
+  })));
+
+  const { unreadCount, markMessagesRead } = useRoomStore(useShallow(state => ({
+    unreadCount: state.unreadCount,
+    markMessagesRead: state.markMessagesRead
+  })));
+
+  const { leaveRoom } = useRoomStore(useShallow(state => ({ leaveRoom: state.leaveRoom })));
+
+  // Hand raise is in participant slice, let's get it correctly
+  const { currentUserId, raisingHandParticipants, toggleHand } = useRoomStore(useShallow(state => ({
+    currentUserId: state.currentUserId,
+    raisingHandParticipants: state.raisingHandParticipants,
+    toggleHand: state.toggleHand
+  })));
+
+  const isHandRaised = currentUserId ? raisingHandParticipants.has(currentUserId) : false;
+
+
   const [hasRequestedScreenShare, setHasRequestedScreenShare] = useState(false);
+  const canScreenShare = true; // Hardcoded for now as it was in the factory default, or logic needed
 
   return (
     <div className="flex items-center justify-between gap-4 p-4 w-full">
@@ -43,7 +91,7 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
               variant="default"
               size="icon"
               className="rounded-full frosted-2 bg-white/10 hover:bg-white/50 text-white hover:text-black"
-              onClick={() => roomControlService.toggleSettingsPanel()}
+              onClick={toggleSettingsPanel}
               aria-label="Toggle settings"
             >
               <Settings className="size-5" />
@@ -59,7 +107,7 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
               variant="default"
               size="icon"
               className="rounded-full frosted-2 bg-white/10 hover:bg-white/50 text-white hover:text-black"
-              onClick={() => roomControlService.toggleParticipantsPanel()}
+              onClick={toggleParticipantsPanel}
               aria-label="Toggle participants"
             >
               <Users className="size-5" />
@@ -90,11 +138,11 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
               textColor: "text-red-950",
               tooltip: "Microphone off",
             }}
-            checked={!mediaService.isAudioEnabled}
+            checked={!isAudioEnabled}
             onCheckedChange={() => {
               // eslint-disable-next-line no-console
-              console.log('[ControlBar] Audio toggle clicked', { isAudioEnabled: mediaService.isAudioEnabled });
-              mediaService.toggleAudio();
+              console.log('[ControlBar] Audio toggle clicked', { isAudioEnabled });
+              toggleAudio();
             }}
             aria-label="Toggle microphone"
           />
@@ -116,11 +164,11 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
               textColor: "text-red-950",
               tooltip: "Camera off",
             }}
-            checked={!mediaService.isVideoEnabled}
+            checked={!isVideoEnabled}
             onCheckedChange={() => {
               // eslint-disable-next-line no-console
-              console.log('[ControlBar] Video toggle clicked', { isVideoEnabled: mediaService.isVideoEnabled });
-              mediaService.toggleVideo();
+              console.log('[ControlBar] Video toggle clicked', { isVideoEnabled });
+              toggleVideo();
             }}
             aria-label="Toggle camera"
           />
@@ -132,42 +180,42 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={roomControlService.isHandRaised ? "default" : "outline"}
+                variant={isHandRaised ? "default" : "outline"}
                 size="icon"
-                className={`rounded-full w-10 transition-colors ${roomControlService.isHandRaised
-                    ? "bg-yellow-500 hover:bg-yellow-600 text-yellow-950"
-                    : "bg-white/10 hover:bg-white/80 text-white"
+                className={`rounded-full w-10 transition-colors ${isHandRaised
+                  ? "bg-yellow-500 hover:bg-yellow-600 text-yellow-950"
+                  : "bg-white/10 hover:bg-white/80 text-white"
                   }`}
-                onClick={() => roomControlService.toggleHand()}
+                onClick={() => toggleHand()}
                 aria-label="Raise hand"
               >
                 <Hand className="size-5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <Typo.P>{roomControlService.isHandRaised ? "Lower hand" : "Raise hand"}</Typo.P>
+              <Typo.P>{isHandRaised ? "Lower hand" : "Raise hand"}</Typo.P>
             </TooltipContent>
           </Tooltip>
 
           {/* Screen Share Toggle */}
-          {roomControlService.canScreenShare ? (
+          {canScreenShare ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant={mediaService.isScreenSharing ? "default" : "outline"}
+                  variant={isScreenSharing ? "default" : "outline"}
                   size="icon"
-                  className={`rounded-full w-14 transition-colors ${mediaService.isScreenSharing
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "bg-white/10 hover:bg-white/80 text-white"
+                  className={`rounded-full w-14 transition-colors ${isScreenSharing
+                    ? "bg-purple-600 hover:bg-purple-700 text-white"
+                    : "bg-white/10 hover:bg-white/80 text-white"
                     }`}
                   onClick={() =>
-                    mediaService.isScreenSharing
-                      ? mediaService.stopScreenShare()
-                      : mediaService.startScreenShare()
+                    isScreenSharing
+                      ? stopScreenShare()
+                      : startScreenShare()
                   }
                   aria-label="Toggle screen share"
                 >
-                  {mediaService.isScreenSharing ? (
+                  {isScreenSharing ? (
                     <ScreenShareOff className="size-5" />
                   ) : (
                     <ScreenShare className="size-5" />
@@ -175,7 +223,7 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <Typo.P>{mediaService.isScreenSharing ? "Stop sharing" : "Share screen"}</Typo.P>
+                <Typo.P>{isScreenSharing ? "Stop sharing" : "Share screen"}</Typo.P>
               </TooltipContent>
             </Tooltip>
           ) :
@@ -186,7 +234,7 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
                   size="icon"
                   className="rounded-full w-14 bg-white/10 hover:bg-white/50 text-white"
                   onClick={() => {
-                    mediaService.startScreenShare();
+                    startScreenShare();
                     setHasRequestedScreenShare(true);
                   }}
                   aria-label="Request screen share"
@@ -209,7 +257,7 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
                 variant="destructive"
                 size="icon"
                 className="rounded-full w-16 bg-red-500 hover:bg-red-700 hover:text-white"
-                onClick={() => roomControlService.leaveRoom()}
+                onClick={() => leaveRoom()}
                 aria-label="Leave room"
               >
                 <PhoneOff className="size-5 text-red-950" />
@@ -231,19 +279,19 @@ const ControlBar = memo(function ControlBar({ dependencies }: ControlBarProps) {
               size="icon"
               className="rounded-full frosted-2 bg-white/10 hover:bg-white/50 text-white hover:text-black"
               onClick={() => {
-                roomControlService.toggleChatPanel()
-                chatService.markMessagesRead()
+                toggleChatPanel()
+                markMessagesRead()
               }}
               aria-label="Toggle chat"
             >
               <MessageSquare className="size-5" />
             </Button>
-            {chatService.unreadCount > 0 && (
+            {unreadCount > 0 && (
               <Badge
                 variant="destructive"
                 className="absolute -top-2 -right-2 h-5 min-w-5 flex items-center justify-center px-1 text-xs"
               >
-                {chatService.unreadCount > 99 ? '99+' : chatService.unreadCount}
+                {unreadCount > 99 ? '99+' : unreadCount}
               </Badge>
             )}
           </div>

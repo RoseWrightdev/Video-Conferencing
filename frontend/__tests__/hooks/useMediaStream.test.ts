@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useMediaStream } from '@/hooks/useMediaStream';
 import { useRoomStore } from '@/store/useRoomStore';
 
 // Mock the store
 vi.mock('@/store/useRoomStore');
+
+// Mock the store
+vi.mock('@/store/useRoomStore', () => ({
+    useRoomStore: vi.fn()
+}));
 
 describe('useMediaStream', () => {
     const mockSetLocalStream = vi.fn();
@@ -274,7 +279,9 @@ describe('useMediaStream', () => {
                 expect(result.current.isInitialized).toBe(true);
             });
 
-            result.current.cleanup();
+            act(() => {
+                result.current.cleanup();
+            });
 
             expect(result.current.isInitialized).toBe(false);
             expect(result.current.isStarting).toBe(false);

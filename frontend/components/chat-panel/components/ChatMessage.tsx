@@ -3,25 +3,26 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import * as Typo from "@/components/ui/typography";
 import { type ChatMessage } from "@/store/types";
-import { ChatDependencies } from "../types/ChatDependencies";
+import { useRoomStore } from "@/store/useRoomStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export interface ChatMessageProps {
   chatMessage: ChatMessage;
   currentUserId: string;
-  dependencies: ChatDependencies;
 }
 
 const ChatMessage = React.memo(function ChatMessage({
   chatMessage,
   currentUserId,
-  dependencies,
 }: ChatMessageProps) {
   // Check if the message author is a host
-  const isHost = dependencies.participantService.getParticipant(chatMessage.participantId)?.role === "host";
+  // Access attributes directly from store or helper
+  const participants = useRoomStore(useShallow(state => state.participants));
+  const isHost = participants.get(chatMessage.participantId)?.role === "host";
 
   if (chatMessage.type === "private") {
     return (
-      <StandardChat chatMessage={chatMessage} currentUserId={currentUserId} isPriv={true} isHost={isHost} dependencies={dependencies} />
+      <StandardChat chatMessage={chatMessage} currentUserId={currentUserId} isPriv={true} isHost={isHost} />
     );
   } else if (chatMessage.type === "system") {
     return (
@@ -31,7 +32,7 @@ const ChatMessage = React.memo(function ChatMessage({
     );
   } else if (chatMessage.type === "text") {
     return (
-      <StandardChat chatMessage={chatMessage} currentUserId={currentUserId} isPriv={false} isHost={isHost} dependencies={dependencies} />
+      <StandardChat chatMessage={chatMessage} currentUserId={currentUserId} isPriv={false} isHost={isHost} />
     );
   }
 
@@ -39,12 +40,12 @@ const ChatMessage = React.memo(function ChatMessage({
 }, (prevProps, nextProps) => {
   // Only re-render if message content or read status changes
   return prevProps.chatMessage.id === nextProps.chatMessage.id &&
-         prevProps.chatMessage.content === nextProps.chatMessage.content &&
-         prevProps.chatMessage.timestamp === nextProps.chatMessage.timestamp &&
-         prevProps.currentUserId === nextProps.currentUserId;
+    prevProps.chatMessage.content === nextProps.chatMessage.content &&
+    prevProps.chatMessage.timestamp === nextProps.chatMessage.timestamp &&
+    prevProps.currentUserId === nextProps.currentUserId;
 });
 
-function StandardChat({ chatMessage, currentUserId, isPriv, isHost, dependencies }: { chatMessage: ChatMessage, currentUserId: string, isPriv: boolean, isHost: boolean, dependencies: ChatDependencies }) {
+function StandardChat({ chatMessage, currentUserId, isPriv, isHost }: { chatMessage: ChatMessage, currentUserId: string, isPriv: boolean, isHost: boolean }) {
   const messageContentRef = useRef<HTMLParagraphElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const handleMouseEnter = () => setIsHovered(true);

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createChatSlice } from '@/store/slices/chatSlice';
-import { RoomStoreState } from '@/store/types';
+import { type RoomStoreState } from '@/store/types';
 
 describe('chatSlice', () => {
     let mockGet: () => Partial<RoomStoreState>;
@@ -9,10 +9,10 @@ describe('chatSlice', () => {
     let currentState: Partial<RoomStoreState>;
 
     const mockWsClient = {
-        send: jest.fn(),
-        connect: jest.fn(),
-        disconnect: jest.fn(),
-        onMessage: jest.fn(),
+        send: vi.fn(),
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        onMessage: vi.fn(),
     };
 
     beforeEach(() => {
@@ -24,8 +24,9 @@ describe('chatSlice', () => {
         };
 
         mockGet = () => currentState;
-        mockSet = (fn) => {
-            currentState = { ...currentState, ...fn(currentState) };
+        mockSet = (param) => {
+            const updates = typeof param === 'function' ? param(currentState) : param;
+            currentState = { ...currentState, ...updates };
         };
 
         slice = createChatSlice(mockSet as any, mockGet as any, {} as any);

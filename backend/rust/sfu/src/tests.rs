@@ -27,7 +27,7 @@ async fn test_broadcaster_add_writer() {
     
     let track = Arc::new(TrackLocalStaticRTP::new(codec, "track-1".to_owned(), "stream-1".to_owned()));
     
-    broadcaster.add_writer(track.clone(), 12345).await;
+    broadcaster.add_writer(track.clone(), 12345, 96).await;
     
     let writers = broadcaster.writers.lock().await;
     assert_eq!(writers.len(), 1);
@@ -83,7 +83,7 @@ async fn test_signaling_flow_and_track_notification() {
 }
 #[tokio::test]
 async fn test_webrtc_api_configuration() {
-    let sfu = MySfu {
+    let _sfu = MySfu {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
     };

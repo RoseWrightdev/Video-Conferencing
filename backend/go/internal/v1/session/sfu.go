@@ -64,7 +64,7 @@ func (r *Room) CreateSFUSession(ctx context.Context, client *Client) error {
 					return
 				}
 
-				slog.Info("DEBUG: Raw SFU Event received", "clientId", client.ID, "event", event.String(), "payloadType", fmt.Sprintf("%T", event.Payload))
+				slog.Debug("SFU Event received", "clientId", client.ID, "payloadType", fmt.Sprintf("%T", event.Payload))
 
 				// Handle TrackAdded
 				if trackEvent := event.GetTrackEvent(); trackEvent != nil {
@@ -137,7 +137,15 @@ func (r *Room) HandleSFUSignal(ctx context.Context, client *Client, signal *pb.S
 	}
 
 	// Forward to Rust via gRPC [cite: 8]
-	slog.Debug("Forwarding signal to SFU", "clientId", client.ID, "signalType", signal.String())
+	signalType := "unknown"
+	if signal.GetSdpOffer() != "" {
+		signalType = "SdpOffer"
+	} else if signal.GetSdpAnswer() != "" {
+		signalType = "SdpAnswer"
+	} else if signal.GetIceCandidate() != "" {
+		signalType = "IceCandidate"
+	}
+	slog.Debug("Forwarding signal to SFU", "clientId", client.ID, "signalType", signalType)
 	_, err := r.sfu.HandleSignal(ctx, string(client.ID), string(r.ID), signal)
 	if err != nil {
 		slog.Error("SFU Signal Error", "error", err)

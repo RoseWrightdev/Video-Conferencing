@@ -6,6 +6,11 @@ import { useRoomStore } from '@/store/useRoomStore';
 // Mock the store
 vi.mock('@/store/useRoomStore');
 
+// Mock the store
+vi.mock('@/store/useRoomStore', () => ({
+    useRoomStore: vi.fn()
+}));
+
 describe('useChat', () => {
     const mockSendMessage = vi.fn();
     const mockMarkMessagesRead = vi.fn();

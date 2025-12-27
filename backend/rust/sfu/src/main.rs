@@ -17,7 +17,6 @@ use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::TrackLocal;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::TrackLocalWriter;
-use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_remote::TrackRemote;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
@@ -26,6 +25,7 @@ use webrtc::rtp_transceiver::rtp_codec::{RTPCodecType, RTCRtpHeaderExtensionCapa
 use webrtc::peer_connection::policy::bundle_policy::RTCBundlePolicy;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
 use serde_json;
+use tracing::{info, error, debug, warn, trace};
 
 // Import the generated proto code
 pub mod pb {
@@ -44,7 +44,10 @@ use pb::sfu::{
 };
 use pb::sfu::sfu_event::Payload as EventPayload;
 
-// A "Peer" wraps the WebRTC Connection
+mod broadcaster;
+use broadcaster::TrackBroadcaster;
+
+// Peer wraps the WebRTC Connection
 struct Peer {
     pc: Arc<RTCPeerConnection>,
     user_id: String,
@@ -57,51 +60,6 @@ struct Peer {
     signaling_lock: Arc<Mutex<()>>,
 }
 
-// TrackBroadcaster holds the list of writers (other peers) for a single incoming track
-struct BroadcasterWriter {
-    track: Arc<TrackLocalStaticRTP>,
-    ssrc: u32,
-}
-
-struct TrackBroadcaster {
-    writers: Arc<Mutex<Vec<BroadcasterWriter>>>,
-    kind: String,
-    capability: RTCRtpCodecCapability,
-    source_pc: Arc<RTCPeerConnection>,
-    source_ssrc: u32,
-}
-
-impl TrackBroadcaster {
-    fn new(kind: String, capability: RTCRtpCodecCapability, source_pc: Arc<RTCPeerConnection>, source_ssrc: u32) -> Self {
-        Self {
-            writers: Arc::new(Mutex::new(Vec::new())),
-            kind,
-            capability,
-            source_pc,
-            source_ssrc,
-        }
-    }
-
-    async fn add_writer(&self, writer: Arc<TrackLocalStaticRTP>, ssrc: u32) {
-        let mut writers = self.writers.lock().await;
-        writers.push(BroadcasterWriter { track: writer, ssrc });
-        self.request_keyframe().await;
-    }
-
-    // Call this when any consumer sends a PLI (Picture Loss Indication)
-    // It forwards the request to the source client to generate a new keyframe.
-    async fn request_keyframe(&self) {
-        if self.kind != "video" { return; }
-        
-        println!("[SFU] Requesting keyframe for SSRC {}", self.source_ssrc);
-        let pli = PictureLossIndication {
-            sender_ssrc: 0, 
-            media_ssrc: self.source_ssrc,
-        };
-        // Use write_rtcp on the source PC
-        let _ = self.source_pc.write_rtcp(&[Box::new(pli)]).await;
-    }
-}
 
 // The Server State
 struct MySfu {
@@ -174,33 +132,33 @@ async fn perform_renegotiation(
     // B. Create Offer
     let offer = match peer_pc.create_offer(None).await {
         Ok(o) => o,
-        Err(e) => { println!("Failed to create offer for {}: {}", user_id, e); return; }
+        Err(e) => { error!(user_id = %user_id, error = %e, "Failed to create offer"); return; }
     };
 
     use webrtc::ice_transport::ice_gathering_state::RTCIceGatheringState;
     let mut gather_complete = peer_pc.gathering_complete_promise().await;
 
     if let Err(e) = peer_pc.set_local_description(offer).await {
-        println!("Failed to set local desc for {}: {}", user_id, e); return;
+        error!(user_id = %user_id, error = %e, "Failed to set local desc"); return;
     }
 
     if peer_pc.ice_gathering_state() != RTCIceGatheringState::Complete {
-        println!("[SFU] Waiting for ICE gathering for {}", user_id);
+        info!(user_id = %user_id, "[SFU] Waiting for ICE gathering");
         let _ = tokio::time::timeout(tokio::time::Duration::from_millis(1500), gather_complete.recv()).await;
     }
 
     // C. Send Offer
     let local_desc = peer_pc.local_description().await.unwrap_or_default();
-    println!("[SFU] Sending Renegotiation Offer to {} (SDP length: {})", user_id, local_desc.sdp.len());
+    info!(user_id = %user_id, sdp_length = %local_desc.sdp.len(), "[SFU] Sending Renegotiation Offer");
     
     let mut tx_lock = event_tx.lock().await;
     if let Some(tx) = tx_lock.as_mut() {
         let _ = tx.send(Ok(SfuEvent {
             payload: Some(EventPayload::RenegotiateSdpOffer(local_desc.sdp)),
         })).await;
-        println!("[SFU] Renegotiation message sent to channel for {}", user_id);
+        debug!(user_id = %user_id, "[SFU] Renegotiation message sent to channel");
     } else {
-        println!("[SFU] !! Event channel for {} is CLOSED or None", user_id);
+        warn!(user_id = %user_id, "[SFU] !! Event channel is CLOSED or None");
     }
 }
 
@@ -237,9 +195,39 @@ impl MySfu {
 
                     let params = rtp_sender.get_parameters().await;
                     let ssrc = params.encodings.first().map(|e| e.ssrc).unwrap_or(0);
-                    broadcaster.add_writer(local_track, ssrc).await;
+                    // Fetch Payload Type from Parameters
+                    // Note: In some webrtc implementations, the codec payload type might be in `codecs`.
+                    // But `get_parameters` returns RTCRtpSendParameters.
+                    // For now, let's try to grab it from the media engine defaults via capability or the codec.
+                     let pt = {
+                        // Hacky way: Since we are using default media engine, we can try to guess or use a default.
+                        // Better way: get the PayloadType from the negotiated codec.
+                        // rtp_sender.get_parameters().await.codecs... is for checking what we are sending.
+                        // Actually, params.codecs is list of RTCRtpCodecParameters.
+                        if let Some(codec) = params.rtp_parameters.codecs.first() {
+                             codec.payload_type
+                        } else {
+                             // Fallback to 96 (VP8) or 111 (Opus) if not found?
+                             // Or just keep original.
+                             0 
+                        }
+                    };
+                    
+                    info!(
+                        "[SFU] subscribe_to_existing_tracks: Resolved PT: {}, SSRC: {}",
+                        pt, ssrc
+                    );
+                    broadcaster.add_writer(local_track, ssrc, pt).await;
+                    
+                    // Delayed Keyframe Request to ensure receiver gets one after connection is stable
+                    broadcaster.clone().schedule_keyframe_burst();
                     peer.track_mapping.insert(t_stream.to_owned(), t_user.to_owned());
-                    println!("[SFU] Added existing track {} (user {}) to new peer {}", t_track, t_user, user_id);
+                    info!(
+                        track = %t_track,
+                        user = %t_user,
+                        new_peer = %user_id,
+                        "[SFU] Added existing track to new peer"
+                    );
                 }
             }
         }
@@ -265,7 +253,7 @@ impl SfuService for MySfu {
         let room_id = req.room_id.clone();
         let user_id = req.user_id.clone();
         
-        println!("CreateSession called for room: {}, user: {}", room_id, user_id);
+        info!(room = %room_id, user = %user_id, "CreateSession called");
 
         // 1. Configure WebRTC Engine
         let api = create_webrtc_api();
@@ -309,13 +297,13 @@ impl SfuService for MySfu {
         // Inspect PC state
         let user_id_ice_state = user_id.clone();
         pc.on_ice_connection_state_change(Box::new(move |s: RTCIceConnectionState| {
-             println!("[SFU] ICE Connection State for {} has changed: {}", user_id_ice_state, s);
+             info!(user_id = %user_id_ice_state, state = %s, "[SFU] ICE Connection State changed");
              Box::pin(async {})
         }));
         
         let user_id_pc_state = user_id.clone();
         pc.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
-             println!("[SFU] Peer Connection State for {} has changed: {}", user_id_pc_state, s);
+             info!(user_id = %user_id_pc_state, state = %s, "[SFU] Peer Connection State changed");
              Box::pin(async {})
         }));
 
@@ -327,7 +315,7 @@ impl SfuService for MySfu {
             let user_id_inner = user_id_ice_candidate.clone();
             Box::pin(async move {
                 if let Some(candidate) = c {
-                    println!("[SFU] Generated ICE candidate for {}", user_id_inner);
+                    info!(user_id = %user_id_inner, "[SFU] Generated ICE candidate");
                     let candidate_json = serde_json::to_string(&candidate.to_json().unwrap()).unwrap();
                     let mut tx_lock = event_tx_inner.lock().await;
                     if let Some(tx) = tx_lock.as_mut() {
@@ -370,7 +358,14 @@ impl SfuService for MySfu {
             let track_id = track.id().to_owned();
             let track_kind = track.kind().to_string();
             let track_ssrc = track.ssrc();
-            println!("[SFU] on_track triggered! User: {}, Kind: {}, StreamId: {}, TrackId: {}, SSRC: {}", user_id_clone, track_kind, track.stream_id(), track_id, track_ssrc);
+            info!(
+                user_id = %user_id_clone,
+                kind = %track_kind,
+                stream_id = %track.stream_id(),
+                track_id = %track_id,
+                ssrc = %track_ssrc,
+                "[SFU] on_track triggered!"
+            );
             
             let user_id = user_id_clone.clone();
             let room_id = room_id_clone.clone();
@@ -378,23 +373,24 @@ impl SfuService for MySfu {
             let tracks_map = tracks_map.clone();
             let pc_capture = pc_for_ontrack.clone();
             
+            
             Box::pin(async move {
-                println!("Received track from user: {}, kind: {}", user_id, track.kind());
+                info!(user_id = %user_id, kind = %track.kind(), "Received track from user");
                 
                 // 1. Create Broadcaster
                 let capability = track.codec().capability.clone();
                 let broadcaster = Arc::new(TrackBroadcaster::new(track_kind.clone(), capability, pc_capture, track_ssrc));
                 let track_key = format!("{}:{}:{}:{}", room_id, user_id, track.stream_id(), track.id());
-                println!("[SFU] Created broadcaster for track: {}", track_key);
+                info!(track_key = %track_key, "[SFU] Created broadcaster for track");
                 tracks_map.insert(track_key.clone(), broadcaster.clone());
                 
                 // 2. Notify Existing Peers & Add Writer to them
-                println!("[SFU] Notifying {} peers about new track", peers.len());
+                info!(count = %peers.len(), "[SFU] Notifying peers about new track");
                 for peer_entry in peers.iter() {
                     let other_peer = peer_entry.value();
-                    println!("[SFU] Checking peer {} in room {}", other_peer.user_id, other_peer.room_id);
+                    debug!(peer = %other_peer.user_id, matching_room = %other_peer.room_id, "[SFU] Checking peer");
                     if other_peer.room_id == room_id && other_peer.user_id != user_id {
-                          println!("[SFU] Forwarding new track to {}", other_peer.user_id);
+                          info!(target_user = %other_peer.user_id, "[SFU] Forwarding new track");
                           
                           let broadcaster_clone = broadcaster.clone();
                           let track_id_clone = track.id().to_owned();
@@ -408,6 +404,7 @@ impl SfuService for MySfu {
                           let other_peer_event_tx = other_peer.event_tx.clone();
                           let other_peer_track_mapping = other_peer.track_mapping.clone();
                           let other_peer_user_id = other_peer.user_id.clone();
+                          let track_for_pt = track.clone();
 
                           tokio::spawn(async move {
                               let local_track = Arc::new(TrackLocalStaticRTP::new(
@@ -418,7 +415,7 @@ impl SfuService for MySfu {
                              
                              let rtp_sender = match other_peer_pc.add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>).await {
                                      Ok(s) => s,
-                                     Err(e) => { println!("Error adding track to peer {}: {}", other_peer_user_id, e); return; }
+                                     Err(e) => { error!(peer = %other_peer_user_id, error = %e, "Error adding track to peer"); return; }
                              };
                                  
                              let sender_clone = rtp_sender.clone();
@@ -436,7 +433,19 @@ impl SfuService for MySfu {
                                  
                              let params = rtp_sender.get_parameters().await;
                              let ssrc = params.encodings.first().map(|e| e.ssrc).unwrap_or(0);
-                             broadcaster_clone.add_writer(local_track, ssrc).await;
+                             let pt = if let Some(codec) = params.rtp_parameters.codecs.first() {
+                                 codec.payload_type
+                            } else {
+                                 // Fallback to incoming PT if we can't find a negotiated one (better than 0)
+                                 let incoming_pt = track_for_pt.payload_type().try_into().unwrap_or(0);
+                                 warn!(incoming_pt = %incoming_pt, "[SFU] Outgoing codecs empty, falling back to incoming PT");
+                                 incoming_pt
+                             };
+                             info!(outgoing_pt = %pt, ssrc = %ssrc, "[SFU] on_track forwarding: Resolved Outgoing PT");
+                             broadcaster_clone.add_writer(local_track, ssrc, pt).await;
+                             
+                             // Delayed Keyframe Request - Burst Mode to ensure delivery after DTLS
+                             broadcaster_clone.clone().schedule_keyframe_burst();
                              other_peer_track_mapping.insert(track_stream_id_clone.clone(), source_user_id.clone());
 
                              // Use unified renegotiation helper
@@ -461,24 +470,35 @@ impl SfuService for MySfu {
                 let track_id_log = track.id().to_owned();
                 tokio::spawn(async move {
                     let mut packet_count = 0;
+                    info!(track = %track_id_log, "[SFU] Starting read_rtp loop");
                     loop {
                          match track.read_rtp().await {
                              Ok((packet, _)) => {
                                  packet_count += 1;
+                                 if packet_count == 1 {
+                                     info!(track = %track_id_log, "[SFU] First packet received");
+                                 }
                                  if packet_count % 100 == 0 {
-                                     println!("[SFU] Forwarded 100 packets for track {}", track_id_log);
+                                     trace!(count = %packet_count, track = %track_id_log, "[SFU] Forwarded packets");
                                  }
                                  let writers = broadcaster.writers.lock().await;
                                  for w in writers.iter() {
+                                     /* ... packet logic ... */
                                      let mut packet = packet.clone();
                                      packet.header.ssrc = w.ssrc;
+                                     if w.payload_type != 0 {
+                                         packet.header.payload_type = w.payload_type;
+                                     }
+                                     if packet_count % 100 == 0 {
+                                         trace!(ssrc = %w.ssrc, pt = %packet.header.payload_type, orig_pt = %packet.header.payload_type, "[SFU] Writing packet");
+                                     }
                                      if let Err(_e) = w.track.write_rtp(&packet).await {
-                                         // println!("Error forwarding packet: {}", _e);
+                                         // debug!(error = %_e, "Error forwarding packet");
                                      }
                                  }
                              }
                              Err(e) => {
-                                 println!("[SFU] Track loop finished for {}: {}", track_id_log, e);
+                                 warn!(track = %track_id_log, error = %e, "[SFU] Track loop finished: Error. (Note: 'DataChannel not opened' usually means Transport Closed)");
                                  break;
                              }
                          }
@@ -503,14 +523,14 @@ impl SfuService for MySfu {
         
         use webrtc::ice_transport::ice_gathering_state::RTCIceGatheringState;
         if peer_pc.ice_gathering_state() != RTCIceGatheringState::Complete {
-            println!("[SFU] Waiting for initial ICE gathering for {}", session_key);
+            info!(session = %session_key, "[SFU] Waiting for initial ICE gathering");
             let _ = tokio::time::timeout(tokio::time::Duration::from_millis(1500), gather_complete.recv()).await;
         }
         
         let local_desc = peer_pc.local_description().await.unwrap_or_default();
         let sdp = local_desc.sdp;
         
-        println!("Session created for {}. Initial SDP Offer (Wait completed)", session_key);
+        info!(session = %session_key, "Session created. Initial SDP Offer (Wait completed)");
 
         Ok(Response::new(CreateSessionResponse {
             sdp_offer: sdp,
@@ -524,7 +544,7 @@ impl SfuService for MySfu {
         let req = request.into_inner();
         let session_key = format!("{}:{}", req.room_id, req.user_id);
         
-        println!("ListenEvents called for {}", session_key);
+        info!(session = %session_key, "ListenEvents called");
 
         let (tx, rx) = mpsc::channel(100);
         
@@ -582,31 +602,31 @@ impl SfuService for MySfu {
         if let Some(payload) = req.payload {
             match payload {
                 pb::sfu::signal_message::Payload::SdpAnswer(sdp) => {
-                    println!("Applying SDP Answer for {}", session_key);
+                    info!(session = %session_key, "Applying SDP Answer");
                     let desc = RTCSessionDescription::answer(sdp).unwrap();
                     pc.set_remote_description(desc).await.map_err(|e| {
                         Status::internal(format!("Failed to set remote description: {}", e))
                     })?;
                 }
                 pb::sfu::signal_message::Payload::IceCandidate(candidate_str) => {
-                    println!("Applying ICE Candidate for {}: {}", session_key, candidate_str);
+                    info!(session = %session_key, candidate = %candidate_str, "Applying ICE Candidate");
                     let candidate: RTCIceCandidateInit = match serde_json::from_str(&candidate_str) {
                         Ok(c) => c,
                         Err(e) => {
-                            println!("Failed to parse ICE candidate from {}: {}", session_key, e);
+                            error!(session = %session_key, error = %e, "Failed to parse ICE candidate");
                             return Err(Status::internal(format!("Failed to parse ICE candidate: {}", e)));
                         }
                     };
                     
                     if let Err(e) = pc.add_ice_candidate(candidate).await {
-                        println!("Failed to add ICE candidate for {}: {}", session_key, e);
+                        error!(session = %session_key, error = %e, "Failed to add ICE candidate");
                     }
                 }
                 pb::sfu::signal_message::Payload::SdpOffer(sdp) => {
-                    println!("Received SDP Offer for {}:\n{}", session_key, sdp);
+                    info!(session = %session_key, sdp_part = %sdp.chars().take(50).collect::<String>(), "Received SDP Offer");
                     let desc = RTCSessionDescription::offer(sdp).unwrap();
                     pc.set_remote_description(desc).await.map_err(|e| {
-                        println!("Failed to set remote description for {}: {}", session_key, e);
+                        error!(session = %session_key, error = %e, "Failed to set remote description");
                         Status::internal(format!("Failed to set remote description: {}", e))
                     })?;
 
@@ -625,12 +645,14 @@ impl SfuService for MySfu {
                     
                     // Fix DTLS Role Flip: Ensure SFU stays passive if the browser offers actpass
                     // This prevents "Failed to set SSL role for the transport" in browsers.
+                    // Fix DTLS Role Flip: Ensure SFU stays passive if the browser offers actpass
+                    // This prevents "Failed to set SSL role for the transport" in browsers.
                     if sdp_answer.contains("a=setup:active") {
                         sdp_answer = sdp_answer.replace("a=setup:active", "a=setup:passive");
-                        println!("Modified Answer to setup:passive for {} to prevent role flip", session_key);
+                        info!(session = %session_key, "Modified Answer to setup:passive to prevent role flip");
                     }
                     
-                    println!("Generated SDP Answer for {}:\n{}", session_key, sdp_answer);
+                    info!(session = %session_key, "Generated SDP Answer");
 
                     // Send Answer via Event Channel
                     let mut tx_lock = peer.event_tx.lock().await;
@@ -653,7 +675,7 @@ impl SfuService for MySfu {
          let req = request.into_inner();
         let session_key = format!("{}:{}", req.room_id, req.user_id);
         if let Some((_, peer)) = self.peers.remove(&session_key) {
-            println!("Deleting session and closing PeerConnection for {}", session_key);
+            info!(session = %session_key, "Deleting session and closing PeerConnection");
             let _ = peer.pc.close().await;
             
             // Cleanup: Remove any broadcast tracks belonging to this user
@@ -667,7 +689,7 @@ impl SfuService for MySfu {
             }
             
             for key in tracks_to_remove {
-                println!("[SFU] Removing broadcast track: {}", key);
+                info!(key = %key, "[SFU] Removing broadcast track");
                 self.tracks.remove(&key);
             }
         }
@@ -677,13 +699,16 @@ impl SfuService for MySfu {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
     let addr = "0.0.0.0:50051".parse()?;
     let sfu = MySfu {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
     };
-    println!("SFU Server listening on {}", addr);
+    info!("SFU Server listening on {}", addr);
     Server::builder()
         .add_service(SfuServiceServer::new(sfu))
         .serve(addr)

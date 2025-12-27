@@ -28,6 +28,13 @@ export const createParticipantSlice: StateCreator<
   addParticipant: (participant) => {
     set((state) => {
       const newParticipants = new Map(state.participants);
+      const existing = newParticipants.get(participant.id);
+
+      // Preserving existing stream if available
+      if (existing?.stream) {
+        participant.stream = existing.stream;
+      }
+
       newParticipants.set(participant.id, participant);
       return { participants: newParticipants };
     });
@@ -209,6 +216,14 @@ export const createParticipantSlice: StateCreator<
           action: isCurrentlyOn ? 'disable_video' : 'enable_video'
         }
       });
+    }
+  },
+
+  toggleHand: async () => {
+    const { roomClient, currentUserId, raisingHandParticipants } = get();
+    if (roomClient && currentUserId) {
+      const isCurrentlyRaised = raisingHandParticipants.has(currentUserId);
+      roomClient.toggleHand(!isCurrentlyRaised);
     }
   },
 });

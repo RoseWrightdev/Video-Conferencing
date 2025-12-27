@@ -163,13 +163,51 @@ func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
 //   - Upgrades to WebSocket on success.
 func (h *Hub) ServeWs(c *gin.Context) {
 	// --- AUTHENTICATION ---
-	tokenString := c.Query("token") // from Auth0
-	if tokenString == "" {
+	// --- AUTHENTICATION ---
+	// Priority 1: Check Sec-WebSocket-Protocol header (Secure)
+	// --- AUTHENTICATION ---
+	// Priority 1: Check Sec-WebSocket-Protocol header (Secure)
+	headerVal := c.GetHeader("Sec-WebSocket-Protocol")
+	var tokenFromHeader string
+	var hasAccessTokenProtocol bool
+
+	if headerVal != "" {
+		parts := strings.Split(headerVal, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "access_token" {
+				hasAccessTokenProtocol = true
+				continue
+			}
+			// Treat any other part as a potential token
+			if p != "" {
+				// We don't know which one is the token, so we have to try candidates.
+				// In a conformant client, we expect "access_token, <token>" or "<token>, access_token".
+				// We'll tentatively use the first non-access_token string as the candidate,
+				// or validte them. Since validation is local (stateless JWT), we can just try.
+				_, err := h.validator.ValidateToken(p)
+				if err == nil {
+					tokenFromHeader = p
+				}
+			}
+		}
+	}
+
+	// Priority 2: Fallback to URL Query (Legacy/Less Secure)
+	var finalToken string
+	if tokenFromHeader != "" {
+		finalToken = tokenFromHeader
+	} else {
+		finalToken = c.Query("token")
+	}
+
+	if finalToken == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "token not provided"})
 		return
 	}
 
-	claims, err := h.validator.ValidateToken(tokenString)
+	// Validate again (if from header, we basically already did, but this keeps logic clean)
+	claims, err := h.validator.ValidateToken(finalToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
@@ -208,7 +246,20 @@ func (h *Hub) ServeWs(c *gin.Context) {
 		},
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	// Important: Echo back the selected protocol
+	responseHeader := http.Header{}
+	if tokenFromHeader != "" {
+		if hasAccessTokenProtocol {
+			// Best practice: verify token, but return "access_token" as the selected protocol
+			// This avoids issues with browsers disliking long JWT strings in the response header.
+			responseHeader.Set("Sec-WebSocket-Protocol", "access_token")
+		} else {
+			// Legacy fallback: echo the token itself if client didn't ask for "access_token"
+			responseHeader.Set("Sec-WebSocket-Protocol", tokenFromHeader)
+		}
+	}
+
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, responseHeader)
 	if err != nil {
 		slog.Error("Failed to upgrade connection", "error", err)
 		return

@@ -2,25 +2,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
 import { useState, useRef, useEffect, memo } from "react";
-import { ChatDependencies } from "../types/ChatDependencies";
+import { useRoomStore } from "@/store/useRoomStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export interface ChatInputProps {
-  dependencies: ChatDependencies;
   disabled?: boolean;
   placeholder?: string;
 }
 
 const ChatInput = memo(function ChatInput({
-  dependencies,
   disabled = false,
   placeholder = "Message"
 }: ChatInputProps) {
+  const sendMessage = useRoomStore(useShallow(state => state.sendMessage));
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSendMessage = () => {
     if (message.trim() && !disabled) {
-      dependencies.chatService.sendChat(message);
+      sendMessage(message);
       setMessage("");
     }
   };

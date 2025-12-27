@@ -6,6 +6,11 @@ import { useRoomStore } from '@/store/useRoomStore';
 // Mock the store
 vi.mock('@/store/useRoomStore');
 
+// Mock the store
+vi.mock('@/store/useRoomStore', () => ({
+    useRoomStore: vi.fn()
+}));
+
 describe('useMediaControls', () => {
     const mockToggleAudio = vi.fn();
     const mockToggleVideo = vi.fn();
@@ -21,12 +26,23 @@ describe('useMediaControls', () => {
             isAudioEnabled: true,
             isVideoEnabled: true,
             isScreenSharing: false,
+            availableDevices: {
+                cameras: [{ deviceId: 'cam-1', label: 'Camera' }],
+                microphones: [{ deviceId: 'mic-1', label: 'Microphone' }],
+                speakers: []
+            },
+            selectedDevices: {
+                camera: 'cam-1',
+                microphone: 'mic-1',
+                speaker: null
+            },
             toggleAudio: mockToggleAudio,
             toggleVideo: mockToggleVideo,
             startScreenShare: mockStartScreenShare,
             stopScreenShare: mockStopScreenShare,
             switchCamera: mockSwitchCamera,
             switchMicrophone: mockSwitchMicrophone,
+            refreshDevices: vi.fn(),
         });
     });
 
@@ -89,12 +105,23 @@ describe('useMediaControls', () => {
                 isAudioEnabled: true,
                 isVideoEnabled: true,
                 isScreenSharing: true,
+                availableDevices: {
+                    cameras: [{ deviceId: 'cam-1', label: 'Camera' }],
+                    microphones: [{ deviceId: 'mic-1', label: 'Microphone' }],
+                    speakers: []
+                },
+                selectedDevices: {
+                    camera: 'cam-1',
+                    microphone: 'mic-1',
+                    speaker: null
+                },
                 toggleAudio: mockToggleAudio,
                 toggleVideo: mockToggleVideo,
                 startScreenShare: mockStartScreenShare,
                 stopScreenShare: mockStopScreenShare,
                 switchCamera: mockSwitchCamera,
                 switchMicrophone: mockSwitchMicrophone,
+                refreshDevices: vi.fn(),
             });
 
             const { result } = renderHook(() => useMediaControls());

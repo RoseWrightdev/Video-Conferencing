@@ -10,72 +10,49 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select';
-import type { Participant } from '@/store/types';
+import { useRoomStore } from '@/store/useRoomStore';
+import { useShallow } from 'zustand/react/shallow';
+import { useMemo } from 'react';
+import { Participant } from '@/store/types';
 
 export interface ParticipantsPanelProps {
-  participants: Participant[];
-  waitingParticipants?: Participant[];
-  currentUserId?: string;
-  isHost?: boolean;
-  onClose: () => void;
-  onMuteParticipant?: (participantId: string) => void;
-  onRemoveParticipant?: (participantId: string) => void;
-  onApproveWaiting?: (participantId: string) => void;
-  onDenyWaiting?: (participantId: string) => void;
   className?: string;
-  // Participant state maps
-  unmutedParticipants?: Set<string>;
-  cameraOnParticipants?: Set<string>;
-  sharingScreenParticipants?: Set<string>;
-  raisingHandParticipants?: Set<string>;
+}
+
+interface ParticipantsPanelContentProps {
+  className?: string;
+  participants: Participant[];
+  waitingParticipants: Participant[];
+  currentUserId: string | null;
+  isHost: boolean;
+  unmutedParticipants: Set<string>;
+  cameraOnParticipants: Set<string>;
+  sharingScreenParticipants: Set<string>;
+  raisingHandParticipants: Set<string>;
+  onClose: () => void;
+  onApprove: (id: string) => void;
+  onKick: (id: string) => void;
+  onToggleAudio: (id: string) => void;
 }
 
 /**
- * Sidebar panel displaying participant list with management controls.
- * 
- * Features:
- * - Participant list with status indicators
- * - Host-only controls (mute, remove)
- * - Waiting room management (approve/deny)
- * - Hand raise indicators
- * - Screen sharing status
- * - Role badges
- * 
- * Dependency Injection:
- * - All data passed via props
- * - No direct store access
- * - Callbacks for actions
- * 
- * @example
- * ```tsx
- * <ParticipantsPanel
- *   participants={participants}
- *   waitingParticipants={waitingUsers}
- *   currentUserId="user-123"
- *   isHost={true}
- *   onClose={() => setOpen(false)}
- *   onMuteParticipant={(id) => handleMute(id)}
- *   onApproveWaiting={(id) => approveParticipant(id)}
- *   unmutedParticipants={unmutedSet}
- * />
- * ```
+ * Pure presentational component for ParticipantsPanel.
  */
-export default function ParticipantsPanel({
-  participants,
-  waitingParticipants = [],
-  currentUserId,
-  isHost = false,
-  onClose,
-  onMuteParticipant,
-  onRemoveParticipant,
-  onApproveWaiting,
-  onDenyWaiting,
+export function ParticipantsPanelContent({
   className,
-  unmutedParticipants = new Set(),
-  cameraOnParticipants = new Set(),
-  sharingScreenParticipants = new Set(),
-  raisingHandParticipants = new Set(),
-}: ParticipantsPanelProps) {
+  participants,
+  waitingParticipants,
+  currentUserId,
+  isHost,
+  unmutedParticipants,
+  cameraOnParticipants,
+  sharingScreenParticipants,
+  raisingHandParticipants,
+  onClose,
+  onApprove,
+  onKick,
+  onToggleAudio,
+}: ParticipantsPanelContentProps) {
   // Sort participants: host first, then hand raised, then alphabetical
   const sortedParticipants = [...participants].sort((a, b) => {
     if (a.role === 'host' && b.role !== 'host') return -1;
@@ -131,7 +108,7 @@ export default function ParticipantsPanel({
                     <div className="w-8 h-8 rounded-full bg-linear-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-white font-bold text-xs shrink-0">
                       {participant.username
                         .split(' ')
-                        .map((n) => n[0])
+                        .map((n: string) => n[0])
                         .join('')
                         .toUpperCase()
                         .slice(0, 2)}
@@ -143,28 +120,24 @@ export default function ParticipantsPanel({
 
                   {/* Right: Approve/Deny buttons */}
                   <div className="flex gap-1">
-                    {onApproveWaiting && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onApproveWaiting(participant.id)}
-                        className="h-7 px-2 text-xs text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/20"
-                        title="Approve"
-                      >
-                        <Check className="h-3 w-3" />
-                      </Button>
-                    )}
-                    {onDenyWaiting && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onDenyWaiting(participant.id)}
-                        className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/20"
-                        title="Deny"
-                      >
-                        <Ban className="h-3 w-3" />
-                      </Button>
-                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onApprove(participant.id)}
+                      className="h-7 px-2 text-xs text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/20"
+                      title="Approve"
+                    >
+                      <Check className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onKick(participant.id)}
+                      className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/20"
+                      title="Deny"
+                    >
+                      <Ban className="h-3 w-3" />
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -183,10 +156,10 @@ export default function ParticipantsPanel({
           ) : (
             sortedParticipants.map(participant => {
               const isCurrentUser = participant.id === currentUserId;
-              const isAudioOn = unmutedParticipants.has(participant.id);
-              const isVideoOn = cameraOnParticipants.has(participant.id);
-              const isScreenSharing = sharingScreenParticipants.has(participant.id);
-              const hasHandRaised = raisingHandParticipants.has(participant.id);
+              const isAudioOn = participant.isAudioEnabled;
+              const isVideoOn = participant.isVideoEnabled;
+              const isScreenSharing = participant.isScreenSharing;
+              const hasHandRaised = participant.isHandRaised;
               const isParticipantHost = participant.role === 'host';
 
               return (
@@ -203,7 +176,7 @@ export default function ParticipantsPanel({
                     <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
                       {participant.username
                         .split(' ')
-                        .map((n) => n[0])
+                        .map((n: string) => n[0])
                         .join('')
                         .toUpperCase()
                         .slice(0, 2)}
@@ -257,17 +230,17 @@ export default function ParticipantsPanel({
                       {isHost && !isCurrentUser && (
                         <div>
                           <Select onValueChange={(value) => {
-                            if (value === 'mute' && onMuteParticipant && isAudioOn) {
-                              onMuteParticipant(participant.id);
-                            } else if (value === 'remove' && onRemoveParticipant) {
-                              onRemoveParticipant(participant.id);
+                            if (value === 'mute' && isAudioOn) {
+                              onToggleAudio(participant.id);
+                            } else if (value === 'remove') {
+                              onKick(participant.id);
                             }
                           }}>
                             <SelectTrigger>
                               <MoreVertical />
                             </SelectTrigger>
                             <SelectContent>
-                              {onMuteParticipant && isAudioOn && (
+                              {isAudioOn && (
                                 <SelectItem value="mute">
                                   <div className="flex items-center gap-2">
                                     <MicOff className="h-3 w-3" />
@@ -275,14 +248,12 @@ export default function ParticipantsPanel({
                                   </div>
                                 </SelectItem>
                               )}
-                              {onRemoveParticipant && (
-                                <SelectItem value="remove" className="text-destructive focus:text-destructive">
-                                  <div className="flex items-center gap-2">
-                                    <UserX className="h-3 w-3" />
-                                    <span>Remove</span>
-                                  </div>
-                                </SelectItem>
-                              )}
+                              <SelectItem value="remove" className="text-destructive focus:text-destructive">
+                                <div className="flex items-center gap-2">
+                                  <UserX className="h-3 w-3" />
+                                  <span>Remove</span>
+                                </div>
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -316,5 +287,62 @@ export default function ParticipantsPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Sidebar panel displaying participant list with management controls.
+ * Connected directly to useRoomStore.
+ */
+export default function ParticipantsPanel({
+  className,
+}: ParticipantsPanelProps) {
+  const {
+    participantsMap,
+    waitingParticipantsMap,
+    currentUserId,
+    isHost,
+    unmutedParticipants,
+    cameraOnParticipants,
+    sharingScreenParticipants,
+    raisingHandParticipants,
+    toggleParticipantsPanel,
+    approveParticipant,
+    kickParticipant,
+    toggleParticipantAudio,
+  } = useRoomStore(useShallow(state => ({
+    participantsMap: state.participants,
+    waitingParticipantsMap: state.waitingParticipants,
+    currentUserId: state.currentUserId,
+    isHost: state.isHost,
+    unmutedParticipants: state.unmutedParticipants,
+    cameraOnParticipants: state.cameraOnParticipants,
+    sharingScreenParticipants: state.sharingScreenParticipants,
+    raisingHandParticipants: state.raisingHandParticipants,
+    toggleParticipantsPanel: state.toggleParticipantsPanel,
+    approveParticipant: state.approveParticipant,
+    kickParticipant: state.kickParticipant,
+    toggleParticipantAudio: state.toggleParticipantAudio,
+  })));
+
+  const participants = useMemo(() => Array.from(participantsMap.values()), [participantsMap]);
+  const waitingParticipants = useMemo(() => Array.from(waitingParticipantsMap.values()), [waitingParticipantsMap]);
+
+  return (
+    <ParticipantsPanelContent
+      className={className}
+      participants={participants}
+      waitingParticipants={waitingParticipants}
+      currentUserId={currentUserId}
+      isHost={isHost}
+      unmutedParticipants={unmutedParticipants}
+      cameraOnParticipants={cameraOnParticipants}
+      sharingScreenParticipants={sharingScreenParticipants}
+      raisingHandParticipants={raisingHandParticipants}
+      onClose={toggleParticipantsPanel}
+      onApprove={approveParticipant}
+      onKick={kickParticipant}
+      onToggleAudio={toggleParticipantAudio}
+    />
   );
 }

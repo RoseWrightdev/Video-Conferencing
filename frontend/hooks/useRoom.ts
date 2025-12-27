@@ -28,8 +28,12 @@ export const useRoom = (params?: {
     username: string,
     token: string,
   ) => {
+    const state = useRoomStore.getState();
     // If we are already initializing or joined, don't try again
-    if (connectionState.isInitializing || isJoined) return;
+    if (state.connectionState.isInitializing || state.isJoined) return;
+
+    // Prevent infinite loop: do not retry if there is an active error
+    if (state.connectionState.lastError) return;
 
     if (!token) {
       handleError('Authentication token is required.');
@@ -41,7 +45,7 @@ export const useRoom = (params?: {
     } catch (error) {
       handleError(`Failed to join room: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [connectionState.isInitializing, isJoined, initializeRoom, handleError]);
+  }, [initializeRoom, handleError]);
 
   // Auto-join effect
   useEffect(() => {
@@ -55,9 +59,7 @@ export const useRoom = (params?: {
       params?.autoJoin &&
       params.roomId &&
       params.username &&
-      params.token &&
-      !isJoined &&
-      !connectionState.isInitializing
+      params.token
     ) {
       // NOTE: React Strict Mode will run this effect twice.
       // The first call sets isInitializing=true synchronously (mostly) in the store
@@ -66,14 +68,26 @@ export const useRoom = (params?: {
 
       joinRoomWithAuth(params.roomId, params.username, params.token);
     }
+
+    // Cleanup function to prevent ghost connections
+    return () => {
+      if (params?.autoJoin) { // Only auto-leave if we auto-joined
+        // We need to be careful not to leave if we are just re-rendering, 
+        // but in Strict Mode we WANT to leave and rejoin to prove resilience.
+        // Ideally, leaveRoom() disconnects socket -> RoomClient cleanup -> Backend sees disconnect.
+        leaveRoom();
+      }
+    };
   }, [
     params?.autoJoin,
     params?.roomId,
     params?.username,
     params?.token,
-    isJoined,
-    connectionState.isInitializing,
-    joinRoomWithAuth
+    // Remove dependencies that cause unnecessary re-joins if they change without intent
+    // Actually, if these change we probably DO want to rejoin.
+    // Keeping logic simple: deps change -> cleanup -> new effect -> join
+    joinRoomWithAuth,
+    leaveRoom
   ]);
 
   const isRoomReady = connectionState.wsConnected && isJoined && !isWaitingRoom;

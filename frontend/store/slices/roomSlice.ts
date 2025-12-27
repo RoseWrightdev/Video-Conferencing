@@ -2,6 +2,9 @@ import { StateCreator } from 'zustand';
 import { RoomClient } from '@/lib/RoomClient';
 import { type RoomSlice, type RoomStoreState } from '../types';
 
+// Basic Singleton for HMR handling
+let activeRoomClient: RoomClient | null = null;
+
 export const createRoomSlice: StateCreator<
   RoomStoreState,
   [],
@@ -42,7 +45,25 @@ export const createRoomSlice: StateCreator<
   // Plan: Modify `RoomSlice` type in next step. For now, we will store `roomClient` as `any` in the store or just closure.
   // Let's use a closure variable for the slice.
 
+  // FIX: Track the active client instance at module level to prevent HMR leaks.
+  if (activeRoomClient) {
+    console.warn('[RoomSlice] Disconnecting previous RoomClient instance due to store recreation/HMR');
+    activeRoomClient.disconnect();
+  }
+
   const roomClient = new RoomClient(onRoomStateChange, onMediaTrackAdded);
+  activeRoomClient = roomClient;
+
+  // Ensure cleanup on HMR disposal
+  if ((import.meta as any).hot) {
+    (import.meta as any).hot.dispose(() => {
+      if (activeRoomClient) {
+        console.warn('[RoomSlice] HMR Dispose: Disconnecting RoomClient');
+        activeRoomClient.disconnect();
+        activeRoomClient = null;
+      }
+    });
+  }
 
   return {
     roomId: null,
@@ -92,6 +113,14 @@ export const createRoomSlice: StateCreator<
         waitingParticipants: new Map(),
         messages: []
       });
+      // Ensure connection state is reset
+      get().updateConnectionState({
+        wsConnected: false,
+        wsReconnecting: false,
+        webrtcConnected: false,
+        isInitializing: false,
+        lastError: undefined
+      });
     },
 
     updateRoomSettings: () => { },
@@ -101,17 +130,3 @@ export const createRoomSlice: StateCreator<
     // For now, let's attach the actions that delegate to roomClient.
   };
 };
-
-/* 
-   NOTE: Other slices (mediaSlice, etc) call `wsClient.send` directly. 
-   We need to fix that or `roomClient` needs to expose `wsClient`.
-   RoomClient exposes `ws` internally. We should probably expose it for compatibility 
-   OR update MediaSlice to use RoomClient methods. 
-   
-   UPDATED PLAN: 
-   1. `RoomClient` should expose `ws` publically or we wrap the methods.
-   2. Current `RoomSlice` type has `wsClient` and `sfuClient`. 
-   3. We can just set `state.wsClient = roomClient.ws` in initialization if we make them public.
-   
-   Let's modify `RoomClient.ts` to make `ws` public or at least accessible.
-*/

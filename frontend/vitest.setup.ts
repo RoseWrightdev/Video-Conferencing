@@ -34,6 +34,8 @@ Object.defineProperty(navigator, 'mediaDevices', {
       getVideoTracks: () => [],
     })),
     enumerateDevices: vi.fn(() => Promise.resolve([])),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
   },
 })
 

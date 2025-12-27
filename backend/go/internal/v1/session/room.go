@@ -195,6 +195,16 @@ func (r *Room) handleClientDisconnect(client *Client) {
 func (r *Room) router(ctx context.Context, client *Client, msg *pb.WebSocketMessage) {
 	switch payload := msg.Payload.(type) {
 	case *pb.WebSocketMessage_Join:
+		// [DEBUG] Log role
+		slog.Info("Handling Join Request", "clientId", client.ID, "role", client.Role)
+
+		// [FIX] Only allow joining SFU if not in waiting room.
+		// Waiting users must be approved by Host (which triggers CreateSFUSession via AdminAction)
+		if client.Role == RoleTypeWaiting {
+			slog.Warn("Ignored Join request from waiting user", "clientId", client.ID)
+			return
+		}
+
 		if err := r.CreateSFUSession(ctx, client); err != nil {
 			slog.Error("Failed to create SFU session", "error", err)
 		}

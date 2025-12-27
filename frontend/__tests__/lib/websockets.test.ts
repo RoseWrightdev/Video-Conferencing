@@ -9,6 +9,9 @@ describe('WebSocketClient', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // Ensure constants are available on the global mock
+        (globalThis.WebSocket as any).OPEN = 1;
+        (globalThis.WebSocket as any).CONNECTING = 0;
         client = new WebSocketClient(mockUrl, mockToken);
     });
 
@@ -27,11 +30,10 @@ describe('WebSocketClient', () => {
             const connectPromise = client.connect();
 
             // Verify WebSocket was created with correct URL
+            // Verify WebSocket was created with correct URL and protocols
             expect(globalThis.WebSocket).toHaveBeenCalledWith(
-                expect.stringContaining('token=test-token-123')
-            );
-            expect(globalThis.WebSocket).toHaveBeenCalledWith(
-                expect.stringContaining(mockUrl)
+                mockUrl,
+                ['access_token', mockToken]
             );
 
             // Simulate WebSocket open event
@@ -105,8 +107,9 @@ describe('WebSocketClient', () => {
             wsInstance.onopen();
             await connectPromise;
 
-            // Send invalid data
-            wsInstance.onmessage({ data: new ArrayBuffer(0) });
+            // Send invalid data (garbage bytes that should fail protobuf decoding)
+            // Note: Empty buffer is valid empty message, so we send garbage key/tag
+            wsInstance.onmessage({ data: new Uint8Array([255, 255, 255]).buffer });
 
             // Handler should not be called if decoding fails
             // The error should be logged but not thrown
@@ -173,10 +176,8 @@ describe('WebSocketClient', () => {
             };
 
             // Change readyState to CONNECTING to simulate not ready
-            Object.defineProperty(wsInstance, 'readyState', {
-                value: WebSocket.CONNECTING,
-                writable: true,
-            });
+            // The mock in vitest.setup.ts returns a plain object, so we can just assign property
+            wsInstance.readyState = WebSocket.CONNECTING;
 
             client.send(message);
 

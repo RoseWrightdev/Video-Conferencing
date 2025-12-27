@@ -4,7 +4,16 @@ import { useRoom } from '@/hooks/useRoom';
 import { useRoomStore } from '@/store/useRoomStore';
 
 // Mock the store
-vi.mock('@/store/useRoomStore');
+// Mock the store
+const { mockUseRoomStore } = vi.hoisted(() => {
+    const mockUseRoomStore = vi.fn();
+    (mockUseRoomStore as any).getState = vi.fn();
+    return { mockUseRoomStore };
+});
+
+vi.mock('@/store/useRoomStore', () => ({
+    useRoomStore: mockUseRoomStore
+}));
 
 describe('useRoom', () => {
     const mockInitializeRoom = vi.fn();
@@ -16,8 +25,7 @@ describe('useRoom', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        // Setup default mock implementation
-        (useRoomStore as any).mockReturnValue({
+        const defaultState = {
             roomId: 'test-room',
             roomName: 'Test Room',
             isJoined: false,
@@ -28,6 +36,7 @@ describe('useRoom', () => {
                 wsConnected: false,
                 wsReconnecting: false,
                 isInitializing: false,
+                lastError: undefined,
             },
             isWaitingRoom: false,
             updateRoomSettings: mockUpdateRoomSettings,
@@ -35,7 +44,11 @@ describe('useRoom', () => {
             clearError: mockClearError,
             initializeRoom: mockInitializeRoom,
             leaveRoom: mockLeaveRoom,
-        });
+        };
+
+        // Setup default mock implementation
+        (useRoomStore as any).mockReturnValue(defaultState);
+        (useRoomStore as any).getState.mockReturnValue(defaultState);
     });
 
     afterEach(() => {
@@ -78,19 +91,22 @@ describe('useRoom', () => {
         });
 
         it('should not join if already initializing', async () => {
-            (useRoomStore as any).mockReturnValue({
+            const newState = {
                 ...useRoomStore(),
                 connectionState: {
                     wsConnected: false,
                     wsReconnecting: false,
                     isInitializing: true,
+                    lastError: undefined
                 },
                 initializeRoom: mockInitializeRoom,
                 handleError: mockHandleError,
                 clearError: mockClearError,
                 updateRoomSettings: mockUpdateRoomSettings,
                 leaveRoom: mockLeaveRoom,
-            });
+            };
+            (useRoomStore as any).mockReturnValue(newState);
+            (useRoomStore as any).getState.mockReturnValue(newState);
 
             const { result } = renderHook(() => useRoom());
             await result.current.joinRoomWithAuth('room-123', 'testuser', 'token-abc');
@@ -99,20 +115,23 @@ describe('useRoom', () => {
         });
 
         it('should not join if already joined', async () => {
-            (useRoomStore as any).mockReturnValue({
+            const newState = {
                 ...useRoomStore(),
                 isJoined: true,
                 connectionState: {
                     wsConnected: true,
                     wsReconnecting: false,
                     isInitializing: false,
+                    lastError: undefined
                 },
                 initializeRoom: mockInitializeRoom,
                 handleError: mockHandleError,
                 clearError: mockClearError,
                 updateRoomSettings: mockUpdateRoomSettings,
                 leaveRoom: mockLeaveRoom,
-            });
+            };
+            (useRoomStore as any).mockReturnValue(newState);
+            (useRoomStore as any).getState.mockReturnValue(newState);
 
             const { result } = renderHook(() => useRoom());
             await result.current.joinRoomWithAuth('room-123', 'testuser', 'token-abc');
@@ -173,7 +192,7 @@ describe('useRoom', () => {
         });
 
         it('should not auto-join if already joined', async () => {
-            (useRoomStore as any).mockReturnValue({
+            const newState = {
                 ...useRoomStore(),
                 isJoined: true,
                 initializeRoom: mockInitializeRoom,
@@ -181,7 +200,9 @@ describe('useRoom', () => {
                 clearError: mockClearError,
                 updateRoomSettings: mockUpdateRoomSettings,
                 leaveRoom: mockLeaveRoom,
-            });
+            };
+            (useRoomStore as any).mockReturnValue(newState);
+            (useRoomStore as any).getState.mockReturnValue(newState);
 
             renderHook(() =>
                 useRoom({

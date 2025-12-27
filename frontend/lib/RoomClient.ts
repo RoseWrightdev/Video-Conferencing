@@ -42,9 +42,16 @@ export class RoomClient {
     }
 
     public async connect(roomId: string, username: string, token: string) {
+        // Enforce cleanup of any existing connection before starting a new one
+        if (this.ws || this.sfu) {
+            logger.warn('Cleaning up existing connection before new connect', { roomId, username });
+            this.disconnect();
+        }
+
         logger.info('Connecting to Room', { roomId, username });
 
-        const wsUrl = `ws://localhost:8080/ws/hub/${roomId}?username=${encodeURIComponent(username)}`;
+        const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080';
+        const wsUrl = `${baseUrl}/ws/hub/${roomId}?username=${encodeURIComponent(username)}`;
         const ws = new WebSocketClient(wsUrl, token);
         this.ws = ws;
 
@@ -77,8 +84,16 @@ export class RoomClient {
                 }
             });
         } catch (e) {
+            // If connection was replaced or explicitly disconnected, ignore the error
+            if (this.ws !== ws) {
+                logger.warn('Ignoring connection error from superseded/disconnected client', e);
+                return;
+            }
+
             logger.error('Failed to connect', e);
             this.onStateChange({ error: `Connection failed: ${e}` });
+            // Clean up if connection failed
+            this.disconnect();
         }
     }
 
@@ -157,6 +172,7 @@ export class RoomClient {
                 break;
             case 'mediaStateChanged':
                 if (msg.mediaStateChanged) {
+                    logger.debug('Received mediaStateChanged', msg.mediaStateChanged);
                     this.updateParticipantState(msg.mediaStateChanged.userId, {
                         isAudioEnabled: msg.mediaStateChanged.isAudioEnabled,
                         isVideoEnabled: msg.mediaStateChanged.isVideoEnabled
@@ -209,12 +225,39 @@ export class RoomClient {
     private updateParticipantState(userId: string, updates: Partial<Participant>) {
         const p = this.participants.get(userId);
         if (p) {
+            // Ensure stream is consistent with our local map (source of truth for streams)
+            const localStreamRef = this.userToStreamMap.get(userId);
+
+            // If we have a stream locally but it's not on the participant object, attach it
+            if (localStreamRef && !p.stream) {
+                p.stream = localStreamRef;
+                logger.debug(`[RoomClient] updateParticipantState: Restored missing stream for ${userId}`);
+            }
+
+            if (p.stream && !updates.stream) {
+                logger.debug(`[RoomClient] updateParticipantState checking stream for ${userId}: Stream ${p.stream.id} preserved.`);
+            } else if (!p.stream && !updates.stream) {
+                // Check one last time before warning
+                if (localStreamRef) {
+                    p.stream = localStreamRef;
+                } else {
+                    logger.warn(`[RoomClient] updateParticipantState: Participant ${userId} has NO stream before update!`);
+                }
+            }
+
             const updated = { ...p, ...updates };
+            // Ensure the stream is definitely on the updated object if we have it
+            if (localStreamRef && !updated.stream) {
+                updated.stream = localStreamRef;
+            }
+
             this.participants.set(userId, updated);
 
             // Need to update the Map in the state
             const newParticipants = new Map(this.participants);
             this.onStateChange({ participants: newParticipants });
+        } else {
+            logger.warn(`[RoomClient] updateParticipantState: User ${userId} not found in map.`);
         }
     }
 
@@ -288,49 +331,108 @@ export class RoomClient {
         });
     }
 
-    private handleTrackAdded(event: { userId: string, streamId: string }) {
+    private handleTrackAdded(event: { userId: string, streamId: string, trackKind: string }) {
         logger.info('Track Added Event', event);
         this.streamToUserMap.set(event.streamId, event.userId);
 
-        // Check if we have the stream pending
-        if (this.pendingStreams.has(event.streamId)) {
-            const stream = this.pendingStreams.get(event.streamId)!;
-            this.assignStreamToUser(event.userId, stream);
-            this.pendingStreams.delete(event.streamId);
-        }
+        // Try to resolve immediately
+        this.resolvePendingStreams();
     }
 
     private handleRemoteTrack(stream: MediaStream, track: MediaStreamTrack) {
+        // 1. Try exact match first
         const userId = this.streamToUserMap.get(stream.id);
         if (userId) {
             this.assignStreamToUser(userId, stream);
-        } else {
-            logger.warn('Received track for unknown user', { streamId: stream.id });
+            return;
+        }
+
+        // 2. Exact match failed, store as pending
+        logger.warn('Received track for unknown user (ID mismatch)', {
+            streamId: stream.id,
+            trackKind: track.kind
+        });
+
+        if (!this.pendingStreams.has(stream.id)) {
             this.pendingStreams.set(stream.id, stream);
+        }
+
+        // 3. Attempt fuzzy resolution
+        this.resolvePendingStreams();
+    }
+
+    private resolvePendingStreams() {
+        if (this.pendingStreams.size === 0) return;
+
+        // Find users who are expected to have a stream (present in streamToUserMap)
+        // but have NOT been assigned a stream object in userToStreamMap yet.
+        const expectedUserIds = Array.from(this.streamToUserMap.values());
+        const unassignedUserIds = expectedUserIds.filter(uid => !this.userToStreamMap.has(uid));
+
+        logger.debug('Resolving Pending Streams', {
+            pending: this.pendingStreams.size,
+            unassignedUsers: unassignedUserIds.length
+        });
+
+        // Strategy: If 1 pending stream and 1 unassigned user, assume match.
+        // This fixes the common WebRTC issue where browser generates a different StreamID than signaled.
+        if (this.pendingStreams.size === 1 && unassignedUserIds.length === 1) {
+            const stream = this.pendingStreams.values().next().value;
+            const userId = unassignedUserIds[0];
+
+            logger.info('Fuzzy Matched Stream to User', { userId, streamId: stream.id });
+
+            this.assignStreamToUser(userId, stream);
+            this.pendingStreams.delete(stream.id);
+            // Update the map to point to the ACTUAL stream ID for future lookups (like mute toggles)
+            this.streamToUserMap.set(stream.id, userId);
         }
     }
 
     private assignStreamToUser(userId: string, stream: MediaStream) {
-        let targetStream = this.userToStreamMap.get(userId);
-        if (!targetStream) {
-            targetStream = new MediaStream();
-            this.userToStreamMap.set(userId, targetStream);
+        // [FIX] Create a NEW MediaStream to force React to detect the change and re-attach srcObject.
+        const currentStream = this.userToStreamMap.get(userId);
+        const newStream = new MediaStream();
+
+        // 1. Copy existing tracks that are NOT being replaced
+        if (currentStream) {
+            currentStream.getTracks().forEach(t => {
+                // If the new stream has a track of this kind, don't copy the old one
+                const startReplacing = stream.getTracks().some(nt => nt.kind === t.kind);
+                if (!startReplacing) {
+                    newStream.addTrack(t);
+                } else {
+                    t.stop(); // Stop the old track to free resources
+                }
+            });
         }
 
-        stream.getTracks().forEach(t => {
-            if (!targetStream!.getTracks().some(existing => existing.id === t.id)) {
-                targetStream!.addTrack(t);
-            }
+        // 2. Add the new tracks
+        stream.getTracks().forEach(newTrack => {
+            newStream.addTrack(newTrack);
         });
 
-        // Notify Slice
-        this.onMediaTrackAdded(userId, targetStream);
+        logger.info('Assigned stream to user', { userId, tracks: newStream.getTracks().length, streamId: newStream.id });
 
-        // Update internal participants map to keep it in sync (optional but good for consistency)
+        this.userToStreamMap.set(userId, newStream);
+        this.onMediaTrackAdded(userId, newStream);
+
+        // Update internal participants map to keep it in sync
         const p = this.participants.get(userId);
         if (p) {
-            p.stream = targetStream;
+            p.stream = newStream;
+
+            // Self-Healing: If we received a video track, ensure isVideoEnabled is true
+            if (newStream.getVideoTracks().length > 0 && !p.isVideoEnabled) {
+                logger.info(`[RoomClient] Self-healing: Enabling video for ${userId} because video track was received.`);
+                p.isVideoEnabled = true;
+            }
+
             this.participants.set(userId, p);
+
+            // Broadcast state update to ensure UI re-renders with new stream AND fast flag
+            const newParticipants = new Map(this.participants);
+            this.onStateChange({ participants: newParticipants });
         }
     }
 

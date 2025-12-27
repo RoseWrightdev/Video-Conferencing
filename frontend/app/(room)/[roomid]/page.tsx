@@ -1,8 +1,8 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
-import { useRoom, useParticipants, useChat, useMediaControls } from '@/hooks';
+import { useRoom, useChat,} from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
 import { useAudioVisualizer } from '@/hooks/useAudioVisualizer';
 import { createLogger } from '@/lib/logger';
@@ -22,7 +22,6 @@ const logger = createLogger('Room');
 
 export default function RoomPage() {
   const params = useParams();
-  const router = useRouter();
   const { data: session, status } = useSession();
   const roomId = params.roomid as string;
   const [permissionsGranted, setPermissionsGranted] = useState(() => {
@@ -40,26 +39,19 @@ export default function RoomPage() {
   const {
     localStream,
     screenShareStream,
-    leaveRoom,
-    wsClient,
-    clientInfo,
+    isAudioEnabled,
     raisingHandParticipants,
-    setHandRaised,
     participants,
     unmutedParticipants,
     cameraOnParticipants,
     sharingScreenParticipants,
-    waitingParticipants,
     isWaitingRoom,
     roomName,
-    approveParticipant,
-    kickParticipant,
     isParticipantsPanelOpen,
     isSettingsPanelOpen,
     pinnedParticipantId,
     gridLayout,
     handleError,
-    toggleParticipantsPanel,
     toggleSettingsPanel,
     setGridLayout,
     pinParticipant,
@@ -68,7 +60,6 @@ export default function RoomPage() {
   const {
     currentUserId,
     connectionState,
-    isHost
   } = useRoom({
     roomId,
     username: session?.user?.name || session?.user?.email || 'Anonymous',
@@ -76,69 +67,7 @@ export default function RoomPage() {
     autoJoin: status === 'authenticated' && !!session?.accessToken,
   });
 
-  const { messages, sendTextMessage, closeChat, isChatPanelOpen, toggleChatPanel, unreadCount, markMessagesRead } = useChat();
-  const { getParticipant } = useParticipants();
-
-  // DEBUG: Track waiting participants updates
-  useEffect(() => {
-    logger.debug('RoomPage: Waiting Participants Updated', {
-      count: waitingParticipants.size,
-      participants: Array.from(waitingParticipants.values()).map(p => p.username),
-      isHost,
-      isParticipantsPanelOpen
-    });
-  }, [waitingParticipants, isHost, isParticipantsPanelOpen]);
-
-  const {
-    isAudioEnabled,
-    isVideoEnabled,
-    isScreenSharing,
-    toggleAudio,
-    toggleVideo,
-    toggleScreenShare,
-  } = useMediaControls();
-
-  // Permission-aware toggles
-  const handleAudioToggle = async () => {
-    // Always ensure localStream is initialized before toggling
-    if (!localStream) {
-      let granted = permissionsGranted;
-      if (!permissionsGranted) {
-        granted = await requestPermissions();
-        if (granted) {
-          setPermissionsGranted(true);
-          localStorage.setItem('media-permissions-granted', 'true');
-        }
-      }
-      if (granted) {
-        await initializeStream();
-      } else {
-        return;
-      }
-    }
-    await toggleAudio();
-  };
-
-  const handleVideoToggle = async () => {
-    // Always ensure localStream is initialized before toggling
-    if (!localStream) {
-      let granted = permissionsGranted;
-      if (!permissionsGranted) {
-        granted = await requestPermissions();
-        if (granted) {
-          setPermissionsGranted(true);
-          localStorage.setItem('media-permissions-granted', 'true');
-        }
-      }
-      if (granted) {
-        await initializeStream();
-      } else {
-        return;
-      }
-    }
-    await toggleVideo();
-  };
-
+  const { isChatPanelOpen } = useChat();
 
   const handleRequestPermissions = async () => {
     try {
@@ -177,7 +106,7 @@ export default function RoomPage() {
     }
   }, [status, permissionsGranted, isWaitingRoom]);
 
-  // Audio Level Detection (Refactored to Hook)
+  // Audio Level Detection
   useAudioVisualizer({
     currentUserId,
     localStream,
@@ -232,67 +161,6 @@ export default function RoomPage() {
       }
     };
   }, [isSettingsPanelOpen]);
-
-  const chatDependencies = {
-    chatService: {
-      messages: messages,
-      sendChat: sendTextMessage,
-      closeChat: closeChat,
-    },
-    roomService: {
-      currentUserId: currentUserId,
-    },
-    participantService: {
-      getParticipant: getParticipant,
-    },
-  };
-
-  const controlDependencies = {
-    mediaService: {
-      isAudioEnabled,
-      isVideoEnabled,
-      isScreenSharing,
-      toggleAudio: handleAudioToggle,
-      toggleVideo: handleVideoToggle,
-      startScreenShare: toggleScreenShare,
-      stopScreenShare: toggleScreenShare,
-      requestScreenShare: async () => {
-        await toggleScreenShare();
-        return isScreenSharing;
-      },
-    },
-    roomControlService: {
-      isHost: isHost || false,
-      isMuted: !isAudioEnabled,
-      isHandRaised: currentUserId ? raisingHandParticipants.has(currentUserId) : false,
-      canScreenShare: true,
-      waitingParticipantsCount: waitingParticipants.size,
-      leaveRoom: () => {
-        leaveRoom();
-        router.push('/');
-      },
-      toggleParticipantsPanel: toggleParticipantsPanel,
-      toggleSettingsPanel: toggleSettingsPanel,
-      toggleChatPanel: toggleChatPanel,
-      toggleHand: () => {
-        if (!wsClient || !clientInfo || !currentUserId) return;
-
-        const isCurrentlyRaised = raisingHandParticipants.has(currentUserId);
-
-        if (isCurrentlyRaised) {
-          // wsClient.lowerHand(clientInfo);
-          setHandRaised(currentUserId, false);
-        } else {
-          // wsClient.raiseHand(clientInfo);
-          setHandRaised(currentUserId, true);
-        }
-      },
-    },
-    chatService: {
-      unreadCount,
-      markMessagesRead,
-    },
-  };
 
   // Show loading screen during authentication or initial connection
   if (status === 'loading') {
@@ -379,52 +247,19 @@ export default function RoomPage() {
             className={`absolute bottom-0 left-0 right-0 z-30 flex justify-center py-4 transition-all duration-300 ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
               }`}
           >
-            <ControlBar dependencies={controlDependencies} />
+            <ControlBar />
           </div>
         </div>
 
         {/* Chat Panel - Right Side */}
         {isChatPanelOpen && (
-          <ChatPanel dependencies={chatDependencies} />
+          <ChatPanel />
         )}
 
         {/* Participants Panel - Left Side */}
         {isParticipantsPanelOpen && (
           <div className="absolute inset-0 pointer-events-none">
-            <ParticipantsPanel
-              participants={Array.from(participants.values())}
-              waitingParticipants={Array.from(waitingParticipants.values())}
-              currentUserId={currentUserId || undefined}
-              isHost={isHost || false}
-              onClose={() => toggleParticipantsPanel()}
-              onMuteParticipant={(id) => {
-                // Host can mute participants via WebSocket
-                if (isHost && wsClient && clientInfo) {
-                  // TODO: Implement mute participant event
-                }
-              }}
-              onRemoveParticipant={(id) => {
-                // Host can remove participants via WebSocket
-                if (isHost && wsClient && clientInfo) {
-                  // TODO: Implement remove participant event
-                }
-              }}
-              onApproveWaiting={(id) => {
-                if (isHost) {
-                  approveParticipant(id);
-                }
-              }}
-              onDenyWaiting={(id) => {
-                if (isHost) {
-                  kickParticipant(id);
-                }
-              }}
-              unmutedParticipants={unmutedParticipants}
-              cameraOnParticipants={cameraOnParticipants}
-              sharingScreenParticipants={sharingScreenParticipants}
-              raisingHandParticipants={raisingHandParticipants}
-              className="pointer-events-auto"
-            />
+            <ParticipantsPanel className="pointer-events-auto" />
           </div>
         )}
 

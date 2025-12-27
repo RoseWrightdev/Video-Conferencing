@@ -93,6 +93,7 @@ export const createMediaSlice: StateCreator<
         // Update UI state
         if (currentUserId) {
           get().setParticipantStream(currentUserId, newStream);
+          get().roomClient?.setLocalStream(currentUserId, newStream);
           setVideoEnabled(currentUserId, true);
         }
 
@@ -131,6 +132,7 @@ export const createMediaSlice: StateCreator<
         // Update UI state
         if (currentUserId) {
           get().setParticipantStream(currentUserId, newStream);
+          get().roomClient?.setLocalStream(currentUserId, newStream);
           setVideoEnabled(currentUserId, false);
         }
 
@@ -174,6 +176,7 @@ export const createMediaSlice: StateCreator<
         // Update UI state
         if (currentUserId) {
           get().setParticipantStream(currentUserId, newStream);
+          get().roomClient?.setLocalStream(currentUserId, newStream);
           setAudioEnabled(currentUserId, true);
         }
 
@@ -212,6 +215,7 @@ export const createMediaSlice: StateCreator<
         // Update UI state
         if (currentUserId) {
           get().setParticipantStream(currentUserId, newStream);
+          get().roomClient?.setLocalStream(currentUserId, newStream);
           setAudioEnabled(currentUserId, false);
         }
 

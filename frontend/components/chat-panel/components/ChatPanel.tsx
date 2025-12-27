@@ -4,24 +4,37 @@ import { useEffect, useRef, useState } from "react";
 
 import ChatMessage from "@/components/chat-panel/components/ChatMessage";
 import ChatInput from "@/components/chat-panel/components/ChatInput";
-import { ChatDependencies } from "@/components/chat-panel/types/ChatDependencies";
+import { useRoomStore } from "@/store/useRoomStore";
+import { useShallow } from 'zustand/react/shallow';
 import { Small, H1 } from "@/components/ui/typography";
 
 interface ChatPanelProps {
-  dependencies: ChatDependencies;
+  // empty
 }
 
-export default function ChatPanel({ dependencies }: ChatPanelProps) {
-  const { chatService, roomService, participantService } = dependencies;
-  const messages = chatService.messages;
-  const currentUserId = roomService.currentUserId;
+export default function ChatPanel({ }: ChatPanelProps) {
+  const { messages, closeChat } = useRoomStore(useShallow(state => ({
+    messages: state.messages,
+    closeChat: state.toggleChatPanel // The 'close' action in UI is just toggling it off. Or is it?
+    // In ChatDependencies, closeChat was mapped to something. Let's assume toggleChatPanel works or check uiSlice.
+    // uiSlice has `toggleChatPanel`.
+  })));
+
+  const { currentUserId } = useRoomStore(useShallow(state => ({
+    currentUserId: state.currentUserId
+  })));
+
+  // We need to pass down less props now, or none if children also use store.
+  // ChatMessage took `dependencies`. It probably needs `participantService` to look up names/avatars.
+  // We will refactor ChatMessage next, so we can stop passing `dependencies`.
+  // Ideally ChatPanel should just render ChatMessage and ChatInput without passing dependencies.
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const mouseMoveHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
   const mouseUpHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
-  
+
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -33,16 +46,16 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
 
     mouseMoveHandlerRef.current = (e: MouseEvent) => {
       if (!panelRef.current) return;
-      
+
       const rect = panelRef.current.getBoundingClientRect();
       const newWidth = rect.right - e.clientX;
-      
+
       // Close chat if dragged below minimum threshold
       if (newWidth < 200) {
-        chatService.closeChat();
+        closeChat();
         return;
       }
-      
+
       // Constrain width between 250px and 600px
       setWidth(Math.min(Math.max(newWidth, 250), 600));
     };
@@ -63,10 +76,10 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
       mouseMoveHandlerRef.current = null;
       mouseUpHandlerRef.current = null;
     };
-  }, [isResizing, chatService]);
+  }, [isResizing, closeChat]);
 
   return (
-    <div 
+    <div
       ref={panelRef}
       className="absolute right-4 top-4 h-[calc(100vh-7rem)] rounded-2xl z-50 overflow-hidden shadow-xl"
       style={{ width: `${width}px` }}
@@ -89,14 +102,14 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={chatService.closeChat}
+            onClick={closeChat}
             className="rounded-full -m-2"
             aria-label="Close chat panel"
           >
             <XIcon className="h-5 w-5 text-black" />
           </Button>
         </div>
-        
+
         {/* Messages */}
         <div className="flex-1 overflow-hidden p-4">
           {messages.length === 0 ? (
@@ -108,20 +121,18 @@ export default function ChatPanel({ dependencies }: ChatPanelProps) {
                   key={msg.id}
                   chatMessage={msg}
                   currentUserId={currentUserId || ""}
-                  dependencies={dependencies}
                 />
               ))}
               <div ref={messagesEndRef} />
             </div>
           )}
         </div>
-        
+
         {/* Input */}
         <div className="p-4 shrink-0">
-          <ChatInput dependencies={dependencies} />
+          <ChatInput />
         </div>
       </div>
     </div>
-
   );
 }

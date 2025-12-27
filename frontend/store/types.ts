@@ -140,6 +140,7 @@ export interface ParticipantSlice {
   toggleParticipantAudio: (participantId: string) => void;
   toggleParticipantVideo: (participantId: string) => void;
   selectParticipant: (participantId: string | null) => void;
+  toggleHand: () => Promise<void>;
 }
 
 export interface RoomSlice {
