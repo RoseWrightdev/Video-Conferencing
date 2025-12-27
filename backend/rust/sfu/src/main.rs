@@ -645,8 +645,6 @@ impl SfuService for MySfu {
                     
                     // Fix DTLS Role Flip: Ensure SFU stays passive if the browser offers actpass
                     // This prevents "Failed to set SSL role for the transport" in browsers.
-                    // Fix DTLS Role Flip: Ensure SFU stays passive if the browser offers actpass
-                    // This prevents "Failed to set SSL role for the transport" in browsers.
                     if sdp_answer.contains("a=setup:active") {
                         sdp_answer = sdp_answer.replace("a=setup:active", "a=setup:passive");
                         info!(session = %session_key, "Modified Answer to setup:passive to prevent role flip");
