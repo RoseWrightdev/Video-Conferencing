@@ -36,9 +36,10 @@ export default function ParticipantTile({
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaybackMuted, setIsPlaybackMuted] = useState(false);
 
   // Determine the stream to display
-  // Prioritize screen share if local, otherwise participant's stream
+  // Prioritize screen sharing if local, otherwise participant's stream
   const streamToDisplay = (isLocal && isScreenSharing && screenShareStream)
     ? screenShareStream
     : participant.stream;
@@ -54,19 +55,20 @@ export default function ParticipantTile({
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
-    if (!shouldShowVideo) {
-      // Clean up if we shouldn't be showing video
+    // Fix: We must attach the stream even if video is disabled, so audio can play!
+    if (!streamToDisplay) {
       if (videoEl.srcObject) {
-        loggers.media.debug('ParticipantTile: Clearing video srcObject (shouldShowVideo=false)', {
+        loggers.media.debug('ParticipantTile: Clearing video srcObject (no stream)', {
           participantId: participant.id
         });
         videoEl.srcObject = null;
         setIsPlaying(false);
+        setIsPlaybackMuted(false);
       }
       return;
     }
 
-    // If stream changed, update srcObject
+    // Only re-attach if object changed
     if (videoEl.srcObject !== streamToDisplay) {
       loggers.media.info('ParticipantTile: Attaching new stream', {
         participantId: participant.id,
@@ -75,24 +77,26 @@ export default function ParticipantTile({
       });
 
       videoEl.srcObject = streamToDisplay;
-      // Reset playing state while we wait for new stream to start
+
+      // Reset states
       setIsPlaying(false);
+      setIsPlaybackMuted(false);
 
       // Attempt playback
       const attemptPlay = async () => {
         try {
-          // Ensure muted if local to prevent echo
           if (isLocal) {
             videoEl.muted = true;
+          } else {
+            videoEl.muted = false;
           }
           await videoEl.play();
-          // setIsPlaying(true) will happen via 'playing' event
         } catch (err) {
           const error = err as Error;
           if (error.name === 'NotAllowedError') {
-            // Autoplay blocked, try muted
             loggers.media.warn('ParticipantTile: Autoplay blocked, retrying muted', { participantId: participant.id });
             videoEl.muted = true;
+            setIsPlaybackMuted(true);
             try {
               await videoEl.play();
             } catch (mutedErr) {
@@ -102,22 +106,20 @@ export default function ParticipantTile({
               });
             }
           } else {
-            if (error.name === 'AbortError') {
-              // Ignore abort errors (usually due to component unmount, rapid updates, or existing playback)
-              return;
+            if (error.name !== 'AbortError') {
+              loggers.media.error('ParticipantTile: Play failed', {
+                name: error.name,
+                message: error.message,
+                participantId: participant.id
+              });
             }
-            loggers.media.error('ParticipantTile: Play failed', {
-              name: error.name,
-              message: error.message,
-              participantId: participant.id
-            });
           }
         }
       };
 
       attemptPlay();
     }
-  }, [shouldShowVideo, streamToDisplay, isLocal, participant.id]);
+  }, [streamToDisplay, isLocal, participant.id]);
 
   // Event listeners for reliable state updates
   useEffect(() => {
@@ -156,6 +158,14 @@ export default function ParticipantTile({
 
   const getInitials = (name: string) => {
     return name?.substring(0, 2).toUpperCase() || '??';
+  };
+
+  const handleUnmute = () => {
+    const videoEl = videoRef.current;
+    if (videoEl) {
+      videoEl.muted = false;
+      setIsPlaybackMuted(false);
+    }
   };
 
   return (
@@ -197,6 +207,19 @@ export default function ParticipantTile({
           )}
         </div>
       </div>
+
+      {/* Autoplay blocked overlay */}
+      {isPlaybackMuted && !isLocal && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
+          <button
+            onClick={handleUnmute}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105"
+          >
+            <MicOff className="w-5 h-5" />
+            Click to Unmute
+          </button>
+        </div>
+      )}
 
       {/* Overlay: Status Icons & Controls */}
       <div className="absolute inset-0 pointer-events-none p-3 flex flex-col justify-between">

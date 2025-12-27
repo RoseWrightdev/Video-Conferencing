@@ -24,7 +24,8 @@ export const useAudioVisualizer = ({
     const audioContextRef = useRef<AudioContext | null>(null);
     const analysersRef = useRef<Map<string, AnalyserNode>>(new Map());
     const sourcesRef = useRef<Map<string, MediaStreamAudioSourceNode>>(new Map());
-    const clonedTracksRef = useRef<Map<string, MediaStreamTrack>>(new Map());
+
+    const streamIdsRef = useRef<Map<string, string>>(new Map());
 
     useEffect(() => {
         if (!currentUserId) return;
@@ -35,9 +36,35 @@ export const useAudioVisualizer = ({
         }
         const audioContext = audioContextRef.current;
 
+        // Cleanup helper
+        const cleanupDetection = (id: string) => {
+            const source = sourcesRef.current.get(id);
+            const analyser = analysersRef.current.get(id);
+
+            if (source) {
+                source.disconnect();
+                sourcesRef.current.delete(id);
+            }
+            if (analyser) {
+                analyser.disconnect();
+                analysersRef.current.delete(id);
+            }
+            streamIdsRef.current.delete(id);
+        };
+
         // Helper to setup detection
         const setupAudioDetection = (id: string, stream: MediaStream) => {
-            if (analysersRef.current.has(id)) return; // Already setup
+            const currentStreamId = streamIdsRef.current.get(id);
+
+            // If we already have a setup for this exact stream, skip
+            if (analysersRef.current.has(id) && currentStreamId === stream.id) {
+                return;
+            }
+
+            // If we have a setup but the stream changed, cleanup first
+            if (analysersRef.current.has(id)) {
+                cleanupDetection(id);
+            }
 
             // We only care about audio tracks
             const audioTracks = stream.getAudioTracks();
@@ -48,12 +75,12 @@ export const useAudioVisualizer = ({
             }
 
             try {
-                // Clone track to avoid interfering with playback (and to safely analyze local stream)
+                // Use original track directly to ensure we get data
+                // Cloning remote tracks often fails to carry rtp data in some browsers/scenarios
                 const track = audioTracks[0];
-                const clonedTrack = track.clone();
-                clonedTracksRef.current.set(id, clonedTrack);
 
-                const sourceStream = new MediaStream([clonedTrack]);
+                // Create a generic MediaStream for the analyzer (wrapping the track)
+                const sourceStream = new MediaStream([track]);
                 const source = audioContext.createMediaStreamSource(sourceStream);
                 const analyser = audioContext.createAnalyser();
 
@@ -63,28 +90,9 @@ export const useAudioVisualizer = ({
 
                 sourcesRef.current.set(id, source);
                 analysersRef.current.set(id, analyser);
+                streamIdsRef.current.set(id, stream.id);
             } catch (err) {
                 logger.error('Failed to setup audio detection', { participantId: id, error: err });
-            }
-        };
-
-        // Cleanup helper
-        const cleanupDetection = (id: string) => {
-            const source = sourcesRef.current.get(id);
-            const analyser = analysersRef.current.get(id);
-            const track = clonedTracksRef.current.get(id);
-
-            if (source) {
-                source.disconnect();
-                sourcesRef.current.delete(id);
-            }
-            if (analyser) {
-                analyser.disconnect();
-                analysersRef.current.delete(id);
-            }
-            if (track) {
-                track.stop();
-                clonedTracksRef.current.delete(id);
             }
         };
 
@@ -101,7 +109,8 @@ export const useAudioVisualizer = ({
 
         participants.forEach((p) => {
             // Only track if they have a stream and are unmuted
-            if (p.id !== currentUserId && p.stream && unmutedParticipants.has(p.id)) {
+            // Fix: Use p.isAudioEnabled property directly as unmutedParticipants Set might be stale for remote users
+            if (p.id !== currentUserId && p.stream && p.isAudioEnabled) {
                 usersToTrack.add(p.id);
                 setupAudioDetection(p.id, p.stream);
             }

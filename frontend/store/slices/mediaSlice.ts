@@ -72,28 +72,29 @@ export const createMediaSlice: StateCreator<
         const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
         const videoTrack = videoStream.getVideoTracks()[0];
 
-        // Create new stream with both audio and video tracks
-        const tracks: MediaStreamTrack[] = [];
-        if (localStream) {
-          const audioTracks = localStream.getAudioTracks();
-          tracks.push(...audioTracks);
-        }
-        tracks.push(videoTrack);
+        let stream = localStream;
 
-        const newStream = new MediaStream(tracks);
+        if (stream) {
+          // Reuse existing stream to keep StreamId constant
+          stream.addTrack(videoTrack);
+        } else {
+          // Create new stream if none exists
+          stream = new MediaStream([videoTrack]);
+        }
 
         // Add video track to SFU
         if (sfuClient) {
-          sfuClient.addTrack(videoTrack, newStream);
-          loggers.media.debug('Added video track to SFU', { trackId: videoTrack.id });
+          // IMPORTANT: Pass the stream that now contains the track
+          sfuClient.addTrack(videoTrack, stream);
+          loggers.media.debug('Added video track to SFU', { trackId: videoTrack.id, streamId: stream.id });
         }
 
-        set({ localStream: newStream, isVideoEnabled: true });
+        set({ localStream: stream, isVideoEnabled: true });
 
         // Update UI state
         if (currentUserId) {
-          get().setParticipantStream(currentUserId, newStream);
-          get().roomClient?.setLocalStream(currentUserId, newStream);
+          get().setParticipantStream(currentUserId, stream);
+          get().roomClient?.setLocalStream(currentUserId, stream);
           setVideoEnabled(currentUserId, true);
         }
 
@@ -118,14 +119,21 @@ export const createMediaSlice: StateCreator<
               loggers.media.debug('Removed video track from SFU', { trackId: track.id });
             }
             track.stop();
+            // Also remove from local stream object
+            localStream.removeTrack(track);
           });
         } else {
-          videoTracks.forEach(track => track.stop());
+          videoTracks.forEach(track => {
+            track.stop();
+            localStream.removeTrack(track);
+          });
         }
 
-        // Create new stream with only audio tracks
-        const audioTracks = localStream.getAudioTracks();
-        const newStream = audioTracks.length > 0 ? new MediaStream(audioTracks) : null;
+        // Check if stream is empty. If so, maybe keep it or null using strict logic?
+        // Usually better to keep the object if audio remains. 
+        // If Audio is also empty, we can set to null.
+        const hasTracks = localStream.getTracks().length > 0;
+        const newStream = hasTracks ? localStream : null;
 
         set({ localStream: newStream, isVideoEnabled: false });
 
@@ -155,28 +163,28 @@ export const createMediaSlice: StateCreator<
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const audioTrack = audioStream.getAudioTracks()[0];
 
-        // Create new stream with both audio and video tracks
-        const tracks: MediaStreamTrack[] = [];
-        if (localStream) {
-          const videoTracks = localStream.getVideoTracks();
-          tracks.push(...videoTracks);
-        }
-        tracks.push(audioTrack);
+        let stream = localStream;
 
-        const newStream = new MediaStream(tracks);
+        if (stream) {
+          // Reuse existing stream to keep StreamId constant
+          stream.addTrack(audioTrack);
+        } else {
+          // Create new stream if none exists
+          stream = new MediaStream([audioTrack]);
+        }
 
         // Add audio track to SFU
         if (sfuClient) {
-          sfuClient.addTrack(audioTrack, newStream);
-          loggers.media.debug('Added audio track to SFU', { trackId: audioTrack.id });
+          sfuClient.addTrack(audioTrack, stream);
+          loggers.media.debug('Added audio track to SFU', { trackId: audioTrack.id, streamId: stream.id });
         }
 
-        set({ localStream: newStream, isAudioEnabled: true });
+        set({ localStream: stream, isAudioEnabled: true });
 
         // Update UI state
         if (currentUserId) {
-          get().setParticipantStream(currentUserId, newStream);
-          get().roomClient?.setLocalStream(currentUserId, newStream);
+          get().setParticipantStream(currentUserId, stream);
+          get().roomClient?.setLocalStream(currentUserId, stream);
           setAudioEnabled(currentUserId, true);
         }
 
@@ -201,14 +209,17 @@ export const createMediaSlice: StateCreator<
               loggers.media.debug('Removed audio track from SFU', { trackId: track.id });
             }
             track.stop();
+            localStream.removeTrack(track);
           });
         } else {
-          audioTracks.forEach(track => track.stop());
+          audioTracks.forEach(track => {
+            track.stop();
+            localStream.removeTrack(track);
+          });
         }
 
-        // Create new stream with only video tracks
-        const videoTracks = localStream.getVideoTracks();
-        const newStream = videoTracks.length > 0 ? new MediaStream(videoTracks) : null;
+        const hasTracks = localStream.getTracks().length > 0;
+        const newStream = hasTracks ? localStream : null;
 
         set({ localStream: newStream, isAudioEnabled: false });
 

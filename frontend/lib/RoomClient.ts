@@ -391,26 +391,26 @@ export class RoomClient {
 
     private assignStreamToUser(userId: string, stream: MediaStream) {
         // [FIX] Create a NEW MediaStream to force React to detect the change and re-attach srcObject.
+        // Populate it immediately with the fresh tracks from the native stream.
+        const newStream = new MediaStream(stream.getTracks());
         const currentStream = this.userToStreamMap.get(userId);
-        const newStream = new MediaStream();
 
-        // 1. Copy existing tracks that are NOT being replaced
+        // Cleanup: Stop tracks from the OLD stream that are NO LONGER in the new stream
         if (currentStream) {
-            currentStream.getTracks().forEach(t => {
-                // If the new stream has a track of this kind, don't copy the old one
-                const startReplacing = stream.getTracks().some(nt => nt.kind === t.kind);
-                if (!startReplacing) {
-                    newStream.addTrack(t);
-                } else {
-                    t.stop(); // Stop the old track to free resources
+            currentStream.getTracks().forEach(oldTrack => {
+                // If this old track is NOT in the new stream (by ID), it's stale. Stop it.
+                // If it IS in the new stream, we leave it alone (it's active).
+                const isPreserved = newStream.getTrackById(oldTrack.id);
+                if (!isPreserved) {
+                    logger.debug(`[RoomClient] Stopping stale track ${oldTrack.id} (${oldTrack.kind}) for ${userId}`);
+                    try {
+                        oldTrack.stop();
+                    } catch (e) {
+                        // ignore stop errors
+                    }
                 }
             });
         }
-
-        // 2. Add the new tracks
-        stream.getTracks().forEach(newTrack => {
-            newStream.addTrack(newTrack);
-        });
 
         logger.info('Assigned stream to user', { userId, tracks: newStream.getTracks().length, streamId: newStream.id });
 
