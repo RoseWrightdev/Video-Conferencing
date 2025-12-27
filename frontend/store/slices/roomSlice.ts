@@ -14,12 +14,34 @@ export const createRoomSlice: StateCreator<
 
   // Create callback to sync state from RoomClient to Zustand
   const onRoomStateChange = (stateUpdate: any) => {
+    // Current state access
+    const currentState = get();
+
+    // INTERCEPT: Calculate unread count for new messages
+    if (stateUpdate.messages) {
+      const oldLength = currentState.messages.length;
+      const newLength = stateUpdate.messages.length;
+      const addedCount = newLength - oldLength;
+
+      if (addedCount > 0 && !currentState.isChatPanelOpen) {
+        // We have new messages and panel is closed -> increment unread count
+        // We accumulate on top of existing unreadCount (or stateUpdate.unreadCount if it exists, theoretically)
+        stateUpdate.unreadCount = currentState.unreadCount + addedCount;
+      } else if (currentState.isChatPanelOpen) {
+        // If panel is open, ensure unread count stays 0
+        stateUpdate.unreadCount = 0;
+      }
+    }
+
     // Direct merge for now
     set(stateUpdate);
 
-    // Also update connection state if join was successful
+    // Also update connection state if join was successful or placed in waiting room
     if (stateUpdate.isJoined) {
       get().updateConnectionState({ isInitializing: false, webrtcConnected: true });
+    }
+    if (stateUpdate.isWaitingRoom) {
+      get().updateConnectionState({ isInitializing: false });
     }
     if (stateUpdate.error) {
       get().handleError(stateUpdate.error);

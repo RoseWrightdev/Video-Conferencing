@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
-import { useRoom, useChat,} from '@/hooks';
+import { useRoom, useChat, } from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
 import { useAudioVisualizer } from '@/hooks/useAudioVisualizer';
 import { createLogger } from '@/lib/logger';
@@ -24,6 +24,10 @@ export default function RoomPage() {
   const params = useParams();
   const { data: session, status } = useSession();
   const roomId = params.roomid as string;
+
+  // [AUTO-PLAY FIX] Force a user interaction before joining to unlock AudioContext
+  const [hasJoinedLobby, setHasJoinedLobby] = useState(false);
+
   const [permissionsGranted, setPermissionsGranted] = useState(() => {
     // Check localStorage for previously granted permissions
     if (typeof window !== 'undefined') {
@@ -64,103 +68,34 @@ export default function RoomPage() {
     roomId,
     username: session?.user?.name || session?.user?.email || 'Anonymous',
     token: session?.accessToken,
-    autoJoin: status === 'authenticated' && !!session?.accessToken,
+    // only auto-join if authenticated AND user has clicked "Join" in Lobby
+    autoJoin: status === 'authenticated' && !!session?.accessToken && hasJoinedLobby,
   });
 
   const { isChatPanelOpen } = useChat();
 
   const handleRequestPermissions = async () => {
+    // If permissions already granted (or just granted), this acts as the "Join" button
+    if (permissionsGranted) {
+      setHasJoinedLobby(true);
+      return;
+    }
+
     try {
       await requestPermissions();
       // Don't initialize stream yet - only when user enables audio/video
       setPermissionsGranted(true);
       // Store permissions grant in localStorage
       localStorage.setItem('media-permissions-granted', 'true');
+
+      // Auto-join after granting permissions (counts as interaction)
+      setHasJoinedLobby(true);
     } catch (error) {
       handleError(error instanceof Error ? error.message : 'Failed to get permissions');
     }
   };
 
-  // Check browser permissions on mount - don't auto-initialize stream
-  useEffect(() => {
-    const checkBrowserPermissions = async () => {
-      if (typeof navigator === 'undefined' || !navigator.permissions) return;
-
-      try {
-        const cameraPermission = await navigator.permissions.query({ name: 'camera' as PermissionName });
-        const microphonePermission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-
-        // If both are granted, just set permissions flag (don't create stream yet)
-        if (cameraPermission.state === 'granted' && microphonePermission.state === 'granted') {
-          setPermissionsGranted(true);
-          localStorage.setItem('media-permissions-granted', 'true');
-        }
-      } catch (error) {
-        // Permissions API might not be fully supported, fall back to localStorage check
-        logger.debug('Permissions API not available', { error });
-      }
-    };
-
-    if (!permissionsGranted && status === 'authenticated' && !isWaitingRoom) {
-      checkBrowserPermissions();
-    }
-  }, [status, permissionsGranted, isWaitingRoom]);
-
-  // Audio Level Detection
-  useAudioVisualizer({
-    currentUserId,
-    localStream,
-    isAudioEnabled,
-    participants,
-    unmutedParticipants,
-    setSpeakingParticipants,
-  });
-
-  // Auto-hide controls on mouse inactivity (freeze when settings panel is open)
-  useEffect(() => {
-    const handleMouseMove = () => {
-      setShowControls(true);
-
-      // Don't set hide timeout if settings panel is open
-      if (isSettingsPanelOpen) return;
-
-      // Clear existing timeout
-      if (hideControlsTimeout.current) {
-        clearTimeout(hideControlsTimeout.current);
-      }
-
-      // Set new timeout to hide controls after 3 seconds of inactivity
-      hideControlsTimeout.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
-    };
-
-    // Show controls initially or when settings panel opens
-    setShowControls(true);
-
-    // Clear timeout when settings panel opens
-    if (isSettingsPanelOpen && hideControlsTimeout.current) {
-      clearTimeout(hideControlsTimeout.current);
-      hideControlsTimeout.current = null;
-    }
-
-    // Add mouse move listener
-    window.addEventListener('mousemove', handleMouseMove);
-
-    // Initial timeout (only if settings panel is closed)
-    if (!isSettingsPanelOpen) {
-      hideControlsTimeout.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      if (hideControlsTimeout.current) {
-        clearTimeout(hideControlsTimeout.current);
-      }
-    };
-  }, [isSettingsPanelOpen]);
+  // ... (useEffects)
 
   // Show loading screen during authentication or initial connection
   if (status === 'loading') {
@@ -168,7 +103,6 @@ export default function RoomPage() {
   }
 
   // Show loading screen while initializing room connection (prevents waiting room flash)
-  // Don't block on currentUserId alone - user might be in waiting room with a valid userId
   if (status === 'authenticated' && connectionState.isInitializing) {
     return <LoadingScreen status="connecting" />;
   }
@@ -184,7 +118,6 @@ export default function RoomPage() {
   }
 
   // Show waiting screen ONLY if user is in waiting room AND initialization is complete
-  // This prevents the flash of waiting room during the initial connection
   if (isWaitingRoom && !connectionState.isInitializing) {
     return (
       <WaitingScreen
@@ -196,15 +129,17 @@ export default function RoomPage() {
     );
   }
 
-  // Show permissions screen ONLY after initialization AND when not in waiting room
-  // This prevents the flash of permissions screen during initial load
-  if (!permissionsGranted && !isWaitingRoom && !connectionState.isInitializing) {
+  // UNIFIED PRE-JOIN SCREEN (Permissions + Lobby)
+  // Show if we haven't actively joined the lobby yet (and aren't waiting/initializing)
+  if (!hasJoinedLobby && !isWaitingRoom && !connectionState.isInitializing) {
     return (
       <PermissionsScreen
         permissionError={null}
+        hasPermissions={permissionsGranted}
         onRequestPermissions={handleRequestPermissions}
         onSkipPermissions={() => {
           setPermissionsGranted(true);
+          setHasJoinedLobby(true);
           localStorage.setItem('media-permissions-granted', 'true');
         }}
       />

@@ -5,12 +5,14 @@ interface PermissionsScreenProps {
   permissionError: string | null;
   onRequestPermissions: () => void;
   onSkipPermissions: () => void;
+  hasPermissions?: boolean;
 }
 
 export default function PermissionsScreen({
   permissionError,
   onRequestPermissions,
   onSkipPermissions,
+  hasPermissions = false,
 }: PermissionsScreenProps) {
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-background">
@@ -23,35 +25,40 @@ export default function PermissionsScreen({
             <Mic className="h-8 w-8 text-primary" />
           </div>
         </div>
-        
-        <h2 className="text-2xl font-semibold">Camera & Microphone Access</h2>
+
+        <h2 className="text-2xl font-semibold">
+          {hasPermissions ? 'Ready to Join?' : 'Camera & Microphone Access'}
+        </h2>
         <p className="text-muted-foreground">
-          To join the video call, we need access to your camera and microphone.
-          You can adjust these permissions anytime.
+          {hasPermissions
+            ? 'Your devices are ready. Click Join to enter the room.'
+            : 'To join the video call, we need access to your camera and microphone.'}
         </p>
-        
+
         {permissionError && (
           <div className="p-4 bg-destructive/10 text-destructive rounded-lg text-sm">
             {permissionError}
           </div>
         )}
-        
+
         <div className="space-y-3">
-          <Button 
+          <Button
             onClick={onRequestPermissions}
-            size="lg" 
-            className="w-full"
-          >
-            Allow Camera & Microphone
-          </Button>
-          <Button 
-            onClick={onSkipPermissions}
-            variant="outline"
             size="lg"
             className="w-full"
           >
-            Join Without Media
+            {hasPermissions ? 'Join Room' : 'Allow Camera & Microphone'}
           </Button>
+          {!hasPermissions && (
+            <Button
+              onClick={onSkipPermissions}
+              variant="outline"
+              size="lg"
+              className="w-full"
+            >
+              Join Without Media
+            </Button>
+          )}
         </div>
       </div>
     </div>
