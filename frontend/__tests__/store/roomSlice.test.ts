@@ -8,9 +8,14 @@ const mockDisconnect = vi.fn();
 const mockWs = { send: vi.fn() };
 const mockSfu = { join: vi.fn() };
 
+const mocks = vi.hoisted(() => ({
+    capturedOnStateChange: undefined as ((state: any) => void) | undefined
+}));
+
 vi.mock('@/lib/RoomClient', () => {
     return {
-        RoomClient: vi.fn().mockImplementation(() => {
+        RoomClient: vi.fn().mockImplementation((onStateChange) => {
+            mocks.capturedOnStateChange = onStateChange;
             return {
                 connect: mockConnect,
                 disconnect: mockDisconnect,
@@ -29,6 +34,7 @@ describe('roomSlice', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mocks.capturedOnStateChange = undefined; // Reset capture
         mockConnect.mockResolvedValue(undefined);
 
         currentState = {
@@ -117,4 +123,50 @@ describe('roomSlice', () => {
         expect(currentState.participants?.size).toBe(0);
         expect(currentState.messages?.length).toBe(0);
     });
+
+    it('should update unreadCount when new messages arrive and panel is closed', () => {
+        // Initial state: panel closed, 0 unread
+        currentState = {
+            ...currentState,
+            isChatPanelOpen: false,
+            unreadCount: 0,
+            messages: []
+        } as any;
+
+        // Ensure mock captured the callback
+        expect(mocks.capturedOnStateChange).toBeDefined();
+
+        // Simulate new message from RoomClient
+        const newMessage = { id: '1', content: 'hello' };
+        mocks.capturedOnStateChange!({
+            messages: [newMessage]
+        });
+
+        // Should increment unread count
+        // Note: The slice implementation uses `set` which calls `mockSet` which updates `currentState`.
+        expect(currentState.unreadCount).toBe(1);
+        expect(currentState.messages).toHaveLength(1);
+
+        // Simulate another message
+        const message2 = { id: '2', content: 'world' };
+        mocks.capturedOnStateChange!({
+            messages: [newMessage, message2]
+        });
+
+        expect(currentState.unreadCount).toBe(2);
+
+        // Simulate opening panel
+        currentState.isChatPanelOpen = true;
+        currentState.unreadCount = 0; // Reset manually
+
+        // Simulate message while open
+        const message3 = { id: '3', content: 'test' };
+        mocks.capturedOnStateChange!({
+            messages: [newMessage, message2, message3]
+        });
+
+        // Should NOT increment
+        expect(currentState.unreadCount).toBe(0);
+    });
 });
+
