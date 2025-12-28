@@ -1,3 +1,4 @@
+use std::env;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
@@ -5,8 +6,7 @@ use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::policy::bundle_policy::RTCBundlePolicy;
-use webrtc::rtp_transceiver::rtp_codec::{RTPCodecType, RTCRtpHeaderExtensionCapability};
-use std::env;
+use webrtc::rtp_transceiver::rtp_codec::{RTCRtpHeaderExtensionCapability, RTPCodecType};
 
 pub struct MediaSetup;
 
@@ -14,7 +14,7 @@ impl MediaSetup {
     pub fn create_webrtc_api() -> webrtc::api::API {
         let mut media_engine = MediaEngine::default();
         media_engine.register_default_codecs().unwrap();
-        
+
         let extensions = vec![
             "urn:ietf:params:rtp-hdrext:sdes:mid",
             "urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id",
@@ -29,17 +29,21 @@ impl MediaSetup {
 
         for extension in extensions {
             let _ = media_engine.register_header_extension(
-                RTCRtpHeaderExtensionCapability { uri: extension.to_string() },
+                RTCRtpHeaderExtensionCapability {
+                    uri: extension.to_string(),
+                },
                 RTPCodecType::Video,
                 None,
             );
             let _ = media_engine.register_header_extension(
-                RTCRtpHeaderExtensionCapability { uri: extension.to_string() },
+                RTCRtpHeaderExtensionCapability {
+                    uri: extension.to_string(),
+                },
                 RTPCodecType::Audio,
                 None,
             );
         }
-        
+
         let mut registry = Registry::new();
         registry = register_default_interceptors(registry, &mut media_engine).unwrap();
 
@@ -50,8 +54,9 @@ impl MediaSetup {
     }
 
     pub fn get_rtc_config() -> RTCConfiguration {
-        let stun_url = env::var("STUN_URL").unwrap_or_else(|_| "stun:stun.l.google.com:19302".to_string());
-        
+        let stun_url =
+            env::var("STUN_URL").unwrap_or_else(|_| "stun:stun.l.google.com:19302".to_string());
+
         RTCConfiguration {
             ice_servers: vec![RTCIceServer {
                 urls: vec![stun_url],
@@ -66,30 +71,36 @@ impl MediaSetup {
         peer: &crate::peer_manager::Peer,
         user_id: &str,
         room_id: &str,
-        tracks: &dashmap::DashMap<String, std::sync::Arc<crate::broadcaster::TrackBroadcaster>>,
+        tracks: &dashmap::DashMap<
+            (String, String, String, String),
+            std::sync::Arc<crate::broadcaster::TrackBroadcaster>,
+        >,
     ) {
         use std::sync::Arc;
+        use tracing::info;
+        use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
         use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
         use webrtc::track::track_local::TrackLocal;
-        use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
-        use tracing::info;
 
         for track_entry in tracks.iter() {
-            let key = track_entry.key();
-            let parts: Vec<&str> = key.split(':').collect();
-            if parts.len() == 4 && parts[0] == room_id && parts[1] != user_id {
+            let (t_room, t_user, t_stream, t_track) = track_entry.key();
+
+            // Filter: Must be same room, different user
+            if t_room == room_id && t_user != user_id {
                 let broadcaster = track_entry.value();
-                let t_stream = parts[2];
-                let t_track = parts[3];
-                let t_user = parts[1];
+                // t_stream, t_track, t_user are already &String here
 
                 let local_track = Arc::new(TrackLocalStaticRTP::new(
                     broadcaster.capability.clone(),
-                    t_track.to_owned(),
-                    t_stream.to_owned(),
+                    t_track.clone(),
+                    t_stream.clone(),
                 ));
-               
-                if let Ok(rtp_sender) = peer.pc.add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>).await {
+
+                if let Ok(rtp_sender) = peer
+                    .pc
+                    .add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>)
+                    .await
+                {
                     let sender_clone = rtp_sender.clone();
                     let broadcaster_to_move = broadcaster.clone();
                     tokio::spawn(async move {
@@ -105,24 +116,24 @@ impl MediaSetup {
 
                     let params = rtp_sender.get_parameters().await;
                     let ssrc = params.encodings.first().map(|e| e.ssrc).unwrap_or(0);
-                    
+
                     let pt = {
                         if let Some(codec) = params.rtp_parameters.codecs.first() {
-                             codec.payload_type
+                            codec.payload_type
                         } else {
-                             0 
+                            0
                         }
                     };
-                    
+
                     info!(
                         "[SFU] subscribe_to_existing_tracks: Resolved PT: {}, SSRC: {}",
                         pt, ssrc
                     );
                     broadcaster.add_writer(local_track, ssrc, pt).await;
-                    
-                    // delayed Keyframe Request to ensure receiver gets one after connection is stable
+
+                    // delayed Keyframe Request
                     broadcaster.clone().schedule_pli_retry();
-                    peer.track_mapping.insert(t_stream.to_owned(), t_user.to_owned());
+                    peer.track_mapping.insert(t_stream.clone(), t_user.clone());
                     info!(
                         track = %t_track,
                         user = %t_user,
@@ -132,5 +143,35 @@ impl MediaSetup {
                 }
             }
         }
+    }
+
+    pub async fn configure_media_engine(
+        pc: &webrtc::peer_connection::RTCPeerConnection,
+    ) -> Result<(), tonic::Status> {
+        use webrtc::rtp_transceiver::rtp_codec::RTPCodecType;
+        use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
+        use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
+
+        pc.add_transceiver_from_kind(
+            RTPCodecType::Video,
+            Some(RTCRtpTransceiverInit {
+                direction: RTCRtpTransceiverDirection::Recvonly,
+                send_encodings: vec![],
+            }),
+        )
+        .await
+        .map_err(|e| tonic::Status::internal(format!("Failed to add video transceiver: {}", e)))?;
+
+        pc.add_transceiver_from_kind(
+            RTPCodecType::Audio,
+            Some(RTCRtpTransceiverInit {
+                direction: RTCRtpTransceiverDirection::Recvonly,
+                send_encodings: vec![],
+            }),
+        )
+        .await
+        .map_err(|e| tonic::Status::internal(format!("Failed to add audio transceiver: {}", e)))?;
+
+        Ok(())
     }
 }

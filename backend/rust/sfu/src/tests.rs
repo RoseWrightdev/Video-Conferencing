@@ -1,9 +1,9 @@
 use super::*;
-use tokio::sync::Mutex;
 use crate::pb::sfu::sfu_service_server::SfuService;
 use crate::pb::sfu::{CreateSessionRequest, ListenRequest};
 use dashmap::DashMap;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tonic::Request;
 use webrtc::api::APIBuilder;
 use webrtc::peer_connection::configuration::RTCConfiguration;
@@ -184,7 +184,7 @@ async fn test_subscribe_logic() {
     ));
 
     sfu.tracks.insert(
-        format!("{}:{}:{}:{}", room_id, user_a, stream_id, track_id),
+        (room_id.clone(), user_a.clone(), stream_id.clone(), track_id),
         broadcaster,
     );
 

@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use crate::pb::sfu::SfuEvent;
 use dashmap::DashMap;
+use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 use tonic::Status;
 use webrtc::peer_connection::RTCPeerConnection;
-use crate::pb::sfu::SfuEvent;
 
 // Peer wraps the WebRTC Connection
 pub struct Peer {
@@ -20,11 +20,7 @@ pub struct Peer {
 }
 
 impl Peer {
-    pub fn new(
-        pc: Arc<RTCPeerConnection>,
-        user_id: String,
-        room_id: String,
-    ) -> Self {
+    pub fn new(pc: Arc<RTCPeerConnection>, user_id: String, room_id: String) -> Self {
         Self {
             pc,
             user_id,
@@ -33,5 +29,37 @@ impl Peer {
             track_mapping: Arc::new(DashMap::new()),
             signaling_lock: Arc::new(Mutex::new(())),
         }
+    }
+
+    pub fn register_ice_candidate_handler(&self) {
+        let event_tx_clone = self.event_tx.clone();
+        let user_id_ice_candidate = self.user_id.clone();
+
+        // We assume `pc` is already Arc, so we can clone it if needed, but here we access it via &self.pc
+        self.pc.on_ice_candidate(Box::new(
+            move |c: Option<webrtc::ice_transport::ice_candidate::RTCIceCandidate>| {
+                let event_tx_inner = event_tx_clone.clone();
+                let user_id_inner = user_id_ice_candidate.clone();
+                Box::pin(async move {
+                    if let Some(candidate) = c {
+                        tracing::info!(user_id = %user_id_inner, "[SFU] Generated ICE candidate");
+                        let candidate_json =
+                            serde_json::to_string(&candidate.to_json().unwrap()).unwrap();
+                        let mut tx_lock = event_tx_inner.lock().await;
+                        if let Some(tx) = tx_lock.as_mut() {
+                            let _ = tx
+                                .send(Ok(SfuEvent {
+                                    payload: Some(
+                                        crate::pb::sfu::sfu_event::Payload::IceCandidate(
+                                            candidate_json,
+                                        ),
+                                    ),
+                                }))
+                                .await;
+                        }
+                    }
+                })
+            },
+        ));
     }
 }
