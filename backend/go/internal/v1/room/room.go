@@ -272,7 +272,17 @@ func (r *Room) Router(ctx context.Context, client types.ClientInterface, msg *pb
 		slog.Info("Handling Join Request", "clientId", client.GetID(), "role", client.GetRole())
 
 		if !canClientJoinSFU(client) {
-			slog.Warn("Ignored Join request from waiting user", "clientId", client.GetID())
+			slog.Info("Sending JoinResponse to waiting user (no SFU session)", "clientId", client.GetID())
+			client.SendProto(&pb.WebSocketMessage{
+				Payload: &pb.WebSocketMessage_JoinResponse{
+					JoinResponse: &pb.JoinResponse{
+						Success:      true,
+						UserId:       string(client.GetID()),
+						IsHost:       client.GetRole() == types.RoleTypeHost,
+						InitialState: r.BuildRoomStateProto(ctx),
+					},
+				},
+			})
 			return
 		}
 

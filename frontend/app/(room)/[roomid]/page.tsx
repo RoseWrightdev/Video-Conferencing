@@ -4,7 +4,6 @@ import { useParams } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { useRoom, useChat, } from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
-import { useAudioVisualizer } from '@/hooks/useAudioVisualizer';
 import { createLogger } from '@/lib/logger';
 import ChatPanel from '@/components/chat-panel/components/ChatPanel';
 import ControlBar from '@/components/room/components/Controls';
@@ -39,11 +38,29 @@ export default function RoomPage() {
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  const { requestPermissions, initializeStream, refreshDevices } = useMediaStream();
+  const handleMouseMove = () => {
+    setShowControls(true);
+    if (hideControlsTimeout.current) {
+      clearTimeout(hideControlsTimeout.current);
+    }
+    hideControlsTimeout.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+  };
+
+  useEffect(() => {
+    // Start initial timer
+    handleMouseMove();
+    return () => {
+      if (hideControlsTimeout.current) {
+        clearTimeout(hideControlsTimeout.current);
+      }
+    };
+  }, []);
+
+  const { requestPermissions, refreshDevices } = useMediaStream();
   const {
-    localStream,
     screenShareStream,
-    isAudioEnabled,
     raisingHandParticipants,
     participants,
     unmutedParticipants,
@@ -95,7 +112,17 @@ export default function RoomPage() {
     }
   };
 
-  // ... (useEffects)
+  // Show waiting screen as soon as we know we are in it, regardless of initialization
+  if (isWaitingRoom) {
+    return (
+      <WaitingScreen
+        roomName={roomName}
+        username={session?.user?.name || session?.user?.email || 'Guest'}
+        isConnected={connectionState.wsConnected}
+        isReconnecting={connectionState.wsReconnecting}
+      />
+    );
+  }
 
   // Show loading screen during authentication or initial connection
   if (status === 'loading') {
@@ -117,17 +144,7 @@ export default function RoomPage() {
     );
   }
 
-  // Show waiting screen ONLY if user is in waiting room AND initialization is complete
-  if (isWaitingRoom && !connectionState.isInitializing) {
-    return (
-      <WaitingScreen
-        roomName={roomName}
-        username={session?.user?.name || session?.user?.email || 'Guest'}
-        isConnected={connectionState.wsConnected}
-        isReconnecting={connectionState.wsReconnecting}
-      />
-    );
-  }
+
 
   // UNIFIED PRE-JOIN SCREEN (Permissions + Lobby)
   // Show if we haven't actively joined the lobby yet (and aren't waiting/initializing)
@@ -152,7 +169,10 @@ export default function RoomPage() {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
+    <div
+      className="h-screen w-screen flex flex-col overflow-hidden bg-background"
+      onMouseMove={handleMouseMove}
+    >
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Video Area */}

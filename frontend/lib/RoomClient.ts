@@ -15,6 +15,7 @@ export interface RoomClientState {
     isHost: boolean;
     currentUserId: string | null;
     error: string | null;
+    isInitialState?: boolean;
 }
 
 export class RoomClient {
@@ -272,21 +273,25 @@ export class RoomClient {
     private handleJoinResponse(response: any) {
         if (response.success) {
             this.currentUserId = response.userId;
+            // Check if we are actually in the waiting room (race condition fix: roomState arrived before joinResponse)
+            const amInWaitingRoom = this.waitingParticipants.has(response.userId);
+
             this.onStateChange({
-                isJoined: true,
+                isJoined: !amInWaitingRoom, // Only 'joined' if we aren't in the waiting room
                 currentUserId: response.userId,
-                isHost: response.isHost
+                isHost: response.isHost,
+                isWaitingRoom: amInWaitingRoom
             });
             // Initial State
             if (response.initialState) {
-                this.handleRoomState(response.initialState);
+                this.handleRoomState(response.initialState, true);
             }
         } else {
             this.onStateChange({ error: 'Failed to join room' });
         }
     }
 
-    private handleRoomState(state: RoomStateEvent) {
+    private handleRoomState(state: RoomStateEvent, isInitial = false) {
         const newParticipants = new Map<string, Participant>();
         let amInWaitingRoom = false;
 
@@ -332,10 +337,12 @@ export class RoomClient {
         this.waitingParticipants = newWaiting;
 
         // Dispatch Update
+
         this.onStateChange({
             participants: newParticipants,
             waitingParticipants: newWaiting,
-            isWaitingRoom: amInWaitingRoom
+            isWaitingRoom: amInWaitingRoom,
+            isInitialState: isInitial
         });
     }
 

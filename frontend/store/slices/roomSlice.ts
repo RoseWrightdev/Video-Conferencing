@@ -33,6 +33,45 @@ export const createRoomSlice: StateCreator<
       }
     }
 
+    // INTERCEPT: Calculate unread count for waiting and regular participants
+    // We must exclude the current user from triggers to avoid self-notification.
+    if (stateUpdate.isInitialState) {
+      // If this is the initial state load, we don't want to trigger notifications for existing users
+      stateUpdate.unreadParticipantsCount = 0;
+    } else {
+      const myId = stateUpdate.currentUserId || currentState.currentUserId;
+      let addedCount = 0;
+
+      // 1. Check Waiting Participants (if updated)
+      if (stateUpdate.waitingParticipants) {
+        const currentWaiting = currentState.waitingParticipants;
+        const newWaiting = stateUpdate.waitingParticipants as Map<string, any>;
+
+        newWaiting.forEach((_, id) => {
+          if (!currentWaiting.has(id) && id !== myId) {
+            addedCount++;
+          }
+        });
+      }
+
+      // 2. Check Regular Participants (if updated)
+      if (stateUpdate.participants) {
+        const currentParticipants = currentState.participants;
+        const newParticipants = stateUpdate.participants as Map<string, any>;
+
+        newParticipants.forEach((_, id) => {
+          if (!currentParticipants.has(id) && id !== myId) {
+            addedCount++;
+          }
+        });
+      }
+
+      if (addedCount > 0 && !currentState.isParticipantsPanelOpen) {
+        const currentUnread = stateUpdate.unreadParticipantsCount ?? currentState.unreadParticipantsCount ?? 0;
+        stateUpdate.unreadParticipantsCount = currentUnread + addedCount;
+      }
+    }
+
     // Direct merge for now
     set(stateUpdate);
 

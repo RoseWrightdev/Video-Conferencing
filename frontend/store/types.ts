@@ -141,6 +141,9 @@ export interface ParticipantSlice {
   toggleParticipantVideo: (participantId: string) => void;
   selectParticipant: (participantId: string | null) => void;
   toggleHand: () => Promise<void>;
+  toggleParticipantsPanel: () => void; // Moved from UiSlice
+  unreadParticipantsCount: number;
+  isParticipantsPanelOpen: boolean; // Moved from UiSlice
 }
 
 export interface RoomSlice {
@@ -164,13 +167,12 @@ export interface RoomSlice {
 }
 
 export interface UiSlice {
-  isParticipantsPanelOpen: boolean;
   isSettingsPanelOpen: boolean;
   gridLayout: GridLayout;
   isPinned: boolean;
   pinnedParticipantId: string | null;
-  toggleParticipantsPanel: () => void;
   toggleSettingsPanel: () => void;
+
   setGridLayout: (layout: GridLayout) => void;
   pinParticipant: (participantId: string | null) => void;
 }

@@ -23,6 +23,8 @@ export const createParticipantSlice: StateCreator<
   // --- UI State ---
   selectedParticipantId: null,
   isHost: false,
+  isParticipantsPanelOpen: false,
+  unreadParticipantsCount: 0,
 
   // --- Basic Actions ---
   addParticipant: (participant) => {
@@ -36,7 +38,15 @@ export const createParticipantSlice: StateCreator<
       }
 
       newParticipants.set(participant.id, participant);
-      return { participants: newParticipants };
+
+      // Increment unread count if panel is closed
+      const currentUnread = state.unreadParticipantsCount ?? 0;
+      const unreadCount = state.isParticipantsPanelOpen ? currentUnread : currentUnread + 1;
+
+      return {
+        participants: newParticipants,
+        unreadParticipantsCount: unreadCount,
+      };
     });
   },
 
@@ -138,9 +148,21 @@ export const createParticipantSlice: StateCreator<
     loggers.room.debug('setHandRaised', { participantId, raised });
     set((state) => {
       const newRaising = new Set(state.raisingHandParticipants);
-      if (raised) newRaising.add(participantId);
-      else newRaising.delete(participantId);
-      return { raisingHandParticipants: newRaising };
+      let unreadCount = state.unreadParticipantsCount || 0;
+
+      if (raised) {
+        newRaising.add(participantId);
+        // Increment unread count if panel is closed
+        if (!state.isParticipantsPanelOpen) {
+          unreadCount += 1;
+        }
+      } else {
+        newRaising.delete(participantId);
+      }
+      return {
+        raisingHandParticipants: newRaising,
+        unreadParticipantsCount: unreadCount
+      };
     });
   },
 
@@ -225,5 +247,15 @@ export const createParticipantSlice: StateCreator<
       const isCurrentlyRaised = raisingHandParticipants.has(currentUserId);
       roomClient.toggleHand(!isCurrentlyRaised);
     }
+  },
+
+  toggleParticipantsPanel: () => {
+    set((state) => {
+      const newOpen = !state.isParticipantsPanelOpen;
+      return {
+        isParticipantsPanelOpen: newOpen,
+        unreadParticipantsCount: newOpen ? 0 : state.unreadParticipantsCount,
+      };
+    });
   },
 });

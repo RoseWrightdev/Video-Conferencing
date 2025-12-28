@@ -25,6 +25,7 @@ import {
 import * as Typo from "@/components/ui/typography";
 import { useRoomStore } from "@/store/useRoomStore";
 import { useShallow } from 'zustand/react/shallow';
+import router from "next/router";
 
 export interface ControlBarProps {
   // empty now
@@ -54,11 +55,13 @@ const ControlBar = memo(function ControlBar() {
     toggleParticipantsPanel,
     toggleSettingsPanel,
     toggleChatPanel,
+    unreadParticipantsCount,
   } = useRoomStore(useShallow(state => ({
     isHost: state.isHost,
     toggleParticipantsPanel: state.toggleParticipantsPanel,
     toggleSettingsPanel: state.toggleSettingsPanel,
     toggleChatPanel: state.toggleChatPanel,
+    unreadParticipantsCount: state.unreadParticipantsCount,
   })));
 
   const { unreadCount, markMessagesRead } = useRoomStore(useShallow(state => ({
@@ -103,15 +106,25 @@ const ControlBar = memo(function ControlBar() {
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              variant="default"
-              size="icon"
-              className="rounded-full frosted-2 bg-white/10 hover:bg-white/50 text-white hover:text-black"
-              onClick={toggleParticipantsPanel}
-              aria-label="Toggle participants"
-            >
-              <Users className="size-5" />
-            </Button>
+            <div className="relative">
+              <Button
+                variant="default"
+                size="icon"
+                className="rounded-full frosted-2 bg-white/10 hover:bg-white/50 text-white hover:text-black"
+                onClick={toggleParticipantsPanel}
+                aria-label="Toggle participants"
+              >
+                <Users className="size-5" />
+              </Button>
+              {unreadParticipantsCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="absolute -top-2 -right-2 h-5 min-w-5 flex items-center justify-center px-1 text-xs"
+                >
+                  {unreadParticipantsCount > 99 ? '99+' : unreadParticipantsCount}
+                </Badge>
+              )}
+            </div>
           </TooltipTrigger>
           <TooltipContent>
             <Typo.P>Participants</Typo.P>
@@ -257,7 +270,10 @@ const ControlBar = memo(function ControlBar() {
                 variant="destructive"
                 size="icon"
                 className="rounded-full w-16 bg-red-500 hover:bg-red-700 hover:text-white"
-                onClick={() => leaveRoom()}
+                onClick={() => {
+                  leaveRoom()
+                  router.push('/');
+                }}
                 aria-label="Leave room"
               >
                 <PhoneOff className="size-5 text-red-950" />
