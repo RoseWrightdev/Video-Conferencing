@@ -95,20 +95,27 @@ data:
 
 ---
 # Alertmanager Secret for sensitive values
-apiVersion: v1
-kind: Secret
+# Alertmanager Secret managed via External Secrets
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
 metadata:
   name: alertmanager-secrets
   namespace: video-conferencing
   labels:
     app.kubernetes.io/name: alertmanager
-type: Opaque
-data:
-  # Base64 encode your webhook URLs
-  # echo -n "https://hooks.slack.com/services/YOUR/WEBHOOK/URL" | base64
-  SLACK_WEBHOOK_URL: aHR0cHM6Ly9ob29rcy5zbGFjay5jb20vc2VydmljZXMvWU9VUi9XRUJPSy9VUkw=  # CHANGE THIS
-  # Optional PagerDuty service key
-  PAGERDUTY_SERVICE_KEY: ""  # Add if using PagerDuty
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: global-secret-store
+    kind: ClusterSecretStore
+  target:
+    name: alertmanager-secrets
+    creationPolicy: Owner
+  data:
+  - secretKey: SLACK_WEBHOOK_URL
+    remoteRef:
+      key: prod/video-conferencing/alertmanager
+      property: SLACK_WEBHOOK_URL
 
 ---
 # Alertmanager Deployment

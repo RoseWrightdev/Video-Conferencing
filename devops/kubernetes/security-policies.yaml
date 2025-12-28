@@ -65,6 +65,16 @@ spec:
       port: 3000
     - protocol: TCP
       port: 8080
+    - protocol: TCP
+      port: 8080
+  # Allow WebRTC traffic for Agones GameServers
+  - from: []
+    ports:
+    - protocol: UDP
+      port: 10000
+    - protocol: UDP
+      port: 50000
+      endPort: 60000 # Agones ephemeral port range (example)
   # Allow inter-service communication
   - from:
     - podSelector:
@@ -96,6 +106,20 @@ spec:
     - protocol: TCP
       port: 50051  # gRPC
   # Allow external HTTPS (for Auth0, etc.)
+    - protocol: TCP
+      port: 443
+  # Allow traffic to Agones System (SDK communication)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: agones-system
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 443 
+    - protocol: TCP
+      port: 10001 # SDK gRPC port (default)
   - to: []
     ports:
     - protocol: TCP

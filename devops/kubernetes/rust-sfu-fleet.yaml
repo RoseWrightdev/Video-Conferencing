@@ -1,0 +1,101 @@
+---
+# Agones Fleet for Rust SFU
+# Replaces standard StatefulSet to provide dedicated GameServers
+# Agones manages dynamic port allocation and lifecycle
+
+apiVersion: agones.dev/v1
+kind: Fleet
+metadata:
+  name: rust-sfu
+  namespace: video-conferencing
+  labels:
+    app.kubernetes.io/name: rust-sfu
+    app.kubernetes.io/component: media
+spec:
+  replicas: 3
+  scheduling: Packed  # Pack servers on fewer nodes (cost efficient)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rust-sfu
+        app.kubernetes.io/component: media
+    spec:
+      ports:
+      # Agones automatically allocates a port from the node and maps it here
+      - name: webrtc-udp
+        containerPort: 10000
+        protocol: UDP
+      
+      health:
+        # Agones-specific health check
+        disabled: false
+        periodSeconds: 10
+        failureThreshold: 3
+        initialDelaySeconds: 30
+        
+      template:
+        spec:
+          serviceAccountName: video-conferencing-backend-sa
+          
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            fsGroup: 65534
+          
+          containers:
+          - name: sfu
+            image: video-conferencing/rust-sfu:latest
+            imagePullPolicy: Always
+            
+            ports:
+            # gRPC still goes through standard K8s Service
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+            
+            env:
+            # Standard K8s Downward API
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            
+            # Agones SDK sidecar will inject its own env vars
+            
+            envFrom:
+            - configMapRef:
+                name: rust-sfu-config
+                
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "500m"
+              limits:
+                memory: "2Gi"
+                cpu: "2000m"
+            
+            # Application-level probes (gRPC)
+            livenessProbe:
+              exec:
+                command: ["/bin/grpc_health_probe", "-addr=:50051"]
+              initialDelaySeconds: 15
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 3
+              
+            readinessProbe:
+              exec:
+                command: ["/bin/grpc_health_probe", "-addr=:50051"]
+              initialDelaySeconds: 5
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 3
