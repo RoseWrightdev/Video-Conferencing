@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: video-conferencing-root
+  namespace: argocd
+spec:
+  project: default
+  
+  # Source of the K8s manifests
+  source:
+    repoURL: 'https://github.com/RoseWrightdev/Video-Conferencing.git' # Replace with actual URL
+    targetRevision: HEAD
+    path: devops/kubernetes
+    directory:
+      recurse: true
+  
+  # Destination Cluster
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: video-conferencing
+  
+  # Sync Policy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

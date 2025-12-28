@@ -1,0 +1,16 @@
+# ArgoCD Installation Guide
+
+# 1. Create Namespace
+# kubectl create namespace argocd
+
+# 2. Install ArgoCD
+# kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# 3. Access the UI (Port Forward)
+# kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+# 4. Get Initial Password
+# argocd admin initial-password -n argocd
+
+# 5. Apply the Root App
+# kubectl apply -f devops/argocd/root-app.yaml

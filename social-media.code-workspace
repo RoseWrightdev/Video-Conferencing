@@ -1,7 +1,7 @@
 {
   "folders": [
     {
-      "name": "Video Confrencing",
+      "name": "Video Conferencing",
       "path": "."
     },
     {
@@ -12,10 +12,6 @@
       "name": "Go",
       "path": "./backend/go"
     },
-        {
-      "name": "Rust",
-      "path": "./backend/rust"
-    },
     {
       "name": "DevOps",
       "path": "./devops"
@@ -24,7 +20,7 @@
       "name": "Protobuf",
       "path": "./proto"
     },
-        {
+    {
       "name": "Scripts",
       "path": "./scripts"
     }
@@ -32,11 +28,13 @@
   "settings": {
     "vitest.workspaceConfig": "./frontend/vitest.config.mts",
     "testing.automaticallyOpenTestResults": "openOnTestStart",
-    "cSpell.words": [
-      "autodocs",
-      "WEBRTC"
-    ],
     "typescript.tsdk": "Frontend/node_modules/typescript/lib",
-    "protobuf.protoc.path": "/opt/homebrew/bin/protoc"
+    "rust-analyzer.linkedProjects": [
+      "backend/rust/sfu/Cargo.toml"
+    ],
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.procMacro.enable": true,
+    "rust-analyzer.cargo.allTargets": true,
+    "rust-analyzer.procMacro.attributes.enable": true,
   }
 }

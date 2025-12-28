@@ -1,4 +1,42 @@
 backend/go/.env
+backend/go/session
 *.DS_Store
 temp
 backend/rust/sfu/target
+
+# Large media files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.iso
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.gz
+*.rar
+*.7z
+
+# Logs
+*.log
+
+# Binaries and shared objects
+*.exe
+*.dll
+*.so
+*.dylib
+bin/
+obj/
+
+# Recordings
+recordings/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform.lock.hcl
