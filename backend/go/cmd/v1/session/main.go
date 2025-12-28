@@ -146,6 +146,7 @@ func main() {
 		slog.Info("API server starting on :8080")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Failed to run server", "error", err)
+			syscall.Kill(os.Getpid(), syscall.SIGTERM)
 		}
 	}()
 
