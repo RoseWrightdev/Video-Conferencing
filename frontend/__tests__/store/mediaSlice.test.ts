@@ -35,12 +35,7 @@ describe('mediaSlice', () => {
         stop: vi.fn(),
     };
 
-    const mockStream = {
-        id: 'stream-1',
-        getTracks: vi.fn().mockReturnValue([mockTrack]),
-        getAudioTracks: vi.fn().mockReturnValue([mockTrack]),
-        getVideoTracks: vi.fn().mockReturnValue([]),
-    };
+    let mockStream: any;
 
     // Mock MediaStream globally
     class MockMediaStream {
@@ -50,13 +45,20 @@ describe('mediaSlice', () => {
         constructor(tracks: any[] = []) {
             this.id = 'mock-stream-' + Math.random().toString(36).substr(2, 9);
             this.tracks = tracks;
+            this.getTracks = vi.fn().mockImplementation(() => this.tracks);
+            this.getAudioTracks = vi.fn().mockImplementation(() => this.tracks.filter(t => t.kind === 'audio'));
+            this.getVideoTracks = vi.fn().mockImplementation(() => this.tracks.filter(t => t.kind === 'video'));
+            this.addTrack = vi.fn().mockImplementation((track: any) => this.tracks.push(track));
+            this.removeTrack = vi.fn().mockImplementation((track: any) => {
+                this.tracks = this.tracks.filter(t => t !== track);
+            });
         }
 
-        getTracks() { return this.tracks; }
-        getAudioTracks() { return this.tracks.filter(t => t.kind === 'audio'); }
-        getVideoTracks() { return this.tracks.filter(t => t.kind === 'video'); }
-        addTrack(track: any) { this.tracks.push(track); }
-        removeTrack(track: any) { this.tracks = this.tracks.filter(t => t !== track); }
+        getTracks: ReturnType<typeof vi.fn>;
+        getAudioTracks: ReturnType<typeof vi.fn>;
+        getVideoTracks: ReturnType<typeof vi.fn>;
+        addTrack: ReturnType<typeof vi.fn>;
+        removeTrack: ReturnType<typeof vi.fn>;
     }
 
     // Global Mocks
@@ -97,11 +99,24 @@ describe('mediaSlice', () => {
         mockSfuClient.addTrack.mockClear();
         mockPc.removeTrack.mockClear();
 
+        mockStream = new MockMediaStream([mockTrack]);
+
         // Browser API Mocks
         Object.defineProperty(navigator, 'mediaDevices', {
             value: {
-                getUserMedia: vi.fn().mockResolvedValue(mockStream),
-                getDisplayMedia: vi.fn().mockResolvedValue(mockStream),
+                getUserMedia: vi.fn().mockImplementation(async (constraints) => {
+                    const tracks: any[] = [];
+                    if (constraints.audio) {
+                        tracks.push({ ...mockTrack, id: 'audio-track-' + Math.random(), kind: 'audio' });
+                    }
+                    if (constraints.video) {
+                        tracks.push({ ...mockTrack, id: 'video-track-' + Math.random(), kind: 'video' });
+                    }
+                    return new MockMediaStream(tracks);
+                }),
+                getDisplayMedia: vi.fn().mockImplementation(async () => {
+                    return new MockMediaStream([{ ...mockTrack, id: 'screen-track', kind: 'video' }]);
+                }),
             },
             writable: true,
         });
@@ -161,9 +176,9 @@ describe('mediaSlice', () => {
 
         it('should disable audio when it was enabled', async () => {
             currentState.isAudioEnabled = true;
-            currentState.localStream = mockStream as any;
+            currentState.localStream = mockStream;
             // Ensure stream has audio tracks to stop
-            mockStream.getAudioTracks.mockReturnValueOnce([mockTrack]);
+            mockStream.addTrack(mockTrack);
 
             await slice.toggleAudio();
 
@@ -190,9 +205,9 @@ describe('mediaSlice', () => {
 
         it('should disable video when it was enabled', async () => {
             currentState.isVideoEnabled = true;
-            currentState.localStream = mockStream as any;
+            currentState.localStream = mockStream;
             const videoTrack = { ...mockTrack, kind: 'video' };
-            mockStream.getVideoTracks.mockReturnValueOnce([videoTrack]);
+            mockStream.addTrack(videoTrack);
 
             await slice.toggleVideo();
 

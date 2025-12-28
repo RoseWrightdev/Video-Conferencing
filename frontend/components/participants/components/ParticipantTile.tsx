@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import type { Participant } from '@/store/types';
 import { loggers } from '@/lib/logger';
 
+import { useMediaStreamLifecycle } from '@/hooks/useMediaStreamLifecycle';
+
 interface ParticipantTileProps {
   participant: Participant;
   isAudioEnabled?: boolean;
@@ -38,17 +40,20 @@ export default function ParticipantTile({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPlaybackMuted, setIsPlaybackMuted] = useState(false);
 
-  // Determine the stream to display
-  // Prioritize screen sharing if local, otherwise participant's stream
-  const streamToDisplay = (isLocal && isScreenSharing && screenShareStream)
+  // Determine the stream object to watch
+  const rawStream = (isLocal && isScreenSharing && screenShareStream)
     ? screenShareStream
     : participant.stream;
+
+  // Use the lifecycle hook to listen for internal track changes (mute/unmute/add/remove)
+  // This ensures we re-render even if 'rawStream' reference stays the same
+  const { stream: streamToDisplay, videoTracks } = useMediaStreamLifecycle(rawStream);
 
   // We should attempt to show video if:
   // 1. We have a valid stream
   // 2. We are either screen sharing OR video is enabled
   // 3. The stream actually has video tracks
-  const hasVideoTracks = (streamToDisplay?.getVideoTracks().length ?? 0) > 0;
+  const hasVideoTracks = videoTracks.length > 0;
   const shouldShowVideo = !!streamToDisplay && hasVideoTracks && (isScreenSharing || isVideoEnabled);
 
   useEffect(() => {

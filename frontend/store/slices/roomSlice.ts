@@ -50,11 +50,8 @@ export const createRoomSlice: StateCreator<
   };
 
   const onMediaTrackAdded = (userId: string, stream: MediaStream) => {
-    get().setParticipantStream(userId, stream);
-    // Also update local tracks if it's us (redundant but safe)
-    if (userId === get().currentUserId) {
-      // Logic for local stream usually handled by mediaSlice, but this ensures consistency
-    }
+    // Redundant: RoomClient's onStateChange will propagate the participant with the stream attached.
+    // Keeping this callback as it's required by RoomClient constructor, but no store action needed.
   };
 
   // Lazy initialization of RoomClient to avoid side effects during module load
@@ -99,7 +96,6 @@ export const createRoomSlice: StateCreator<
     wsClient: null, // Legacy, will be null
     sfuClient: null, // Legacy, will be null
     roomClient: roomClient, // Exposed for other slices
-    streamToUserMap: new Map(), // Legacy/Unused by Slice logic but kept for type compat
 
     initializeRoom: async (roomId, username, token) => {
       get().updateConnectionState({ isInitializing: true });

@@ -24,9 +24,18 @@ export class RoomClient {
     // Authoritative State
     private participants: Map<string, Participant> = new Map();
     private waitingParticipants: Map<string, Participant> = new Map();
+    // streamToUserMap maps Stream ID -> User ID. This differs from participants map (User ID -> Stream).
+    // It is primarily used to lookup user when a track/stream event arrives with only StreamID.
     private streamToUserMap: Map<string, string> = new Map();
-    private userToStreamMap: Map<string, MediaStream> = new Map();
-    private pendingStreams: Map<string, MediaStream> = new Map();
+
+    // We keep a reference to the streams to ensure they aren't garbage collected if that were an issue,
+    // but primarily the participants map is now the source of truth for "User has this stream".
+    // We can remove userToStreamMap if we just check participants, but keeping it for quick lookup is fine
+    // as long as we keep it in sync. Let's simplifiy: Source of truth = participants.
+    // However, handleRoomState wipes participants map. We need to remember streams.
+    // So we need a persistent map of streams that survives handleRoomState updates.
+    private activeStreams: Map<string, MediaStream> = new Map(); // UserId -> Stream
+
     private messages: ChatMessage[] = [];
     private currentUserId: string | null = null; // Stored locally for logic checks
 
@@ -105,15 +114,14 @@ export class RoomClient {
         this.participants.clear();
         this.waitingParticipants.clear();
         this.streamToUserMap.clear();
-        this.userToStreamMap.clear();
-        this.pendingStreams.clear();
+        this.activeStreams.clear();
     }
 
     public setLocalStream(userId: string, stream: MediaStream | null) {
         if (stream) {
-            this.userToStreamMap.set(userId, stream);
+            this.activeStreams.set(userId, stream);
         } else {
-            this.userToStreamMap.delete(userId);
+            this.activeStreams.delete(userId);
         }
 
         const p = this.participants.get(userId);
@@ -226,7 +234,7 @@ export class RoomClient {
         const p = this.participants.get(userId);
         if (p) {
             // Ensure stream is consistent with our local map (source of truth for streams)
-            const localStreamRef = this.userToStreamMap.get(userId);
+            const localStreamRef = this.activeStreams.get(userId);
 
             // If we have a stream locally but it's not on the participant object, attach it
             if (localStreamRef && !p.stream) {
@@ -285,7 +293,7 @@ export class RoomClient {
         // Process Participants
         state.participants.forEach((p: ParticipantInfo) => {
             // Check if we already have a stream for this user (from previous state or early track event)
-            const existingStream = this.userToStreamMap.get(p.id);
+            const existingStream = this.activeStreams.get(p.id);
 
             newParticipants.set(p.id, {
                 id: p.id,
@@ -335,102 +343,60 @@ export class RoomClient {
         logger.info('Track Added Event', event);
         this.streamToUserMap.set(event.streamId, event.userId);
 
-        // Try to resolve immediately
-        this.resolvePendingStreams();
+        // No fuzzy resolution check anymore.
+        // If we have pending tracks for this streamId (unlikely with this order, but possible in future if we queue tracks),
+        // we would process them here. But we don't queue tracks anymore as we expect trackAdded -> handleRemoteTrack or vice versa
+        // AND strict matching.
     }
 
     private handleRemoteTrack(stream: MediaStream, track: MediaStreamTrack) {
-        // 1. Try exact match first
+        // 1. Strict match only
         const userId = this.streamToUserMap.get(stream.id);
         if (userId) {
             this.assignStreamToUser(userId, stream);
             return;
         }
 
-        // 2. Exact match failed, store as pending
-        logger.warn('Received track for unknown user (ID mismatch)', {
+        // 2. Strict ID match failed
+        logger.warn('Received track for unknown or unmapped stream ID. Dropping.', {
             streamId: stream.id,
             trackKind: track.kind
         });
 
-        if (!this.pendingStreams.has(stream.id)) {
-            this.pendingStreams.set(stream.id, stream);
-        }
-
-        // 3. Attempt fuzzy resolution
-        this.resolvePendingStreams();
-    }
-
-    private resolvePendingStreams() {
-        if (this.pendingStreams.size === 0) return;
-
-        // Find users who are expected to have a stream (present in streamToUserMap)
-        // but have NOT been assigned a stream object in userToStreamMap yet.
-        const expectedUserIds = Array.from(this.streamToUserMap.values());
-        const unassignedUserIds = expectedUserIds.filter(uid => !this.userToStreamMap.has(uid));
-
-        logger.debug('Resolving Pending Streams', {
-            pending: this.pendingStreams.size,
-            unassignedUsers: unassignedUserIds.length
-        });
-
-        // Strategy: If 1 pending stream and 1 unassigned user, assume match.
-        // This fixes the common WebRTC issue where browser generates a different StreamID than signaled.
-        if (this.pendingStreams.size === 1 && unassignedUserIds.length === 1) {
-            const stream = this.pendingStreams.values().next().value;
-            const userId = unassignedUserIds[0];
-
-            logger.info('Fuzzy Matched Stream to User', { userId, streamId: stream.id });
-
-            this.assignStreamToUser(userId, stream);
-            this.pendingStreams.delete(stream.id);
-            // Update the map to point to the ACTUAL stream ID for future lookups (like mute toggles)
-            this.streamToUserMap.set(stream.id, userId);
-        }
+        // We do NOT use fuzzy logic anymore.
     }
 
     private assignStreamToUser(userId: string, stream: MediaStream) {
-        // [FIX] Create a NEW MediaStream to force React to detect the change and re-attach srcObject.
-        // Populate it immediately with the fresh tracks from the native stream.
-        const newStream = new MediaStream(stream.getTracks());
-        const currentStream = this.userToStreamMap.get(userId);
+        // [REFRACTOR] Use the stream directly. Do NOT create new MediaStream().
+        // This avoids unnecessary object creation and lets us track the native stream's events.
 
-        // Cleanup: Stop tracks from the OLD stream that are NO LONGER in the new stream
-        if (currentStream) {
-            currentStream.getTracks().forEach(oldTrack => {
-                // If this old track is NOT in the new stream (by ID), it's stale. Stop it.
-                // If it IS in the new stream, we leave it alone (it's active).
-                const isPreserved = newStream.getTrackById(oldTrack.id);
-                if (!isPreserved) {
-                    logger.debug(`[RoomClient] Stopping stale track ${oldTrack.id} (${oldTrack.kind}) for ${userId}`);
-                    try {
-                        oldTrack.stop();
-                    } catch (e) {
-                        // ignore stop errors
-                    }
-                }
-            });
+        logger.info('Assigned stream to user', { userId, tracks: stream.getTracks().length, streamId: stream.id });
+
+        const currentStream = this.activeStreams.get(userId);
+        if (currentStream && currentStream.id !== stream.id) {
+            // Logic to handle stream *replacement* (e.g. screen share switching or re-negotiation leading to new stream ID)
+            // Stop old tracks if they aren't in the new stream?
+            // Actually, WebRTC usually reuses stream ID for same transceiver, but if it changes:
+            logger.info(`Replacing old stream ${currentStream.id} with new stream ${stream.id} for user ${userId}`);
         }
 
-        logger.info('Assigned stream to user', { userId, tracks: newStream.getTracks().length, streamId: newStream.id });
-
-        this.userToStreamMap.set(userId, newStream);
-        this.onMediaTrackAdded(userId, newStream);
+        this.activeStreams.set(userId, stream);
+        this.onMediaTrackAdded(userId, stream);
 
         // Update internal participants map to keep it in sync
         const p = this.participants.get(userId);
         if (p) {
-            p.stream = newStream;
+            p.stream = stream;
 
             // Self-Healing: If we received a video track, ensure isVideoEnabled is true
-            if (newStream.getVideoTracks().length > 0 && !p.isVideoEnabled) {
+            if (stream.getVideoTracks().length > 0 && !p.isVideoEnabled) {
                 logger.info(`[RoomClient] Self-healing: Enabling video for ${userId} because video track was received.`);
                 p.isVideoEnabled = true;
             }
 
             this.participants.set(userId, p);
 
-            // Broadcast state update to ensure UI re-renders with new stream AND fast flag
+            // Broadcast state update
             const newParticipants = new Map(this.participants);
             this.onStateChange({ participants: newParticipants });
         }

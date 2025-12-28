@@ -156,7 +156,6 @@ export interface RoomSlice {
   wsClient: WebSocketClient | null;
   sfuClient: SFUClient | null;
   roomClient: RoomClient | null; // Added
-  streamToUserMap: Map<string, string>;
 
   initializeRoom: (roomId: string, username: string, token: string) => Promise<void>;
   joinRoom: (approvalToken?: string) => Promise<void>;
