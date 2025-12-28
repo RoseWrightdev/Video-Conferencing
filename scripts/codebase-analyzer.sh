@@ -56,6 +56,10 @@ find . \( \
     ! -name "*.tmp" -a \
     ! -name "*.temp" -a \
     ! -name "*.md" -a \
+    ! -name "*.pb.go" -a \
+    ! -name "*_pb.js" -a \
+    ! -name "*_pb.d.ts" -a \
+    ! -name "*_pb.ts" -a \
     ! -name "*.json" \
 \) -print > /tmp/codebase_files.txt
 
@@ -91,8 +95,12 @@ echo "CSS (no comments):       $CSS_LINES_NO_COMMENTS lines"
 YAML_LINES_NO_COMMENTS=$(grep -E '\.(yaml|yml)$' /tmp/codebase_files.txt | xargs cat 2>/dev/null | sed '/^\s*#/d; /^\s*$/d' | wc -l)
 echo "YAML (no comments):      $YAML_LINES_NO_COMMENTS lines"
 
+# Count Rust without comments
+RS_LINES_NO_COMMENTS=$(grep '\.rs$' /tmp/codebase_files.txt | xargs cat 2>/dev/null | sed '/^\s*\/\//d; /^\s*\/\*/,/\*\//d; /^\s*$/d' | wc -l)
+echo "Rust (no comments):      $RS_LINES_NO_COMMENTS lines"
+
 # Total executable lines
-TOTAL_NO_COMMENTS=$((GO_LINES_NO_COMMENTS + TS_LINES_NO_COMMENTS + CSS_LINES_NO_COMMENTS + YAML_LINES_NO_COMMENTS))
+TOTAL_NO_COMMENTS=$((GO_LINES_NO_COMMENTS + TS_LINES_NO_COMMENTS + CSS_LINES_NO_COMMENTS + YAML_LINES_NO_COMMENTS + RS_LINES_NO_COMMENTS))
 echo ""
 echo "🚀 Total executable lines (no comments/blanks): $TOTAL_NO_COMMENTS"
 
@@ -107,6 +115,7 @@ echo ""
 echo "Source code files:"
 echo "===================="
 echo "Go files:        $(grep '\.go$' /tmp/codebase_files.txt | wc -l)"
+echo "Rust files:      $(grep '\.rs$' /tmp/codebase_files.txt | wc -l)"
 echo "TypeScript/JS:   $(grep -E '\.(ts|tsx|js|jsx)$' /tmp/codebase_files.txt | wc -l)"
 echo "CSS/SCSS:        $(grep -E '\.(css|scss|sass)$' /tmp/codebase_files.txt | wc -l)"
 echo "Markdown:        $(grep '\.md$' /tmp/codebase_files.txt | wc -l)"
@@ -152,6 +161,10 @@ for dir in */; do
             ! -name ".env" -a \
             ! -name ".env.*" -a \
             ! -name "*.md" -a \
+            ! -name "*.pb.go" -a \
+            ! -name "*_pb.js" -a \
+            ! -name "*_pb.d.ts" -a \
+            ! -name "*_pb.ts" -a \
             ! -name "*.json" \
         \) -print | wc -l)
         echo "$dir: $count files"
