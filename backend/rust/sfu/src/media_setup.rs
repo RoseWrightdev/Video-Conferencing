@@ -6,14 +6,78 @@ use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::policy::bundle_policy::RTCBundlePolicy;
-use webrtc::rtp_transceiver::rtp_codec::{RTCRtpHeaderExtensionCapability, RTPCodecType};
+use webrtc::rtp_transceiver::rtp_codec::{
+    RTCRtpCodecCapability, RTCRtpHeaderExtensionCapability, RTPCodecType,
+};
+use tracing::error;
 
 pub struct MediaSetup;
 
 impl MediaSetup {
     pub fn create_webrtc_api() -> webrtc::api::API {
         let mut media_engine = MediaEngine::default();
-        media_engine.register_default_codecs().unwrap();
+
+        // Register Opus with FEC and low latency settings
+        use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecParameters;
+        media_engine
+            .register_codec(
+                RTCRtpCodecParameters {
+                    capability: RTCRtpCodecCapability {
+                        mime_type: "audio/opus".to_owned(),
+                        clock_rate: 48000,
+                        channels: 2,
+                        sdp_fmtp_line: "minptime=10;useinbandfec=1".to_owned(),
+                        ..Default::default()
+                    },
+                    payload_type: 111,
+                    ..Default::default()
+                },
+                RTPCodecType::Audio,
+            )
+            .unwrap_or_else(|e| {
+                panic!("Failed to register Opus codec: {}", e);
+            });
+
+        // Register Video Codecs (VP8, H264)
+        media_engine
+            .register_codec(
+                RTCRtpCodecParameters {
+                    capability: RTCRtpCodecCapability {
+                        mime_type: "video/VP8".to_owned(),
+                        clock_rate: 90000,
+                        channels: 0,
+                        sdp_fmtp_line: "".to_owned(),
+                        ..Default::default()
+                    },
+                    payload_type: 96,
+                    ..Default::default()
+                },
+                RTPCodecType::Video,
+            )
+            .unwrap_or_else(|e| {
+                panic!("Failed to register VP8 codec: {}", e);
+            });
+
+        media_engine
+            .register_codec(
+                RTCRtpCodecParameters {
+                    capability: RTCRtpCodecCapability {
+                        mime_type: "video/H264".to_owned(),
+                        clock_rate: 90000,
+                        channels: 0,
+                        sdp_fmtp_line:
+                            "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f"
+                                .to_owned(),
+                        ..Default::default()
+                    },
+                    payload_type: 102,
+                    ..Default::default()
+                },
+                RTPCodecType::Video,
+            )
+            .unwrap_or_else(|e| {
+                error!("Failed to register H264 codec: {}", e);
+            });
 
         let extensions = vec![
             "urn:ietf:params:rtp-hdrext:sdes:mid",

@@ -1,4 +1,3 @@
-use dashmap::DashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace, warn};
 use webrtc::peer_connection::RTCPeerConnection;
@@ -9,15 +8,14 @@ use webrtc::track::track_remote::TrackRemote;
 
 use crate::broadcaster::TrackBroadcaster;
 use crate::pb;
-use crate::peer_manager::Peer;
 use crate::signaling_handler::perform_renegotiation;
 
 pub fn attach_track_handler(
     pc: &Arc<RTCPeerConnection>,
     user_id: String,
     room_id: String,
-    peers: Arc<DashMap<(String, String), Peer>>,
-    tracks: Arc<DashMap<(String, String, String, String), Arc<TrackBroadcaster>>>,
+    peers: crate::types::PeerMap,
+    tracks: crate::types::TrackMap,
 ) {
     let peers_clone = peers.clone();
     let tracks_map = tracks.clone();
@@ -124,7 +122,7 @@ pub fn attach_track_handler(
                             codec.payload_type
                         } else {
                             // Fallback to incoming PT if we can't find a negotiated one (better than 0)
-                            let incoming_pt = track_for_pt.payload_type().try_into().unwrap_or(0);
+                            let incoming_pt = track_for_pt.payload_type();
                             warn!(incoming_pt = %incoming_pt, "[SFU] Outgoing codecs empty, falling back to incoming PT");
                             incoming_pt
                         };
@@ -171,7 +169,7 @@ pub fn attach_track_handler(
                             }
 
                             // Keyframe Detection
-                            let is_keyframe = if packet.payload.len() > 0 {
+                            let is_keyframe = if !packet.payload.is_empty() {
                                 if mime_type.contains("vp8") {
                                     // VP8: S-bit is 0 for start of partition? No, Key frame is bit 0 of first byte == 0
                                     // (payload[0] & 0x01) == 0

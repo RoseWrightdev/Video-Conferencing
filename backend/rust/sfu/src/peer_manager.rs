@@ -1,9 +1,7 @@
 use crate::pb::sfu::SfuEvent;
 use dashmap::DashMap;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tonic::Status;
 use webrtc::peer_connection::RTCPeerConnection;
 
 // Peer wraps the WebRTC Connection
@@ -12,7 +10,7 @@ pub struct Peer {
     pub user_id: String,
     pub room_id: String,
     // Channel to send events (TrackAdded, Renegotiation) to Go -> Frontend
-    pub event_tx: Arc<Mutex<Option<mpsc::Sender<Result<SfuEvent, Status>>>>>,
+    pub event_tx: crate::types::SharedEventSender,
     // Map from StreamID (in this peer's PC) to Source UserID
     pub track_mapping: Arc<DashMap<String, String>>,
     // Ensure only one negotiation happens at a time per peer
