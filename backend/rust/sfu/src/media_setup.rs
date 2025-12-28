@@ -1,0 +1,136 @@
+use webrtc::api::interceptor_registry::register_default_interceptors;
+use webrtc::api::media_engine::MediaEngine;
+use webrtc::api::APIBuilder;
+use webrtc::ice_transport::ice_server::RTCIceServer;
+use webrtc::interceptor::registry::Registry;
+use webrtc::peer_connection::configuration::RTCConfiguration;
+use webrtc::peer_connection::policy::bundle_policy::RTCBundlePolicy;
+use webrtc::rtp_transceiver::rtp_codec::{RTPCodecType, RTCRtpHeaderExtensionCapability};
+use std::env;
+
+pub struct MediaSetup;
+
+impl MediaSetup {
+    pub fn create_webrtc_api() -> webrtc::api::API {
+        let mut media_engine = MediaEngine::default();
+        media_engine.register_default_codecs().unwrap();
+        
+        let extensions = vec![
+            "urn:ietf:params:rtp-hdrext:sdes:mid",
+            "urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id",
+            "urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id",
+            "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+            "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+            "urn:ietf:params:rtp-hdrext:ssrc-audio-level",
+            "urn:ietf:params:rtp-hdrext:toffset",
+            "urn:3gpp:video-orientation",
+            "http://www.webrtc.org/experiments/rtp-hdrext/video-content-type",
+        ];
+
+        for extension in extensions {
+            let _ = media_engine.register_header_extension(
+                RTCRtpHeaderExtensionCapability { uri: extension.to_string() },
+                RTPCodecType::Video,
+                None,
+            );
+            let _ = media_engine.register_header_extension(
+                RTCRtpHeaderExtensionCapability { uri: extension.to_string() },
+                RTPCodecType::Audio,
+                None,
+            );
+        }
+        
+        let mut registry = Registry::new();
+        registry = register_default_interceptors(registry, &mut media_engine).unwrap();
+
+        APIBuilder::new()
+            .with_media_engine(media_engine)
+            .with_interceptor_registry(registry)
+            .build()
+    }
+
+    pub fn get_rtc_config() -> RTCConfiguration {
+        let stun_url = env::var("STUN_URL").unwrap_or_else(|_| "stun:stun.l.google.com:19302".to_string());
+        
+        RTCConfiguration {
+            ice_servers: vec![RTCIceServer {
+                urls: vec![stun_url],
+                ..Default::default()
+            }],
+            bundle_policy: RTCBundlePolicy::MaxBundle,
+            ..Default::default()
+        }
+    }
+
+    pub async fn subscribe_to_existing_tracks(
+        peer: &crate::peer_manager::Peer,
+        user_id: &str,
+        room_id: &str,
+        tracks: &dashmap::DashMap<String, std::sync::Arc<crate::broadcaster::TrackBroadcaster>>,
+    ) {
+        use std::sync::Arc;
+        use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
+        use webrtc::track::track_local::TrackLocal;
+        use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
+        use tracing::info;
+
+        for track_entry in tracks.iter() {
+            let key = track_entry.key();
+            let parts: Vec<&str> = key.split(':').collect();
+            if parts.len() == 4 && parts[0] == room_id && parts[1] != user_id {
+                let broadcaster = track_entry.value();
+                let t_stream = parts[2];
+                let t_track = parts[3];
+                let t_user = parts[1];
+
+                let local_track = Arc::new(TrackLocalStaticRTP::new(
+                    broadcaster.capability.clone(),
+                    t_track.to_owned(),
+                    t_stream.to_owned(),
+                ));
+               
+                if let Ok(rtp_sender) = peer.pc.add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>).await {
+                    let sender_clone = rtp_sender.clone();
+                    let broadcaster_to_move = broadcaster.clone();
+                    tokio::spawn(async move {
+                        let mut rtcp_buf = vec![0u8; 1500];
+                        while let Ok((packets, _)) = sender_clone.read(&mut rtcp_buf).await {
+                            for packet in packets {
+                                if packet.as_any().is::<PictureLossIndication>() {
+                                    broadcaster_to_move.request_keyframe().await;
+                                }
+                            }
+                        }
+                    });
+
+                    let params = rtp_sender.get_parameters().await;
+                    let ssrc = params.encodings.first().map(|e| e.ssrc).unwrap_or(0);
+                    
+                    let pt = {
+                        if let Some(codec) = params.rtp_parameters.codecs.first() {
+                             codec.payload_type
+                        } else {
+                             0 
+                        }
+                    };
+                    
+                    info!(
+                        "[SFU] subscribe_to_existing_tracks: Resolved PT: {}, SSRC: {}",
+                        pt, ssrc
+                    );
+                    broadcaster.add_writer(local_track, ssrc, pt).await;
+                    
+                    // delayed Keyframe Request to ensure receiver gets one after connection is stable
+                    broadcaster.clone().schedule_pli_retry();
+                    peer.track_mapping.insert(t_stream.to_owned(), t_user.to_owned());
+                    info!(
+                        track = %t_track,
+                        user = %t_user,
+                        new_peer = %user_id,
+                        "[SFU] Added existing track to new peer"
+                    );
+                }
+            }
+        }
+    }
+}

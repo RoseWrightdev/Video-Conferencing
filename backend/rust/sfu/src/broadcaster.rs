@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::peer_connection::RTCPeerConnection;
@@ -13,26 +13,28 @@ pub struct BroadcasterWriter {
 }
 
 pub struct TrackBroadcaster {
-    pub writers: Arc<Mutex<Vec<BroadcasterWriter>>>,
+    pub writers: Arc<RwLock<Vec<BroadcasterWriter>>>,
     pub kind: String,
     pub capability: RTCRtpCodecCapability,
     pub source_pc: Arc<RTCPeerConnection>,
     pub source_ssrc: u32,
+    pub last_keyframe_ts: Arc<std::sync::atomic::AtomicI64>,
 }
 
 impl TrackBroadcaster {
     pub fn new(kind: String, capability: RTCRtpCodecCapability, source_pc: Arc<RTCPeerConnection>, source_ssrc: u32) -> Self {
         Self {
-            writers: Arc::new(Mutex::new(Vec::new())),
+            writers: Arc::new(RwLock::new(Vec::new())),
             kind,
             capability,
             source_pc,
             source_ssrc,
+            last_keyframe_ts: Arc::new(std::sync::atomic::AtomicI64::new(0)),
         }
     }
 
     pub async fn add_writer(&self, writer: Arc<TrackLocalStaticRTP>, ssrc: u32, payload_type: u8) {
-        let mut writers = self.writers.lock().await;
+        let mut writers = self.writers.write().await;
         writers.push(BroadcasterWriter { track: writer, ssrc, payload_type });
         info!(
             kind = %self.kind,
@@ -40,7 +42,17 @@ impl TrackBroadcaster {
             payload_type = %payload_type,
             "[SFU] Added writer for track"
         );
+        // We use schedule_pli_retry when adding a writer now? 
+        // No, add_writer calls request_keyframe() originally.
+        // The burst was called externally.
+        // I'll leave request_keyframe() here or remove it if schedule_pli_retry does it.
+        // Original add_writer called request_keyframe().
         self.request_keyframe().await;
+    }
+
+    pub fn mark_keyframe_received(&self) {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+        self.last_keyframe_ts.store(now, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub async fn request_keyframe(&self) {
@@ -59,24 +71,21 @@ impl TrackBroadcaster {
         }
     }
 
-    pub fn schedule_keyframe_burst(self: Arc<Self>) {
+    pub fn schedule_pli_retry(self: Arc<Self>) {
         tokio::spawn(async move {
-            // Burst keyframes to catch the receiver as soon as they are ready
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            info!("[SFU] Sending delayed Keyframe (1s)");
+            // Smart Retry: Send one now, check in 500ms
             self.request_keyframe().await;
+            let start_time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
             
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            info!("[SFU] Sending delayed Keyframe (2s)");
-            self.request_keyframe().await;
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            info!("[SFU] Sending delayed Keyframe (3s)");
-            self.request_keyframe().await;
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-            info!("[SFU] Sending delayed Keyframe (5s)");
-            self.request_keyframe().await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            
+            let last = self.last_keyframe_ts.load(std::sync::atomic::Ordering::Relaxed);
+            if last < start_time {
+                info!("[SFU] No keyframe received in 500ms, retrying PLI");
+                self.request_keyframe().await;
+            } else {
+                tracing::debug!("[SFU] Keyframe received, skipping retry");
+            }
         });
     }
 }
