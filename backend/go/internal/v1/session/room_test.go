@@ -20,6 +20,7 @@ type MockWSConnection struct {
 	writeMessages [][]byte
 	readIndex     int
 	closed        bool
+	messageType   int // Configurable message type, defaults to BinaryMessage
 }
 
 func (m *MockWSConnection) ReadMessage() (messageType int, p []byte, err error) {
@@ -33,7 +34,13 @@ func (m *MockWSConnection) ReadMessage() (messageType int, p []byte, err error) 
 
 	msg := m.readMessages[m.readIndex]
 	m.readIndex++
-	return websocket.BinaryMessage, msg, nil
+
+	// Use configured message type, default to BinaryMessage
+	msgType := m.messageType
+	if msgType == 0 {
+		msgType = websocket.BinaryMessage
+	}
+	return msgType, msg, nil
 }
 
 func (m *MockWSConnection) WriteMessage(messageType int, data []byte) error {
@@ -77,10 +84,12 @@ func (m *MockListenEventsClient) Recv() (*pb.SfuEvent, error) {
 
 // MockSFUProvider implements SFUProvider for testing
 type MockSFUProvider struct {
+	mu                  sync.Mutex
 	CreateSessionCalled bool
 	HandleSignalCalled  bool
 	DeleteSessionCalled bool
 	ListenEventsCalled  bool
+	failDeleteSession   bool
 }
 
 func (m *MockSFUProvider) CreateSession(ctx context.Context, uid string, roomID string) (*pb.CreateSessionResponse, error) {
@@ -94,7 +103,12 @@ func (m *MockSFUProvider) HandleSignal(ctx context.Context, uid string, roomID s
 }
 
 func (m *MockSFUProvider) DeleteSession(ctx context.Context, uid string, roomID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.DeleteSessionCalled = true
+	if m.failDeleteSession {
+		return fmt.Errorf("mock delete session error")
+	}
 	return nil
 }
 
@@ -113,9 +127,7 @@ func TestNewRoom(t *testing.T) {
 	room := NewRoom("test-room", nil, mockBus, nil)
 
 	assert.Equal(t, RoomIdType("test-room"), room.ID)
-	assert.NotNil(t, room.hosts)
-	assert.NotNil(t, room.participants)
-	assert.NotNil(t, room.waiting)
+	assert.NotNil(t, room.clients)
 	assert.NotNil(t, room.chatHistory)
 	assert.Equal(t, 100, room.maxChatHistoryLength)
 }
@@ -134,13 +146,13 @@ func TestIsRoomEmpty(t *testing.T) {
 	assert.False(t, room.isRoomEmpty())
 
 	// Remove host, add participant
-	room.deleteHost(ctx, host)
+	room.disconnectClient(ctx, host)
 	participant := createTestClient("user1", "User", RoleTypeParticipant)
 	room.addParticipant(ctx, participant)
 	assert.False(t, room.isRoomEmpty())
 
 	// Remove participant, should be empty
-	room.deleteParticipant(ctx, participant)
+	room.disconnectClient(ctx, participant)
 	assert.True(t, room.isRoomEmpty())
 }
 
@@ -152,9 +164,8 @@ func TestHandleClientConnect_FirstUser(t *testing.T) {
 	room.handleClientConnect(client)
 
 	// First user should be auto-promoted to host
-	assert.Contains(t, room.hosts, client.ID)
+	assert.Equal(t, client, room.clients[client.ID])
 	assert.Equal(t, RoleTypeHost, client.Role)
-	assert.NotContains(t, room.waiting, client.ID)
 }
 
 func TestHandleClientConnect_SubsequentUsers(t *testing.T) {
@@ -171,9 +182,8 @@ func TestHandleClientConnect_SubsequentUsers(t *testing.T) {
 	client := createTestClient("user2", "User 2", RoleTypeWaiting)
 	room.handleClientConnect(client)
 
-	assert.Contains(t, room.waiting, client.ID)
+	assert.Equal(t, client, room.clients[client.ID])
 	assert.Equal(t, RoleTypeWaiting, client.Role)
-	assert.NotContains(t, room.participants, client.ID)
 }
 
 func TestHandleClientConnect_DuplicateConnection(t *testing.T) {
@@ -185,7 +195,7 @@ func TestHandleClientConnect_DuplicateConnection(t *testing.T) {
 	oldClient := createTestClient("user1", "Old Client", RoleTypeHost)
 	room.addHost(ctx, oldClient)
 	room.ownerID = oldClient.ID // [FIX] Set owner
-	assert.Contains(t, room.hosts, oldClient.ID)
+	assert.Equal(t, oldClient, room.clients[oldClient.ID])
 
 	// Connect second client with same ID (simulating refresh)
 	newClient := createTestClient("user1", "New Client", RoleTypeHost)
@@ -193,8 +203,8 @@ func TestHandleClientConnect_DuplicateConnection(t *testing.T) {
 
 	// Old client should be replaced
 	// Since first user, should still be host
-	assert.Contains(t, room.hosts, newClient.ID)
-	assert.Equal(t, 1, len(room.hosts))
+	assert.Equal(t, newClient, room.clients[newClient.ID])
+	assert.Equal(t, 1, len(room.clients))
 }
 
 func TestHandleClientDisconnect(t *testing.T) {
@@ -210,13 +220,14 @@ func TestHandleClientDisconnect(t *testing.T) {
 	client := createTestClient("user1", "User", RoleTypeParticipant)
 
 	room.addParticipant(ctx, client)
-	assert.Contains(t, room.participants, client.ID)
+	assert.Equal(t, client, room.clients[client.ID])
 
 	// Disconnect
 	room.handleClientDisconnect(client)
 
 	// Client should be removed
-	assert.NotContains(t, room.participants, client.ID)
+	_, ok := room.clients[client.ID]
+	assert.False(t, ok)
 
 	// Room should trigger cleanup callback
 	time.Sleep(100 * time.Millisecond)
@@ -270,8 +281,8 @@ func TestBroadcastRoomState(t *testing.T) {
 	// Allow time for async operations
 	time.Sleep(100 * time.Millisecond)
 
-	// Host should receive room state
-	assert.Greater(t, len(host.send), 0)
+	// Host should receive room state (RoomState messages are priority)
+	assert.Greater(t, len(host.prioritySend), 0)
 }
 
 func TestSendRoomStateToClient(t *testing.T) {
@@ -285,8 +296,8 @@ func TestSendRoomStateToClient(t *testing.T) {
 	// Send state to client
 	room.sendRoomStateToClient(host)
 
-	// Client should receive a message
-	assert.Greater(t, len(host.send), 0)
+	// Client should receive a message (RoomState messages are priority)
+	assert.Greater(t, len(host.prioritySend), 0)
 }
 
 func TestRouter(t *testing.T) {
@@ -379,7 +390,7 @@ func TestConcurrentClientOperations(t *testing.T) {
 	wg.Wait()
 
 	// First should be host, rest in waiting
-	totalClients := len(room.hosts) + len(room.participants) + len(room.waiting)
+	totalClients := len(room.clients)
 	assert.Equal(t, numClients, totalClients)
 }
 

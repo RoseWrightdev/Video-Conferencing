@@ -102,11 +102,17 @@ func main() {
 
 	var authValidator *auth.Validator
 	if !skipAuth {
-		if auth0Domain == "" || auth0Audience == "" {
+		// FALLBACK: If in dev mode and credentials missing, auto-skip
+		if developmentMode && (auth0Domain == "" || auth0Audience == "") {
+			slog.Warn("⚠️  Development Mode: Auth0 credentials missing. Auto-enabling SKIP_AUTH.")
+			skipAuth = true
+		} else if auth0Domain == "" || auth0Audience == "" {
 			slog.Error("AUTH0_DOMAIN and AUTH0_AUDIENCE must be set in environment when SKIP_AUTH=false")
 			return
 		}
+	}
 
+	if !skipAuth {
 		// Create the Auth0 token validator.
 		var err error
 		authValidator, err = auth.NewValidator(context.Background(), auth0Domain, auth0Audience)

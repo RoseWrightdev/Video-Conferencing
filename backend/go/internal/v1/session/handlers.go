@@ -2,9 +2,7 @@ package session
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"time"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 )
@@ -15,9 +13,9 @@ func (r *Room) HandleToggleMedia(ctx context.Context, client *Client, req *pb.To
 
 	switch req.Kind {
 	case "audio":
-		r.toggleAudio(client, req.IsEnabled) // Calls room_methods.go
+		r.toggleAudio(client, req.IsEnabled) // Calls methods.go
 	case "video":
-		r.toggleVideo(client, req.IsEnabled) // Calls room_methods.go
+		r.toggleVideo(client, req.IsEnabled) // Calls methods.go
 	}
 
 	// 2. Broadcast Update
@@ -25,12 +23,12 @@ func (r *Room) HandleToggleMedia(ctx context.Context, client *Client, req *pb.To
 		Payload: &pb.WebSocketMessage_MediaStateChanged{
 			MediaStateChanged: &pb.MediaStateEvent{
 				UserId:         string(client.ID),
-				IsAudioEnabled: r.unmuted[client.ID] != nil,
-				IsVideoEnabled: r.cameraOn[client.ID] != nil,
+				IsAudioEnabled: client.IsAudioEnabled,
+				IsVideoEnabled: client.IsVideoEnabled,
 			},
 		},
 	}
-	r.Broadcast(msg)
+	r.broadcastLocked(msg)
 }
 
 func (r *Room) HandleToggleHand(ctx context.Context, client *Client, req *pb.ToggleHandRequest) {
@@ -48,32 +46,19 @@ func (r *Room) HandleToggleHand(ctx context.Context, client *Client, req *pb.Tog
 			},
 		},
 	}
-	r.Broadcast(msg)
+	r.broadcastLocked(msg)
 }
 
 func (r *Room) HandleChat(ctx context.Context, client *Client, chatReq *pb.ChatRequest) {
-	// 1. Create the Event
-	event := &pb.ChatEvent{
-		Id:         fmt.Sprintf("%d", time.Now().UnixNano()),
-		SenderId:   string(client.ID),
-		SenderName: string(client.DisplayName),
-		Content:    chatReq.Content,
-		Timestamp:  time.Now().UnixMilli(),
-		IsPrivate:  chatReq.TargetId != "",
+	// 1. Create the Event (business logic)
+	event := buildChatEvent(client, chatReq)
+
+	// 2. Store in History (business logic + state change)
+	if shouldStoreChatInHistory(event) {
+		r.addChat(chatInfoFromEvent(event))
 	}
 
-	// 2. Store in History using the "unused" method
-	if !event.IsPrivate {
-		chatInfo := ChatInfo{
-			ClientInfo:  ClientInfo{ClientId: client.ID, DisplayName: client.DisplayName},
-			ChatId:      ChatId(event.Id),
-			Timestamp:   Timestamp(event.Timestamp),
-			ChatContent: ChatContent(event.Content),
-		}
-		r.addChat(chatInfo)
-	}
-
-	// 3. Broadcast
+	// 3. Broadcast (I/O glue)
 	msg := &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_ChatEvent{
 			ChatEvent: event,
@@ -101,14 +86,14 @@ func (r *Room) HandleScreenShare(ctx context.Context, client *Client, req *pb.Sc
 			},
 		},
 	}
-	r.Broadcast(msg)
+	r.broadcastLocked(msg)
 }
 
 func (r *Room) HandleGetRecentChats(ctx context.Context, client *Client) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	internalChats := r.getRecentChats()
+	internalChats := r.getRecentChatsLocked()
 
 	var protoChats []*pb.ChatEvent
 	for _, msg := range internalChats {
@@ -121,7 +106,7 @@ func (r *Room) HandleGetRecentChats(ctx context.Context, client *Client) {
 		})
 	}
 
-client.sendProto(&pb.WebSocketMessage{
+	client.sendProto(&pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_RecentChats_{
 			RecentChats_: &pb.RecentChatsEvent{
 				Chats: protoChats,
@@ -142,10 +127,10 @@ func (r *Room) HandleDeleteChat(ctx context.Context, client *Client, req *pb.Del
 	}
 
 	// Delete from memory
-	r.deleteChat(ChatInfo{ChatId: ChatId(req.ChatId)})
+	r.deleteChatLocked(ChatInfo{ChatId: ChatId(req.ChatId)})
 
 	// Broadcast Deletion
-	r.Broadcast(&pb.WebSocketMessage{
+	r.broadcastLocked(&pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_DeleteChatEvent{
 			DeleteChatEvent: &pb.DeleteChatEvent{
 				ChatId: req.ChatId,
@@ -171,92 +156,62 @@ func (r *Room) HandleRequestScreenSharePermission(ctx context.Context, client *C
 	defer r.mu.RUnlock()
 
 	// Send only to Hosts
-	for _, host := range r.hosts {
-		host.sendProto(msg)
+	for _, c := range r.clients {
+		if c.Role == RoleTypeHost {
+			c.sendProto(msg)
+		}
 	}
 }
 
+// HandleAdminAction processes admin actions (kick, approve, mute, unmute).
+// This is thin I/O glue - business logic is in admin_helpers.go (testable).
 func (r *Room) HandleAdminAction(ctx context.Context, client *Client, adminReq *pb.AdminActionRequest) {
-	// 1. SECURITY CHECK: Must be Host
-	if !HasPermission(client.Role, HasHostPermission()) {
-		slog.Warn("Unauthorized admin action attempt", "clientId", client.ID)
+	// Permission check (business logic)
+	if err := validateAdminPermission(client.Role); err != nil {
+		slog.Warn("Unauthorized admin action attempt", "clientId", client.ID, "error", err)
 		return
 	}
 
 	targetId := ClientIdType(adminReq.TargetUserId)
+	action := parseAdminAction(adminReq.Action)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	switch adminReq.Action {
-	case "kick":
-		// Find the target (could be participant, host, or waiting)
-		var target *Client
-		if c, ok := r.participants[targetId]; ok {
-			target = c
-		}
-		if c, ok := r.hosts[targetId]; ok {
-			target = c
-		}
-		if c, ok := r.waiting[targetId]; ok {
-			target = c
-		}
+	// Find target (business logic)
+	target, err := findTargetClient(r.clients, targetId)
+	if err != nil && action != AdminActionKick {
+		// Kick doesn't error on missing target - just no-op
+		return
+	}
 
-		if target != nil {
-			// Notify them they are kicked
-			kickMsg := &pb.WebSocketMessage{
-				Payload: &pb.WebSocketMessage_AdminEvent{
-					AdminEvent: &pb.AdminActionEvent{
-						Action: "kicked",
-						Reason: "Host removed you",
-					},
-				},
-			}
-			target.sendProto(kickMsg)
-
-			// Actually disconnect them
-			// FIX: Do NOT call disconnectClient directly in a goroutine (race condition).
-			// Instead, close the connection, which triggers the readPump to exit and call handleClientDisconnect safely.
-			target.conn.Close()
+	// Execute action (business logic + I/O glue)
+	switch action {
+	case AdminActionKick:
+		if shouldKickClient(target) {
+			target.sendProto(buildKickMessage()) // I/O
+			target.conn.Close()                  // I/O - triggers readPump exit
 		}
 
-	case "approve":
-		if target, ok := r.waiting[targetId]; ok {
-			// [FIX] Use helpers to move properly
-			r.deleteWaiting(target)       // Remove from waiting queue
-			r.addParticipant(ctx, target) // Add to participant queue + Redis
-
-			// Notify User
-			joinMsg := &pb.WebSocketMessage{
-				Payload: &pb.WebSocketMessage_JoinResponse{
-					JoinResponse: &pb.JoinResponse{
-						Success: true,
-						UserId:  string(target.ID),
-						IsHost:  false,
-					},
-				},
-			}
-			target.sendProto(joinMsg)
-
-			// Start Video
-			go r.CreateSFUSession(ctx, target)
-
-			// Update everyone else
-			go r.BroadcastRoomState(ctx)
+	case AdminActionApprove:
+		if shouldApproveWaitingUser(target) {
+			r.deleteWaitingLocked(target)                             // State change
+			r.addParticipantLocked(ctx, target)                       // State change
+			target.sendProto(buildApprovalMessage(string(target.ID))) // I/O
+			go r.CreateSFUSession(ctx, target)                        // I/O
+			go r.BroadcastRoomState(ctx)                              // I/O
 		}
 
-	case "mute":
-		// Logic to update state
-		if target, ok := r.participants[targetId]; ok {
-			delete(r.unmuted, target.ID)
-			// Send update to room
-			go r.BroadcastRoomState(ctx)
+	case AdminActionMute:
+		if shouldMuteClient(target) {
+			r.toggleAudio(target, false) // State change
+			go r.BroadcastRoomState(ctx) // I/O
 		}
 
-	case "unmute":
-		if target, ok := r.participants[targetId]; ok {
-			r.unmuted[target.ID] = target
-			go r.BroadcastRoomState(ctx)
+	case AdminActionUnmute:
+		if shouldMuteClient(target) {
+			r.toggleAudio(target, true)  // State change
+			go r.BroadcastRoomState(ctx) // I/O
 		}
 	}
 }

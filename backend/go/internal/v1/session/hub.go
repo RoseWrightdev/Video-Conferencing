@@ -25,9 +25,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -38,7 +36,6 @@ import (
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/pkg/sfu"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 )
 
 // TokenValidator defines the interface for JWT token authentication services.
@@ -112,30 +109,38 @@ type Hub struct {
 //   - validator: JWT token validator for authentication
 //   - bus: Optional Redis pub/sub service for distributed messaging (nil for single-instance mode)
 //   - devMode: Disable rate limiting for development (allows rapid WebSocket messages)
-func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
-	var sfuClient SFUProvider
-	var err error
-
-	// 1. Check Flag
-	// We only attempt connection if explicitly enabled
-	if os.Getenv("ENABLE_SFU") == "true" {
-		sfuAddr := os.Getenv("SFU_ADDR")
-		if sfuAddr == "" {
-			sfuAddr = "localhost:50051"
-		}
-
-		slog.Info("🔌 SFU Enabled. Connecting...", "addr", sfuAddr)
-		sfuClient, err = sfu.NewSFUClient(sfuAddr)
-		if err != nil {
-			// If we asked for it and it failed, we panic to alert the dev
-			slog.Error("SFU Connection Failed", "error", err)
-			panic(err)
-		}
-		slog.Info("✅ SFU Connected")
-	} else {
+//
+// getSFUClientFromEnv is a helper to connect to SFU based on environment variables.
+// This is isolated I/O glue (0% coverage acceptable).
+func getSFUClientFromEnv() SFUProvider {
+	if os.Getenv("ENABLE_SFU") != "true" {
 		slog.Warn("⚠️  SFU Disabled (ENABLE_SFU != true). App running in Signaling-Only mode.")
+		return nil
 	}
 
+	sfuAddr := os.Getenv("SFU_ADDR")
+	if sfuAddr == "" {
+		sfuAddr = "localhost:50051"
+	}
+
+	slog.Info("🔌 SFU Enabled. Connecting...", "addr", sfuAddr)
+	sfuClient, err := sfu.NewSFUClient(sfuAddr)
+	if err != nil {
+		slog.Error("SFU Connection Failed", "error", err)
+		panic(err)
+	}
+	slog.Info("✅ SFU Connected")
+	return sfuClient
+}
+
+// NewHub creates a new Hub and configures it with its dependencies.
+func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
+	return NewHubWithSFU(validator, bus, devMode, getSFUClientFromEnv())
+}
+
+// NewHubWithSFU creates a new Hub with a specific SFU provider.
+// This allows testing the Hub without connecting to a real SFU.
+func NewHubWithSFU(validator TokenValidator, bus BusService, devMode bool, sfu SFUProvider) *Hub {
 	return &Hub{
 		rooms:               make(map[RoomIdType]*Room),
 		validator:           validator,
@@ -143,178 +148,75 @@ func NewHub(validator TokenValidator, bus BusService, devMode bool) *Hub {
 		bus:                 bus,
 		cleanupGracePeriod:  5 * time.Second,
 		devMode:             devMode,
-		sfu:                 sfuClient, // This will be nil if disabled
+		sfu:                 sfu,
 	}
 }
 
-// ServeWs authenticates the user and hands them off to the room.
-// ServeWs upgrades an HTTP request to a WebSocket connection for real-time communication.
-// It authenticates the user using a JWT token provided as a query parameter, validates the token,
-// and establishes a WebSocket connection. Upon successful authentication and upgrade, it creates
-// or retrieves a room based on the roomId path parameter, initializes a new client, and registers
-// the client with the room. The client's read and write goroutines are started to handle message
-// exchange over the WebSocket connection.
+// ServeWs authenticates the user and upgrades to WebSocket connection.
+// It validates the token, checks origin, establishes a WebSocket connection,
+// creates or retrieves a room, initializes a new client, and starts message pumps.
 //
 // Parameters:
 //   - c: *gin.Context representing the HTTP request context.
 //
 // Responses:
 //   - 401 Unauthorized if the token is missing or invalid.
+//   - 403 Forbidden if origin is not allowed.
 //   - Upgrades to WebSocket on success.
 func (h *Hub) ServeWs(c *gin.Context) {
-	// --- AUTHENTICATION ---
-	// --- AUTHENTICATION ---
-	// Priority 1: Check Sec-WebSocket-Protocol header (Secure)
-	// --- AUTHENTICATION ---
-	// Priority 1: Check Sec-WebSocket-Protocol header (Secure)
-	headerVal := c.GetHeader("Sec-WebSocket-Protocol")
-	var tokenFromHeader string
-	var hasAccessTokenProtocol bool
+	ctx := context.Background()
 
-	if headerVal != "" {
-		parts := strings.Split(headerVal, ",")
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			if p == "access_token" {
-				hasAccessTokenProtocol = true
-				continue
-			}
-			// Treat any other part as a potential token
-			if p != "" {
-				// We don't know which one is the token, so we have to try candidates.
-				// In a conformant client, we expect "access_token, <token>" or "<token>, access_token".
-				// We'll tentatively use the first non-access_token string as the candidate,
-				// or validte them. Since validation is local (stateless JWT), we can just try.
-				_, err := h.validator.ValidateToken(p)
-				if err == nil {
-					tokenFromHeader = p
-				}
-			}
-		}
-	}
-
-	// Priority 2: Fallback to URL Query (Legacy/Less Secure)
-	var finalToken string
-	if tokenFromHeader != "" {
-		finalToken = tokenFromHeader
-	} else {
-		finalToken = c.Query("token")
-	}
-
-	if finalToken == "" {
+	// 1-3. Validation (pure logic + Gin bridge)
+	tokenResult, err := h.extractToken(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "token not provided"})
 		return
 	}
 
-	// Validate again (if from header, we basically already did, but this keeps logic clean)
-	claims, err := h.validator.ValidateToken(finalToken)
+	claims, err := h.authenticateUser(ctx, tokenResult.Token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
 	}
 
 	allowedOrigins := auth.GetAllowedOriginsFromEnv("ALLOWED_ORIGINS", []string{"http://localhost:3000"})
-	upgrader := websocket.Upgrader{
-		// This is the secure way to check the origin.
-		CheckOrigin: func(r *http.Request) bool {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				return true // Allow non-browser clients (e.g., for testing)
-			}
-			originURL, err := url.Parse(origin)
-			if err != nil {
-				return false
-			}
-
-			for _, allowed := range allowedOrigins {
-				allowedURL, err := url.Parse(allowed)
-				if err != nil {
-					continue
-				}
-				// Check if the scheme and host match.
-				if originURL.Scheme == allowedURL.Scheme && originURL.Host == allowedURL.Host {
-					return true
-				}
-			}
-			return false
-		},
-		WriteBufferPool: &sync.Pool{
-			New: func() any {
-				// Pre-allocate 4KB buffers
-				return make([]byte, 4096)
-			},
-		},
-	}
-
-	// Important: Echo back the selected protocol
-	responseHeader := http.Header{}
-	if tokenFromHeader != "" {
-		if hasAccessTokenProtocol {
-			// Best practice: verify token, but return "access_token" as the selected protocol
-			// This avoids issues with browsers disliking long JWT strings in the response header.
-			responseHeader.Set("Sec-WebSocket-Protocol", "access_token")
-		} else {
-			// Legacy fallback: echo the token itself if client didn't ask for "access_token"
-			responseHeader.Set("Sec-WebSocket-Protocol", tokenFromHeader)
-		}
-	}
-
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, responseHeader)
-	if err != nil {
-		slog.Error("Failed to upgrade connection", "error", err)
+	if err := validateOrigin(c.Request, allowedOrigins); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
 		return
 	}
 
-	// --- CLIENT & ROOM SETUP ---
+	// 4-6. Upgrade to WebSocket (isolated I/O glue)
+	conn, err := h.upgradeWebSocket(c, allowedOrigins, tokenResult)
+	if err != nil {
+		return
+	}
+
+	// 7-10. Setup and start (orchestration logic)
+	h.HandleConnection(c, conn, claims)
+}
+
+// HandleConnection takes an established WebSocket connection and sets up the client/room.
+// This is pure orchestration logic, fully testable with a mock connection.
+func (h *Hub) HandleConnection(c *gin.Context, conn wsConnection, claims *auth.CustomClaims) {
 	roomId := c.Param("roomId")
-	room := h.getOrCreateRoom(RoomIdType(roomId))
+	username := c.Query("username")
 
-	// Get username from query parameter (sent by frontend with session name/email)
-	usernameParam := c.Query("username")
+	client, room := h.setupClientConnection(&clientSetupParams{
+		RoomID:   RoomIdType(roomId),
+		UserID:   ClientIdType(claims.Subject),
+		Username: username,
+		Claims:   claims,
+		DevMode:  h.devMode,
+		Conn:     conn,
+	})
 
-	displayName := usernameParam // Use frontend-provided username first
-	if displayName == "" {
-		// Fallback to JWT claims if username param not provided
-		displayName = claims.Subject // Fallback to subject if name is not in token
-		if claims.Name != "" {
-			displayName = claims.Name
-		} else if claims.Email != "" {
-			// Use email prefix as display name
-			if parts := strings.Split(claims.Email, "@"); len(parts) > 0 {
-				displayName = parts[0]
-			}
-		}
-	}
-
-	slog.Info("Setting display name for client",
-		"usernameParam", usernameParam,
-		"finalDisplayName", displayName,
-		"clientId", claims.Subject)
-
-	client := &Client{
-		conn:             conn,
-		send:             make(chan []byte, 256),
-		room:             room,
-		ID:               ClientIdType(claims.Subject),
-		DisplayName:      DisplayNameType(displayName),
-		Role:             RoleTypeHost, // Default role, should be derived from token scopes
-		rateLimitEnabled: !h.devMode,   // Disable rate limiting in dev mode for rapid messages
-	}
-
-	// In Dev Mode, if using MockValidator, multiple tabs will have same ID ("dev-user-123").
-	// This breaks waiting room logic (same user is both Host and Waiting).
-	// We override ID to be unique based on username if provided.
-	if h.devMode && usernameParam != "" {
-		client.ID = ClientIdType(usernameParam)
-		slog.Info("Dev Mode: Overriding ClientID to username for uniqueness", "newID", client.ID)
-	}
-
-	// Metrics: Track WebSocket connection (defer ensures cleanup on disconnect)
+	// Track metrics
 	metrics.ActiveWebSocketConnections.Inc()
 
+	// Handle connection
 	room.handleClientConnect(client)
 
-	// Start the client's goroutines.
+	// Start message pumps
 	go client.writePump()
 	go client.readPump()
 }
@@ -338,7 +240,7 @@ func (h *Hub) removeRoom(roomId RoomIdType) {
 		defer h.mu.Unlock()
 
 		// Double-check room still exists and is empty before deleting
-		if room, ok := h.rooms[roomId]; ok && len(room.participants) == 0 && len(room.hosts) == 0 && len(room.sharingScreen) == 0 {
+		if room, ok := h.rooms[roomId]; ok && room.isRoomEmpty() {
 			delete(h.rooms, roomId)
 			delete(h.pendingRoomCleanups, roomId)
 

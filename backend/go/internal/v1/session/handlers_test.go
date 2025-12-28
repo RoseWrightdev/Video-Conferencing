@@ -24,13 +24,13 @@ func TestHandleToggleMedia_Audio(t *testing.T) {
 	}
 	room.HandleToggleMedia(ctx, client, req)
 
-	assert.Contains(t, room.unmuted, client.ID)
+	assert.True(t, client.IsAudioEnabled)
 
 	// Disable audio
 	req.IsEnabled = false
 	room.HandleToggleMedia(ctx, client, req)
 
-	assert.NotContains(t, room.unmuted, client.ID)
+	assert.False(t, client.IsAudioEnabled)
 }
 
 func TestHandleToggleMedia_Video(t *testing.T) {
@@ -48,13 +48,13 @@ func TestHandleToggleMedia_Video(t *testing.T) {
 	}
 	room.HandleToggleMedia(ctx, client, req)
 
-	assert.Contains(t, room.cameraOn, client.ID)
+	assert.True(t, client.IsVideoEnabled)
 
 	// Disable video
 	req.IsEnabled = false
 	room.HandleToggleMedia(ctx, client, req)
 
-	assert.NotContains(t, room.cameraOn, client.ID)
+	assert.False(t, client.IsVideoEnabled)
 }
 
 func TestHandleToggleHand(t *testing.T) {
@@ -71,13 +71,13 @@ func TestHandleToggleHand(t *testing.T) {
 	}
 	room.HandleToggleHand(ctx, client, req)
 
-	assert.Contains(t, room.raisingHand, client.ID)
+	assert.True(t, client.IsHandRaised)
 
 	// Lower hand
 	req.IsRaised = false
 	room.HandleToggleHand(ctx, client, req)
 
-	assert.NotContains(t, room.raisingHand, client.ID)
+	assert.False(t, client.IsHandRaised)
 }
 
 func TestHandleChat(t *testing.T) {
@@ -124,13 +124,13 @@ func TestHandleScreenShare(t *testing.T) {
 	}
 	room.HandleScreenShare(ctx, client, req)
 
-	assert.Contains(t, room.sharingScreen, client.ID)
+	assert.True(t, client.IsScreenSharing)
 
 	// Stop screen sharing
 	req.IsSharing = false
 	room.HandleScreenShare(ctx, client, req)
 
-	assert.NotContains(t, room.sharingScreen, client.ID)
+	assert.False(t, client.IsScreenSharing)
 }
 
 func TestHandleGetRecentChats(t *testing.T) {
@@ -270,7 +270,8 @@ func TestHandleAdminAction_Approve(t *testing.T) {
 	room.addHost(ctx, host)
 	room.addWaiting(waiting)
 
-	assert.Contains(t, room.waiting, waiting.ID)
+	// Check roles
+	assert.Equal(t, RoleTypeWaiting, waiting.Role)
 
 	// Host approves waiting user
 	req := &pb.AdminActionRequest{
@@ -280,8 +281,8 @@ func TestHandleAdminAction_Approve(t *testing.T) {
 	room.HandleAdminAction(ctx, host, req)
 
 	// User should be moved to participants
-	assert.NotContains(t, room.waiting, waiting.ID)
-	assert.Contains(t, room.participants, waiting.ID)
+	assert.Equal(t, RoleTypeParticipant, waiting.Role)
+	assert.Equal(t, waiting, room.clients[waiting.ID])
 	assert.Equal(t, RoleTypeParticipant, waiting.Role)
 
 	// User should receive join confirmation
@@ -302,7 +303,7 @@ func TestHandleAdminAction_Mute(t *testing.T) {
 
 	// First unmute the participant
 	room.toggleAudio(participant, true)
-	assert.Contains(t, room.unmuted, participant.ID)
+	assert.True(t, participant.IsAudioEnabled)
 
 	// Host mutes participant
 	req := &pb.AdminActionRequest{
@@ -311,7 +312,7 @@ func TestHandleAdminAction_Mute(t *testing.T) {
 	}
 	room.HandleAdminAction(ctx, host, req)
 
-	assert.NotContains(t, room.unmuted, participant.ID)
+	assert.False(t, participant.IsAudioEnabled)
 }
 
 func TestHandleAdminAction_Unmute(t *testing.T) {
@@ -332,7 +333,7 @@ func TestHandleAdminAction_Unmute(t *testing.T) {
 	}
 	room.HandleAdminAction(ctx, host, req)
 
-	assert.Contains(t, room.unmuted, participant.ID)
+	assert.True(t, participant.IsAudioEnabled)
 }
 
 func TestHandleAdminAction_UnauthorizedUser(t *testing.T) {
@@ -356,7 +357,8 @@ func TestHandleAdminAction_UnauthorizedUser(t *testing.T) {
 	room.HandleAdminAction(ctx, attacker, req)
 
 	// Participant should still be in room
-	assert.Contains(t, room.participants, participant.ID)
+	assert.Equal(t, RoleTypeParticipant, participant.Role)
+	assert.Equal(t, participant, room.clients[participant.ID])
 }
 
 func TestHandleChatPrivateMessage(t *testing.T) {
@@ -401,12 +403,21 @@ func TestMultipleHandRaises(t *testing.T) {
 		room.HandleToggleHand(ctx, user, req)
 	}
 
-	assert.Equal(t, 5, len(room.raisingHand))
+	for _, user := range users {
+		assert.True(t, user.IsHandRaised)
+	}
 
 	// First user lowers hand
 	req := &pb.ToggleHandRequest{IsRaised: false}
 	room.HandleToggleHand(ctx, users[0], req)
 
-	assert.Equal(t, 4, len(room.raisingHand))
-	assert.NotContains(t, room.raisingHand, users[0].ID)
+	// Verify counts
+	raisedCount := 0
+	for _, user := range users {
+		if user.IsHandRaised {
+			raisedCount++
+		}
+	}
+	assert.Equal(t, 4, raisedCount)
+	assert.False(t, users[0].IsHandRaised)
 }

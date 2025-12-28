@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
-	"google.golang.org/protobuf/proto"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 )
@@ -26,19 +25,13 @@ type Room struct {
 	chatHistory          *list.List
 	maxChatHistoryLength int
 
-	ownerID      ClientIdType // [NEW] Persist the room creator to prevent host stealing
-	hosts        map[ClientIdType]*Client
-	participants map[ClientIdType]*Client
-	waiting      map[ClientIdType]*Client
+	ownerID ClientIdType // [NEW] Persist the room creator to prevent host stealing
+
+	clients map[ClientIdType]*Client // Single source of truth
 
 	waitingDrawOrderStack *list.List
 	clientDrawOrderQueue  *list.List
 	handDrawOrderQueue    *list.List
-
-	raisingHand   map[ClientIdType]*Client
-	sharingScreen map[ClientIdType]*Client
-	unmuted       map[ClientIdType]*Client
-	cameraOn      map[ClientIdType]*Client
 
 	onEmpty func(RoomIdType)
 	bus     BusService
@@ -51,18 +44,11 @@ func NewRoom(id RoomIdType, onEmptyCallback func(RoomIdType), busService BusServ
 		chatHistory:          list.New(),
 		maxChatHistoryLength: 100,
 
-		hosts:        make(map[ClientIdType]*Client),
-		participants: make(map[ClientIdType]*Client),
-		waiting:      make(map[ClientIdType]*Client),
+		clients: make(map[ClientIdType]*Client),
 
 		waitingDrawOrderStack: list.New(),
 		clientDrawOrderQueue:  list.New(),
 		handDrawOrderQueue:    list.New(),
-
-		raisingHand:   make(map[ClientIdType]*Client),
-		sharingScreen: make(map[ClientIdType]*Client),
-		unmuted:       make(map[ClientIdType]*Client),
-		cameraOn:      make(map[ClientIdType]*Client),
 
 		onEmpty: onEmptyCallback,
 		bus:     busService,
@@ -76,11 +62,57 @@ func NewRoom(id RoomIdType, onEmptyCallback func(RoomIdType), busService BusServ
 	return room
 }
 
-// isRoomEmpty checks if the room is vacant
+func (r *Room) BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent {
+	var pbParticipants []*pb.ParticipantInfo
+	var pbWaitingUsers []*pb.ParticipantInfo
+
+	// Helper to convert Client to Proto
+	makeProto := func(c *Client) *pb.ParticipantInfo {
+		return &pb.ParticipantInfo{
+			Id:              string(c.ID),
+			DisplayName:     string(c.DisplayName),
+			IsHost:          c.Role == RoleTypeHost,
+			IsAudioEnabled:  c.IsAudioEnabled,
+			IsVideoEnabled:  c.IsVideoEnabled,
+			IsScreenSharing: c.IsScreenSharing,
+			IsHandRaised:    c.IsHandRaised,
+		}
+	}
+
+	// Iterate once over consolidated map
+	for _, c := range r.clients {
+		switch c.Role {
+		case RoleTypeHost, RoleTypeParticipant:
+			pbParticipants = append(pbParticipants, makeProto(c))
+		case RoleTypeWaiting:
+			pbWaitingUsers = append(pbWaitingUsers, makeProto(c))
+		}
+	}
+
+	return &pb.RoomStateEvent{
+		Participants: pbParticipants,
+		WaitingUsers: pbWaitingUsers,
+	}
+}
+
+// isRoomEmptyLocked checks if the room is vacant (no hosts or participants) without acquiring a lock.
+// Caller must hold r.mu.RLock() or r.mu.Lock().
+func (r *Room) isRoomEmptyLocked() bool {
+	// Simple optimization: if map is huge, this might be slow, but usually < 100 clients.
+	// We want to know if there are any ACTIVE users (Hosts/Participants).
+	for _, c := range r.clients {
+		if c.Role == RoleTypeHost || c.Role == RoleTypeParticipant {
+			return false
+		}
+	}
+	return true
+}
+
+// isRoomEmpty checks if the room is vacant (no hosts or participants)
 func (r *Room) isRoomEmpty() bool {
-	return len(r.hosts) == 0 &&
-		len(r.participants) == 0 &&
-		len(r.sharingScreen) == 0
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isRoomEmptyLocked()
 }
 
 func (r *Room) handleClientConnect(client *Client) {
@@ -93,15 +125,9 @@ func (r *Room) handleClientConnect(client *Client) {
 	var existingClient *Client
 	var preservedRole RoleType = RoleTypeUnknown
 
-	if c, exists := r.hosts[client.ID]; exists {
+	if c, exists := r.clients[client.ID]; exists {
 		existingClient = c
-		preservedRole = RoleTypeHost
-	} else if c, exists := r.participants[client.ID]; exists {
-		existingClient = c
-		preservedRole = RoleTypeParticipant
-	} else if c, exists := r.waiting[client.ID]; exists {
-		existingClient = c
-		preservedRole = RoleTypeWaiting
+		preservedRole = c.Role
 	}
 
 	if existingClient != nil {
@@ -116,8 +142,15 @@ func (r *Room) handleClientConnect(client *Client) {
 				slog.Error("Failed to delete stale SFU session", "error", err)
 			}
 		}
+		// Use sync.Once to ensure channel is only closed once
+		// This prevents panic when duplicate connections are cleaned up
+		existingClient.closeOnce.Do(func() {
+			close(existingClient.send)
+			close(existingClient.prioritySend)
+		})
+
 		// Synchronously disconnect the old client to prevent race conditions
-		r.disconnectClient(context.Background(), existingClient)
+		r.disconnectClientLocked(context.Background(), existingClient)
 	}
 
 	// 1. First Joiner Logic (Owner Assignment)
@@ -131,9 +164,9 @@ func (r *Room) handleClientConnect(client *Client) {
 	// If they are the Owner, they are ALWAYS the host.
 	if client.ID == r.ownerID {
 		slog.Info("Owner joined, ensuring Host role", "room", r.ID, "clientId", client.ID)
-		r.addHost(context.Background(), client)
+		r.addHostLocked(context.Background(), client)
 		r.sendRoomStateToClient(client)
-		r.BroadcastRoomState(context.Background())
+		r.broadcastRoomStateLocked(context.Background())
 		return
 	}
 
@@ -144,26 +177,26 @@ func (r *Room) handleClientConnect(client *Client) {
 		switch preservedRole {
 		case RoleTypeHost:
 			// Should be covered by owner check, but safe fallback
-			r.addHost(context.Background(), client)
+			r.addHostLocked(context.Background(), client)
 		case RoleTypeParticipant:
-			r.addParticipant(context.Background(), client)
+			r.addParticipantLocked(context.Background(), client)
 		case RoleTypeWaiting:
-			r.addWaiting(client)
+			r.addWaitingLocked(client)
 		}
 		r.sendRoomStateToClient(client)
-		r.BroadcastRoomState(context.Background())
+		r.broadcastRoomStateLocked(context.Background())
 		return
 	}
 
 	// 4. Default: Waiting Room
 	// Everyone else goes to waiting room
-	r.addWaiting(client)
+	r.addWaitingLocked(client)
 	r.sendRoomStateToClient(client)
 
 	// Broadcast the update to existing Hosts/Participants so they see the new waiting user
 	// We call this synchronously because we hold the lock, ensuring state consistency.
 	// Note: This sends state to everyone (hosts + participants).
-	r.BroadcastRoomState(context.Background())
+	r.broadcastRoomStateLocked(context.Background())
 }
 
 func (r *Room) handleClientDisconnect(client *Client) {
@@ -171,19 +204,25 @@ func (r *Room) handleClientDisconnect(client *Client) {
 	defer r.mu.Unlock()
 
 	ctx := context.Background()
-	r.disconnectClient(ctx, client)
+	r.disconnectClientLocked(ctx, client)
 	slog.Info("Client disconnected", "room", r.ID, "ClientId", client.ID)
 
-	totalParticipants := len(r.hosts) + len(r.participants)
+	totalParticipants := 0
+	for _, c := range r.clients {
+		if c.Role == RoleTypeHost || c.Role == RoleTypeParticipant {
+			totalParticipants++
+		}
+	}
+
 	if totalParticipants > 0 {
 		metrics.RoomParticipants.WithLabelValues(string(r.ID)).Set(float64(totalParticipants))
 	} else {
 		metrics.RoomParticipants.DeleteLabelValues(string(r.ID))
 	}
 
-	r.BroadcastRoomState(ctx)
+	r.broadcastRoomStateLocked(ctx)
 
-	if r.isRoomEmpty() {
+	if r.isRoomEmptyLocked() {
 		if r.onEmpty == nil {
 			return
 		}
@@ -193,14 +232,16 @@ func (r *Room) handleClientDisconnect(client *Client) {
 
 // Router delegates to handlers.go
 func (r *Room) router(ctx context.Context, client *Client, msg *pb.WebSocketMessage) {
+	if !validateMessagePayload(msg) {
+		slog.Warn("Received message with empty payload", "clientId", client.ID)
+		return
+	}
+
 	switch payload := msg.Payload.(type) {
 	case *pb.WebSocketMessage_Join:
-		// [DEBUG] Log role
 		slog.Info("Handling Join Request", "clientId", client.ID, "role", client.Role)
 
-		// [FIX] Only allow joining SFU if not in waiting room.
-		// Waiting users must be approved by Host (which triggers CreateSFUSession via AdminAction)
-		if client.Role == RoleTypeWaiting {
+		if !canClientJoinSFU(client) {
 			slog.Warn("Ignored Join request from waiting user", "clientId", client.ID)
 			return
 		}
@@ -244,37 +285,59 @@ func (r *Room) sendRoomStateToClient(client *Client) {
 	})
 }
 
-// Broadcast sends a message to everyone.
-func (r *Room) Broadcast(msg *pb.WebSocketMessage) {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		slog.Error("Failed to marshal proto for broadcast", "error", err)
-		return
-	}
-
-	sendToMap := func(clients map[ClientIdType]*Client) {
-		for _, client := range clients {
-			select {
-			case client.send <- data:
-			default:
-				slog.Warn("Client channel full", "clientId", client.ID)
-			}
+func (r *Room) broadcastLocked(msg *pb.WebSocketMessage) {
+	// Snapshot targets to avoid iterating while sending if possible, though sending is buffered.
+	// Caller MUST hold r.mu (Lock or RLock)
+	var targets []*Client
+	for _, client := range r.clients {
+		if client.Role != RoleTypeWaiting {
+			targets = append(targets, client)
 		}
 	}
 
-	sendToMap(r.hosts)
-	sendToMap(r.participants)
+	for _, client := range targets {
+		client.sendProto(msg)
+	}
 
 	// Send to Redis (Stubbed in Dev Mode)
 	go r.publishToRedis(context.Background(), msg)
 }
 
-func (r *Room) BroadcastRoomState(ctx context.Context) {
+// Broadcast sends a message to everyone.
+func (r *Room) Broadcast(msg *pb.WebSocketMessage) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	r.broadcastLocked(msg)
+}
+
+func (r *Room) broadcastRoomStateLocked(ctx context.Context) {
+	// 1. Build the state payload while holding the lock
 	roomState := r.BuildRoomStateProto(ctx)
-	slog.Info("Broadcasting RoomState", "room", r.ID, "hosts", len(r.hosts), "waiting", len(r.waiting))
-	r.Broadcast(&pb.WebSocketMessage{
+
+	// 2. Snapshot recipients (Hosts + Participants, exclude Waiting if consistent with old behavior)
+	var recipients []*Client
+	for _, c := range r.clients {
+		if c.Role != RoleTypeWaiting {
+			recipients = append(recipients, c)
+		}
+	}
+
+	slog.Info("Broadcasting RoomState", "room", r.ID, "recipients", len(recipients))
+
+	// 3. Send
+	msg := &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_RoomState{
 			RoomState: roomState,
 		},
-	})
+	}
+
+	for _, client := range recipients {
+		client.sendProto(msg)
+	}
+}
+
+func (r *Room) BroadcastRoomState(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.broadcastRoomStateLocked(ctx)
 }

@@ -230,10 +230,12 @@ func TestRoomIsolation(t *testing.T) {
 	room2.addHost(ctx, client2)
 
 	// Rooms should be independent
-	assert.Contains(t, room1.hosts, client1.ID)
-	assert.NotContains(t, room1.hosts, client2.ID)
-	assert.Contains(t, room2.hosts, client2.ID)
-	assert.NotContains(t, room2.hosts, client1.ID)
+	assert.Equal(t, client1, room1.clients[client1.ID])
+	_, ok := room1.clients[client2.ID]
+	assert.False(t, ok)
+	assert.Equal(t, client2, room2.clients[client2.ID])
+	_, ok = room2.clients[client1.ID]
+	assert.False(t, ok)
 }
 
 func TestCleanupGracePeriod(t *testing.T) {

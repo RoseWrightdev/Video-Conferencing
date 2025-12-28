@@ -108,16 +108,25 @@ type Roomer interface {
 // enabling clean separation of concerns and easier testing.
 type Client struct {
 	conn             wsConnection    // WebSocket connection for real-time communication
-	send             chan []byte     // Buffered channel for outgoing messages
 	room             Roomer          // Room interface for business logic operations
 	ID               ClientIdType    // Unique identifier from JWT token
 	DisplayName      DisplayNameType // Human-readable name for UI display
 	Role             RoleType        // Current permission level in the room
 	drawOrderElement *list.Element   // Position reference in room draw order queues
-	mu               sync.RWMutex    // Protects concurrent access to Client fields (like Role)
-	rateLimitEnabled bool            // Enable rate limiting (disabled for tests)
-	closeOnce        sync.Once       // Ensures send channel is only closed once
-	closed           bool            // Track if client has been disconnected
+
+	// State Flags (Consolidated from Room maps)
+	IsAudioEnabled  bool
+	IsVideoEnabled  bool
+	IsScreenSharing bool
+	IsHandRaised    bool
+
+	mu               sync.RWMutex // Protects concurrent access to Client fields (like Role)
+	rateLimitEnabled bool         // Enable rate limiting (disabled for tests)
+	closeOnce        sync.Once    // Ensures send channel is only closed once
+	closed           bool         // Track if client has been disconnected
+
+	send         chan []byte // Buffered channel for normal messages (Chat)
+	prioritySend chan []byte // Buffered channel for critical messages (State, SDP)
 }
 
 // Thread-safe reader
@@ -171,14 +180,30 @@ func (c *Client) writePump() {
 	defer c.conn.Close()
 	writeWait := 10 * time.Second
 
-	for message := range c.send {
-		c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-		if err := c.conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
-			slog.Error("error writing message", "error", err)
-			return
+	for {
+		select {
+		case message, ok := <-c.prioritySend:
+			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
+				slog.Error("error writing priority message", "error", err)
+				return
+			}
+		case message, ok := <-c.send:
+			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
+				slog.Error("error writing message", "error", err)
+				return
+			}
 		}
 	}
-	c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 }
 
 func (c *Client) sendProto(msg *pb.WebSocketMessage) {
@@ -204,10 +229,26 @@ func (c *Client) sendProto(msg *pb.WebSocketMessage) {
 		}
 	}()
 
-	// Thread-safe send
-	select {
-	case c.send <- data:
-	default:
-		slog.Warn("Client send channel full or closed", "clientId", c.ID)
+	// Determine priority based on message type
+	isPriority := false
+	switch msg.Payload.(type) {
+	case *pb.WebSocketMessage_RoomState, *pb.WebSocketMessage_Signal, *pb.WebSocketMessage_SignalEvent, *pb.WebSocketMessage_Error:
+		isPriority = true
+	}
+
+	if isPriority {
+		select {
+		case c.prioritySend <- data:
+		default:
+			// If priority queue is full, we still try to send it, or log a critical warning
+			// For now, we'll try to push it, but better full handling might be needed
+			slog.Error("Client priority channel full - dropping critical message", "clientId", c.ID)
+		}
+	} else {
+		select {
+		case c.send <- data:
+		default:
+			slog.Warn("Client send channel full or closed", "clientId", c.ID)
+		}
 	}
 }

@@ -107,6 +107,61 @@ func TestClientSendProto(t *testing.T) {
 	}
 }
 
+func TestClientSendProto_Priority(t *testing.T) {
+	client := createTestClient("user1", "User", RoleTypeParticipant)
+
+	// RoomState messages should go to priority channel
+	msg := &pb.WebSocketMessage{
+		Payload: &pb.WebSocketMessage_RoomState{
+			RoomState: &pb.RoomStateEvent{
+				Participants: []*pb.ParticipantInfo{},
+			},
+		},
+	}
+
+	client.sendProto(msg)
+
+	// Should have message in prioritySend channel
+	select {
+	case data := <-client.prioritySend:
+		var received pb.WebSocketMessage
+		err := proto.Unmarshal(data, &received)
+		assert.NoError(t, err)
+		assert.NotNil(t, received.GetRoomState())
+	case <-time.After(1 * time.Second):
+		t.Fatal("Priority message not sent")
+	}
+}
+
+func TestClientSendProto_ClosedClient(t *testing.T) {
+	client := createTestClient("user1", "User", RoleTypeParticipant)
+
+	// Mark client as closed
+	client.mu.Lock()
+	client.closed = true
+	client.mu.Unlock()
+
+	msg := &pb.WebSocketMessage{
+		Payload: &pb.WebSocketMessage_ChatEvent{
+			ChatEvent: &pb.ChatEvent{
+				Id:      "test",
+				Content: "Hello",
+			},
+		},
+	}
+
+	// Should not panic or block when sending to closed client
+	client.sendProto(msg)
+
+	// Verify no message was sent
+	select {
+	case <-client.send:
+		t.Fatal("Message should not have been sent to closed client")
+	case <-time.After(100 * time.Millisecond):
+		// Expected - no message sent
+	}
+}
+
 func TestClientSendProto_ChannelFull(t *testing.T) {
 	// Create client with small buffer
 	client := &Client{
@@ -169,6 +224,71 @@ func TestClientReadPump(t *testing.T) {
 	mockRoom.mu.Unlock()
 }
 
+func TestClientReadPump_InvalidProto(t *testing.T) {
+	mockRoom := &MockRoom{}
+	mockConn := &MockWSConnection{}
+
+	// Send invalid proto data
+	mockConn.readMessages = [][]byte{[]byte("invalid proto data")}
+
+	client := &Client{
+		ID:          "user1",
+		DisplayName: "User",
+		Role:        RoleTypeParticipant,
+		conn:        mockConn,
+		room:        mockRoom,
+		send:        make(chan []byte, 256),
+	}
+
+	// Start read pump in goroutine
+	go client.readPump()
+
+	// Wait for processing
+	time.Sleep(200 * time.Millisecond)
+
+	// Router should not have been called due to invalid proto
+	mockRoom.mu.Lock()
+	assert.Equal(t, 0, mockRoom.routerCalls)
+	mockRoom.mu.Unlock()
+}
+
+func TestClientReadPump_NonBinaryMessage(t *testing.T) {
+	mockRoom := &MockRoom{}
+	mockConn := &MockWSConnection{
+		messageType: websocket.TextMessage, // Non-binary message
+	}
+
+	msg := &pb.WebSocketMessage{
+		Payload: &pb.WebSocketMessage_Chat{
+			Chat: &pb.ChatRequest{
+				Content: "Test message",
+			},
+		},
+	}
+	data, _ := proto.Marshal(msg)
+	mockConn.readMessages = [][]byte{data}
+
+	client := &Client{
+		ID:          "user1",
+		DisplayName: "User",
+		Role:        RoleTypeParticipant,
+		conn:        mockConn,
+		room:        mockRoom,
+		send:        make(chan []byte, 256),
+	}
+
+	// Start read pump in goroutine
+	go client.readPump()
+
+	// Wait for processing
+	time.Sleep(200 * time.Millisecond)
+
+	// Router should not have been called - message was text, not binary
+	mockRoom.mu.Lock()
+	assert.Equal(t, 0, mockRoom.routerCalls)
+	mockRoom.mu.Unlock()
+}
+
 func TestClientWritePump(t *testing.T) {
 	mockConn := &MockWSConnection{}
 
@@ -200,6 +320,41 @@ func TestClientWritePump(t *testing.T) {
 
 	// Wait for processing
 	time.Sleep(200 * time.Millisecond)
+
+	// Message should be written
+	assert.Greater(t, len(mockConn.writeMessages), 0)
+}
+
+func TestClientWritePump_PriorityChannel(t *testing.T) {
+	mockConn := &MockWSConnection{}
+
+	client := &Client{
+		ID:           "user1",
+		DisplayName:  "User",
+		Role:         RoleTypeParticipant,
+		conn:         mockConn,
+		send:         make(chan []byte, 256),
+		prioritySend: make(chan []byte, 256),
+	}
+
+	// Start write pump
+	go client.writePump()
+
+	// Send a message to priority channel
+	msg := &pb.WebSocketMessage{
+		Payload: &pb.WebSocketMessage_RoomState{
+			RoomState: &pb.RoomStateEvent{},
+		},
+	}
+	data, _ := proto.Marshal(msg)
+	client.prioritySend <- data
+
+	// Wait for processing
+	time.Sleep(100 * time.Millisecond)
+
+	// Close to stop write pump
+	close(client.prioritySend)
+	time.Sleep(100 * time.Millisecond)
 
 	// Message should be written
 	assert.Greater(t, len(mockConn.writeMessages), 0)

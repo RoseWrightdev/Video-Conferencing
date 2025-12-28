@@ -3,6 +3,7 @@ package session
 import (
 	"container/list"
 	"context"
+	"sync"
 	"testing"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
@@ -12,36 +13,61 @@ import (
 
 // MockBusService is a mock implementation of BusService for testing
 type MockBusService struct {
+	mu             sync.Mutex
 	setAddCalls    []string
 	setRemCalls    []string
 	publishCalls   int
 	subscribeCalls int
+	failPublish    bool
+	failSetAdd     bool
+	failSetRem     bool
 }
 
 func (m *MockBusService) SetAdd(ctx context.Context, key string, value string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failSetAdd {
+		return assert.AnError
+	}
 	m.setAddCalls = append(m.setAddCalls, key+":"+value)
 	return nil
 }
 
 func (m *MockBusService) SetRem(ctx context.Context, key string, value string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failSetRem {
+		return assert.AnError
+	}
 	m.setRemCalls = append(m.setRemCalls, key+":"+value)
 	return nil
 }
 
 func (m *MockBusService) SetMembers(ctx context.Context, key string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return []string{}, nil
 }
 
 func (m *MockBusService) Publish(ctx context.Context, roomID string, event string, payload any, senderID string, roles []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failPublish {
+		return assert.AnError
+	}
 	m.publishCalls++
 	return nil
 }
 
 func (m *MockBusService) PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return nil
 }
 
 func (m *MockBusService) Subscribe(ctx context.Context, roomID string, handler func(bus.PubSubPayload)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.subscribeCalls++
 }
 
@@ -52,10 +78,11 @@ func (m *MockBusService) Close() error {
 // Helper to create a test client
 func createTestClient(id string, name string, role RoleType) *Client {
 	return &Client{
-		ID:          ClientIdType(id),
-		DisplayName: DisplayNameType(name),
-		Role:        role,
-		send:        make(chan []byte, 256),
+		ID:           ClientIdType(id),
+		DisplayName:  DisplayNameType(name),
+		Role:         role,
+		send:         make(chan []byte, 256),
+		prioritySend: make(chan []byte, 256),
 	}
 }
 
@@ -69,18 +96,24 @@ func TestAddParticipant(t *testing.T) {
 	room.addParticipant(ctx, client)
 
 	// Verify client is in participants map
-	assert.Contains(t, room.participants, client.ID)
+	assert.Equal(t, client, room.clients[client.ID])
 	assert.Equal(t, RoleTypeParticipant, client.Role)
-
-	// Verify not in other maps
-	assert.NotContains(t, room.hosts, client.ID)
-	assert.NotContains(t, room.waiting, client.ID)
 
 	// Verify draw order queue updated
 	assert.Equal(t, 1, room.clientDrawOrderQueue.Len())
 
 	// Verify Redis call was made
 	assert.Greater(t, len(mockBus.setAddCalls), 0)
+}
+
+func TestAddParticipant_RedisError(t *testing.T) {
+	ctx := context.Background()
+	mockBus := &MockBusService{failSetAdd: true}
+	room := NewRoom("test-room", nil, mockBus, nil)
+	client := createTestClient("user1", "Test User", RoleTypeWaiting)
+
+	// Should not panic, just log error
+	room.addParticipant(ctx, client)
 }
 
 func TestDeleteParticipant(t *testing.T) {
@@ -94,7 +127,9 @@ func TestDeleteParticipant(t *testing.T) {
 	room.deleteParticipant(ctx, client)
 
 	// Verify client is removed
-	assert.NotContains(t, room.participants, client.ID)
+	// Note: deleteParticipant no longer removes from clients map (handleClientDisconnect does that)
+	// _, ok := room.clients[client.ID]
+	// assert.False(t, ok)
 	assert.Equal(t, 0, room.clientDrawOrderQueue.Len())
 	assert.Greater(t, len(mockBus.setRemCalls), 0)
 }
@@ -109,12 +144,8 @@ func TestAddHost(t *testing.T) {
 	room.addHost(ctx, client)
 
 	// Verify client is in hosts map
-	assert.Contains(t, room.hosts, client.ID)
+	assert.Equal(t, client, room.clients[client.ID])
 	assert.Equal(t, RoleTypeHost, client.Role)
-
-	// Verify not in other maps
-	assert.NotContains(t, room.participants, client.ID)
-	assert.NotContains(t, room.waiting, client.ID)
 
 	// Verify draw order queue updated
 	assert.Equal(t, 1, room.clientDrawOrderQueue.Len())
@@ -131,7 +162,9 @@ func TestDeleteHost(t *testing.T) {
 	room.deleteHost(ctx, client)
 
 	// Verify client is removed
-	assert.NotContains(t, room.hosts, client.ID)
+	// Note: deleteHost no longer removes from clients map
+	// _, ok := room.clients[client.ID]
+	// assert.False(t, ok)
 	assert.Equal(t, 0, room.clientDrawOrderQueue.Len())
 }
 
@@ -144,12 +177,8 @@ func TestAddWaiting(t *testing.T) {
 	room.addWaiting(client)
 
 	// Verify client is in waiting map
-	assert.Contains(t, room.waiting, client.ID)
+	assert.Equal(t, client, room.clients[client.ID])
 	assert.Equal(t, RoleTypeWaiting, client.Role)
-
-	// Verify not in other maps
-	assert.NotContains(t, room.hosts, client.ID)
-	assert.NotContains(t, room.participants, client.ID)
 
 	// Verify draw order stack updated
 	assert.Equal(t, 1, room.waitingDrawOrderStack.Len())
@@ -165,7 +194,9 @@ func TestDeleteWaiting(t *testing.T) {
 	room.deleteWaiting(client)
 
 	// Verify client is removed
-	assert.NotContains(t, room.waiting, client.ID)
+	// Note: deleteWaiting no longer removes from clients map
+	// _, ok := room.clients[client.ID]
+	// assert.False(t, ok)
 	assert.Equal(t, 0, room.waitingDrawOrderStack.Len())
 }
 
@@ -175,11 +206,11 @@ func TestToggleAudio(t *testing.T) {
 
 	// Enable audio
 	room.toggleAudio(client, true)
-	assert.Contains(t, room.unmuted, client.ID)
+	assert.True(t, client.IsAudioEnabled)
 
 	// Disable audio
 	room.toggleAudio(client, false)
-	assert.NotContains(t, room.unmuted, client.ID)
+	assert.False(t, client.IsAudioEnabled)
 }
 
 func TestToggleVideo(t *testing.T) {
@@ -188,11 +219,11 @@ func TestToggleVideo(t *testing.T) {
 
 	// Enable video
 	room.toggleVideo(client, true)
-	assert.Contains(t, room.cameraOn, client.ID)
+	assert.True(t, client.IsVideoEnabled)
 
 	// Disable video
 	room.toggleVideo(client, false)
-	assert.NotContains(t, room.cameraOn, client.ID)
+	assert.False(t, client.IsVideoEnabled)
 }
 
 func TestToggleScreenshare(t *testing.T) {
@@ -201,12 +232,12 @@ func TestToggleScreenshare(t *testing.T) {
 
 	// Enable screenshare
 	room.toggleScreenshare(client, true)
-	assert.Contains(t, room.sharingScreen, client.ID)
+	assert.True(t, client.IsScreenSharing)
 	assert.NotNil(t, client.drawOrderElement)
 
 	// Disable screenshare
 	room.toggleScreenshare(client, false)
-	assert.NotContains(t, room.sharingScreen, client.ID)
+	assert.False(t, client.IsScreenSharing)
 }
 
 func TestRaiseHand(t *testing.T) {
@@ -215,12 +246,12 @@ func TestRaiseHand(t *testing.T) {
 
 	// Raise hand
 	room.raiseHand(client, true)
-	assert.Contains(t, room.raisingHand, client.ID)
+	assert.True(t, client.IsHandRaised)
 	assert.NotNil(t, client.drawOrderElement)
 
 	// Lower hand
 	room.raiseHand(client, false)
-	assert.NotContains(t, room.raisingHand, client.ID)
+	assert.False(t, client.IsHandRaised)
 }
 
 func TestAddChat(t *testing.T) {
@@ -294,10 +325,9 @@ func TestDisconnectClient(t *testing.T) {
 	room.disconnectClient(ctx, client)
 
 	// Verify all states cleared
-	assert.NotContains(t, room.participants, client.ID)
-	assert.NotContains(t, room.unmuted, client.ID)
-	assert.NotContains(t, room.cameraOn, client.ID)
-	assert.NotContains(t, room.raisingHand, client.ID)
+	// Verify all states cleared
+	_, ok := room.clients[client.ID]
+	assert.False(t, ok)
 }
 
 func TestBuildRoomStateProto(t *testing.T) {
@@ -351,36 +381,6 @@ func TestBuildRoomStateProto(t *testing.T) {
 	assert.True(t, foundParticipant.IsHandRaised)
 }
 
-func TestGetLocalHosts(t *testing.T) {
-	ctx := context.Background()
-	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
-
-	host1 := createTestClient("host1", "Host 1", RoleTypeHost)
-	host2 := createTestClient("host2", "Host 2", RoleTypeHost)
-
-	room.addHost(ctx, host1)
-	room.addHost(ctx, host2)
-
-	hosts := room.getLocalHosts()
-	assert.Equal(t, 2, len(hosts))
-}
-
-func TestGetLocalParticipants(t *testing.T) {
-	ctx := context.Background()
-	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
-
-	p1 := createTestClient("p1", "Participant 1", RoleTypeParticipant)
-	p2 := createTestClient("p2", "Participant 2", RoleTypeParticipant)
-
-	room.addParticipant(ctx, p1)
-	room.addParticipant(ctx, p2)
-
-	participants := room.getLocalParticipants()
-	assert.Equal(t, 2, len(participants))
-}
-
 func TestChatHistoryLimit(t *testing.T) {
 	room := NewRoom("test-room", nil, nil, nil)
 	room.maxChatHistoryLength = 10
@@ -406,24 +406,17 @@ func TestRoleTransitions(t *testing.T) {
 
 	// Start as waiting
 	room.addWaiting(client)
-	assert.Contains(t, room.waiting, client.ID)
 	assert.Equal(t, RoleTypeWaiting, client.Role)
 
 	// Promote to participant
 	room.addParticipant(ctx, client)
-	assert.NotContains(t, room.waiting, client.ID)
-	assert.Contains(t, room.participants, client.ID)
 	assert.Equal(t, RoleTypeParticipant, client.Role)
 
 	// Promote to host
 	room.addHost(ctx, client)
-	assert.NotContains(t, room.participants, client.ID)
-	assert.Contains(t, room.hosts, client.ID)
 	assert.Equal(t, RoleTypeHost, client.Role)
 
 	// Demote to waiting
 	room.addWaiting(client)
-	assert.NotContains(t, room.hosts, client.ID)
-	assert.Contains(t, room.waiting, client.ID)
 	assert.Equal(t, RoleTypeWaiting, client.Role)
 }

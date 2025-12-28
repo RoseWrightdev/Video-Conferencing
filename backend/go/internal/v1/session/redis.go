@@ -44,7 +44,7 @@ func (r *Room) handleRedisMessage(payload bus.PubSubPayload) {
 
 	// 4. Broadcast to LOCAL users
 	// This ensures users on Pod A see chat messages from Pod B
-	r.Broadcast(&msg)
+	r.broadcastLocked(&msg)
 }
 
 func (r *Room) publishToRedis(ctx context.Context, msg *pb.WebSocketMessage) {

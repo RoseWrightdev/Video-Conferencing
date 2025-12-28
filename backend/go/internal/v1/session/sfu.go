@@ -59,68 +59,11 @@ func (r *Room) CreateSFUSession(ctx context.Context, client *Client) error {
 			for {
 				event, err := stream.Recv()
 				if err != nil {
-					// Stream closed or error
 					slog.Info("SFU Event Stream closed", "clientId", client.ID, "error", err)
 					return
 				}
 
-				slog.Debug("SFU Event received", "clientId", client.ID, "payloadType", fmt.Sprintf("%T", event.Payload))
-
-				// Handle TrackAdded
-				if trackEvent := event.GetTrackEvent(); trackEvent != nil {
-					slog.Info("SFU Track Added event received", "targetClientId", client.ID, "sourceUserId", trackEvent.UserId, "streamId", trackEvent.StreamId, "kind", trackEvent.TrackKind)
-					// Forward to Client
-					msg := &pb.WebSocketMessage{
-						Payload: &pb.WebSocketMessage_TrackAdded{
-							TrackAdded: trackEvent,
-						},
-					}
-					client.sendProto(msg)
-					slog.Debug("Forwarded TrackAdded to client", "clientId", client.ID)
-				}
-
-				// Handle Renegotiation Offer from SFU
-				if sdp := event.GetRenegotiateSdpOffer(); sdp != "" {
-					slog.Info("SFU Renegotiation Offer", "clientId", client.ID)
-					msg := &pb.WebSocketMessage{
-						Payload: &pb.WebSocketMessage_SignalEvent{
-							SignalEvent: &pb.SignalEvent{
-								Signal: &pb.SignalEvent_SdpOffer{
-									SdpOffer: sdp,
-								},
-							},
-						},
-					}
-					client.sendProto(msg)
-				}
-
-				// Handle Answer from SFU (when client initiated negotiation)
-				if sdp := event.GetSdpAnswer(); sdp != "" {
-					slog.Info("SFU Answer received", "clientId", client.ID)
-					msg := &pb.WebSocketMessage{
-						Payload: &pb.WebSocketMessage_SignalEvent{
-							SignalEvent: &pb.SignalEvent{
-								Signal: &pb.SignalEvent_SdpAnswer{
-									SdpAnswer: sdp,
-								},
-							},
-						},
-					}
-					client.sendProto(msg)
-				}
-
-				// Handle ICE Candidate from SFU
-				if candidate := event.GetIceCandidate(); candidate != "" {
-					slog.Debug("SFU ICE Candidate received", "clientId", client.ID)
-					msg := &pb.WebSocketMessage{
-						Payload: &pb.WebSocketMessage_SignalEvent{
-							SignalEvent: &pb.SignalEvent{
-								Signal: &pb.SignalEvent_IceCandidate{
-									IceCandidate: candidate,
-								},
-							},
-						},
-					}
+				if msg := processSFUEvent(client, event); msg != nil {
 					client.sendProto(msg)
 				}
 			}
@@ -136,19 +79,11 @@ func (r *Room) HandleSFUSignal(ctx context.Context, client *Client, signal *pb.S
 		return
 	}
 
-	// Forward to Rust via gRPC [cite: 8]
-	signalType := "unknown"
-	if signal.GetSdpOffer() != "" {
-		signalType = "SdpOffer"
-	} else if signal.GetSdpAnswer() != "" {
-		signalType = "SdpAnswer"
-	} else if signal.GetIceCandidate() != "" {
-		signalType = "IceCandidate"
-	}
+	signalType := getSignalType(signal)
 	slog.Debug("Forwarding signal to SFU", "clientId", client.ID, "signalType", signalType)
+
 	_, err := r.sfu.HandleSignal(ctx, string(client.ID), string(r.ID), signal)
 	if err != nil {
 		slog.Error("SFU Signal Error", "error", err)
-		return
 	}
 }

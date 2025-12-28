@@ -127,6 +127,24 @@ func TestPublishToRedis_WithBus(t *testing.T) {
 	assert.Greater(t, mockBus.publishCalls, 0)
 }
 
+func TestPublishToRedis_Error(t *testing.T) {
+	ctx := context.Background()
+	mockBus := &MockBusService{failPublish: true}
+	room := NewRoom("test-room", nil, mockBus, nil)
+
+	msg := &pb.WebSocketMessage{
+		Payload: &pb.WebSocketMessage_ChatEvent{
+			ChatEvent: &pb.ChatEvent{
+				Id:      "test",
+				Content: "Hello",
+			},
+		},
+	}
+
+	// Should not panic, just log error
+	room.publishToRedis(ctx, msg)
+}
+
 func TestBroadcast_FullChannel(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
