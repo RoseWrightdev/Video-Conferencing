@@ -19,7 +19,8 @@ import (
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
-	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/session"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/transport"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 )
 
 // MockValidator is a development-only token validator that accepts any token
@@ -152,14 +153,14 @@ func main() {
 
 	// --- Create Hubs with Dependencies ---
 	// Each feature gets its own hub, configured with the same dependencies.
-	var validator session.TokenValidator
+	var validator types.TokenValidator
 	if authValidator != nil {
 		validator = authValidator
 	} else {
 		validator = &MockValidator{}
 	}
 
-	hub := session.NewHub(validator, busService, developmentMode)
+	hub := transport.NewHub(validator, busService, developmentMode)
 
 	// --- Set up Server ---
 	router := gin.Default()
