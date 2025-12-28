@@ -12,6 +12,7 @@ tokio-stream = "0.1"
 # gRPC
 tonic = "0.9"
 prost = "0.11"
+bytes = "1.0"
 
 # WebRTC
 webrtc = "0.9"
@@ -35,8 +36,11 @@ tonic-build = "0.9"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 rand = "0.8"
-bytes = "1.0"
 
 [[bench]]
 name = "sfu_benchmarks"
 harness = false
+
+[[bin]]
+name = "sfu_load_sim"
+path = "src/sfu_load_sim.rs"
