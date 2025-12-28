@@ -13,6 +13,10 @@
       "path": "./backend/go"
     },
     {
+      "name": "Rust",
+      "path": "./backend/rust/sfu"
+    },
+    {
       "name": "DevOps",
       "path": "./devops"
     },
