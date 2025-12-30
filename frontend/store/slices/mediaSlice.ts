@@ -244,8 +244,15 @@ export const createMediaSlice: StateCreator<
 
       const sfu = get().sfuClient;
       if (sfu && stream) {
+        const track = stream.getVideoTracks()[0];
         // Add screen track to SFU connection
-        sfu.addTrack(stream.getVideoTracks()[0], stream);
+        sfu.addTrack(track, stream);
+
+        // Listen for browser UI "Stop sharing" event
+        track.onended = () => {
+          loggers.media.info('Screen share ended by browser UI');
+          get().stopScreenShare();
+        };
 
         // Notify Backend
         get().wsClient?.send({
@@ -258,8 +265,22 @@ export const createMediaSlice: StateCreator<
   },
 
   stopScreenShare: async () => {
-    const { screenShareStream } = get();
-    screenShareStream?.getTracks().forEach(t => t.stop());
+    const { screenShareStream, sfuClient } = get();
+
+    if (screenShareStream) {
+      screenShareStream.getTracks().forEach(t => {
+        t.stop();
+        // Remove from SFU to prevent ghost tracks
+        if (sfuClient) {
+          const sender = sfuClient.pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.id === t.id);
+          if (sender) {
+            sfuClient.pc.removeTrack(sender);
+            loggers.media.debug('Removed screen share track from SFU', { trackId: t.id });
+          }
+        }
+      });
+    }
+
     set({ screenShareStream: null, isScreenSharing: false });
 
     // Notify Backend
