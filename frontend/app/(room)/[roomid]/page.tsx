@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { useRoom, useChat, } from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
@@ -17,11 +17,13 @@ import { Button } from '@/components/ui/button';
 import { useState, useEffect, useRef } from 'react';
 import { useRoomStore } from '@/store/useRoomStore';
 import LeaveRoomDialog from '@/components/room/components/LeaveRoomDialog';
+import { toast } from "sonner";
 
 const logger = createLogger('Room');
 
 export default function RoomPage() {
   const params = useParams();
+  const router = useRouter();
   const { data: session, status } = useSession();
   const roomId = params.roomid as string;
 
@@ -82,6 +84,7 @@ export default function RoomPage() {
   const {
     currentUserId,
     connectionState,
+    isKicked,
   } = useRoom({
     roomId,
     username: session?.user?.name || session?.user?.email || 'Anonymous',
@@ -91,6 +94,14 @@ export default function RoomPage() {
   });
 
   const { isChatPanelOpen } = useChat();
+
+  // Handle kick redirect
+  useEffect(() => {
+    if (isKicked || connectionState.lastError?.includes('kicked')) {
+      toast.error('You have been kicked from the room.');
+      router.push('/');
+    }
+  }, [isKicked, connectionState.lastError, router]);
 
   const handleRequestPermissions = async () => {
     // If permissions already granted (or just granted), this acts as the "Join" button

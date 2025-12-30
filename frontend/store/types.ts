@@ -153,6 +153,7 @@ export interface RoomSlice {
   roomSettings: RoomSettings | null;
   isJoined: boolean;
   isWaitingRoom: boolean;
+  isKicked: boolean;
   currentUserId: string | null;
   currentUsername: string | null;
 

@@ -168,7 +168,7 @@ func TestRemoveRoom_NonEmptyRoom(t *testing.T) {
 
 	// Add a participant
 	client := &hubMockClient{id: "user1"}
-	r.AddParticipant(ctx, client)
+	r.AddHost(ctx, client)
 
 	// Trigger removal
 	hub.removeRoom(roomID)

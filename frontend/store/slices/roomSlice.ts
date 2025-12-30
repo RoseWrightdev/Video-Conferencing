@@ -131,6 +131,7 @@ export const createRoomSlice: StateCreator<
     roomSettings: null,
     isJoined: false,
     isWaitingRoom: false,
+    isKicked: false,
     currentUserId: null,
     currentUsername: null,
     clientInfo: null,
@@ -170,7 +171,8 @@ export const createRoomSlice: StateCreator<
         isWaitingRoom: false,
         participants: new Map(),
         waitingParticipants: new Map(),
-        messages: []
+        messages: [],
+        isKicked: false,
       });
       // Ensure connection state is reset
       get().updateConnectionState({

@@ -13,6 +13,7 @@ export interface RoomClientState {
     isJoined: boolean;
     isWaitingRoom: boolean;
     isHost: boolean;
+    isKicked?: boolean;
     currentUserId: string | null;
     error: string | null;
     isInitialState?: boolean;
@@ -240,8 +241,11 @@ export class RoomClient {
                 break;
             case 'adminEvent':
                 if (msg.adminEvent) {
-                    if (msg.adminEvent.action === 'kicked') {
-                        this.onStateChange({ error: `You were kicked: ${msg.adminEvent.reason}` });
+                    if (msg.adminEvent.action === 'kicked' || msg.adminEvent.action === 'kick') {
+                        this.onStateChange({
+                            error: `You were kicked: ${msg.adminEvent.reason}`,
+                            isKicked: true
+                        });
                         this.disconnect();
                     } else if (msg.adminEvent.action === 'room_closed') {
                         this.onStateChange({ error: `The room has been closed by the host.` });
@@ -253,6 +257,7 @@ export class RoomClient {
                             // Local host status might be updated by roomState broadcast, 
                             // but we can proactively alert the user.
                             logger.info('You are now the host');
+                            this.onStateChange({ isHost: true });
                         }
                     }
                 }

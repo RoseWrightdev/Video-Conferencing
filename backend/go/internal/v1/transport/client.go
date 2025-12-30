@@ -121,7 +121,17 @@ func (c *Client) SetIsHandRaised(enabled bool) {
 }
 
 func (c *Client) Disconnect() {
-	c.conn.Close()
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return
+	}
+	c.closed = true
+	c.mu.Unlock()
+
+	// Closing channels triggers the writePump to drain buffers, send CloseMessage, and then close the connection
+	close(c.send)
+	close(c.prioritySend)
 }
 
 // readPump continuously processes incoming WebSocket messages from the client.
