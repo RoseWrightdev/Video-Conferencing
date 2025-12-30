@@ -34,6 +34,7 @@ export const createRoomSlice: StateCreator<
     }
 
     // INTERCEPT: Calculate unread count for waiting and regular participants
+    // AND Sync derived Sets (raisingHand, unmuted, etc.)
     // We must exclude the current user from triggers to avoid self-notification.
     if (stateUpdate.isInitialState) {
       // If this is the initial state load, we don't want to trigger notifications for existing users
@@ -59,6 +60,7 @@ export const createRoomSlice: StateCreator<
         const currentParticipants = currentState.participants;
         const newParticipants = stateUpdate.participants as Map<string, any>;
 
+        // Calculate added count for notifications
         newParticipants.forEach((_, id) => {
           if (!currentParticipants.has(id) && id !== myId) {
             addedCount++;

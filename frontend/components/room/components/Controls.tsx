@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Crown,
   Mic,
   MicOff,
   Video,
@@ -25,11 +26,7 @@ import {
 import * as Typo from "@/components/ui/typography";
 import { useRoomStore } from "@/store/useRoomStore";
 import { useShallow } from 'zustand/react/shallow';
-import router from "next/router";
-
-export interface ControlBarProps {
-  // empty now
-}
+import { useRouter } from "next/navigation";
 
 const ControlBar = memo(function ControlBar() {
   const {
@@ -39,7 +36,9 @@ const ControlBar = memo(function ControlBar() {
     toggleAudio,
     toggleVideo,
     startScreenShare,
-    stopScreenShare
+    stopScreenShare,
+    isHost,
+    setLeaveDialogOpen
   } = useRoomStore(useShallow(state => ({
     isAudioEnabled: state.isAudioEnabled,
     isVideoEnabled: state.isVideoEnabled,
@@ -47,17 +46,17 @@ const ControlBar = memo(function ControlBar() {
     toggleAudio: state.toggleAudio,
     toggleVideo: state.toggleVideo,
     startScreenShare: state.startScreenShare,
-    stopScreenShare: state.stopScreenShare
+    stopScreenShare: state.stopScreenShare,
+    isHost: state.isHost,
+    setLeaveDialogOpen: state.setLeaveDialogOpen
   })));
 
   const {
-    isHost,
     toggleParticipantsPanel,
     toggleSettingsPanel,
     toggleChatPanel,
     unreadParticipantsCount,
   } = useRoomStore(useShallow(state => ({
-    isHost: state.isHost,
     toggleParticipantsPanel: state.toggleParticipantsPanel,
     toggleSettingsPanel: state.toggleSettingsPanel,
     toggleChatPanel: state.toggleChatPanel,
@@ -70,6 +69,7 @@ const ControlBar = memo(function ControlBar() {
   })));
 
   const { leaveRoom } = useRoomStore(useShallow(state => ({ leaveRoom: state.leaveRoom })));
+  const router = useRouter();
 
   // Hand raise is in participant slice, let's get it correctly
   const { currentUserId, raisingHandParticipants, toggleHand } = useRoomStore(useShallow(state => ({
@@ -79,10 +79,8 @@ const ControlBar = memo(function ControlBar() {
   })));
 
   const isHandRaised = currentUserId ? raisingHandParticipants.has(currentUserId) : false;
-
-
   const [hasRequestedScreenShare, setHasRequestedScreenShare] = useState(false);
-  const canScreenShare = true; // Hardcoded for now as it was in the factory default, or logic needed
+  const canScreenShare = true; // Defining as true or based on local logic as requested
 
   return (
     <div className="flex items-center justify-between gap-4 p-4 w-full">
@@ -263,24 +261,21 @@ const ControlBar = memo(function ControlBar() {
           {/* Spacer */}
           <div className="w-2" />
 
-          {/* Leave Room */}
+          {/* Leave Room / End Meeting Button */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="destructive"
                 size="icon"
                 className="rounded-full w-16 bg-red-500 hover:bg-red-700 hover:text-white"
-                onClick={() => {
-                  leaveRoom()
-                  router.push('/');
-                }}
                 aria-label="Leave room"
+                onClick={() => setLeaveDialogOpen(true)}
               >
                 <PhoneOff className="size-5 text-red-950" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <Typo.P>Leave room</Typo.P>
+              <Typo.P>{isHost ? "End or Leave" : "Leave room"}</Typo.P>
             </TooltipContent>
           </Tooltip>
         </div>

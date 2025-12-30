@@ -131,12 +131,15 @@ export default function ParticipantTile({
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
+    // Synchronously check if it's already playing when the effect runs
+    // (e.g. if state changed but the video element survived)
+    if (videoEl.readyState >= 2 && !videoEl.paused) {
+      setIsPlaying(true);
+    }
+
     const onPlaying = () => {
-      // Only set playing to true if we actually expect video
-      if (shouldShowVideo) {
-        loggers.media.debug('ParticipantTile: Video started playing', { participantId: participant.id });
-        setIsPlaying(true);
-      }
+      loggers.media.debug('ParticipantTile: Video started playing', { participantId: participant.id });
+      setIsPlaying(true);
     };
 
     const onWaiting = () => {
@@ -149,17 +152,21 @@ export default function ParticipantTile({
     };
 
     videoEl.addEventListener('playing', onPlaying);
+    videoEl.addEventListener('play', onPlaying);
+    videoEl.addEventListener('canplay', onPlaying);
     videoEl.addEventListener('waiting', onWaiting);
     videoEl.addEventListener('pause', onPause);
     videoEl.addEventListener('ended', onPause);
 
     return () => {
       videoEl.removeEventListener('playing', onPlaying);
+      videoEl.removeEventListener('play', onPlaying);
+      videoEl.removeEventListener('canplay', onPlaying);
       videoEl.removeEventListener('waiting', onWaiting);
       videoEl.removeEventListener('pause', onPause);
       videoEl.removeEventListener('ended', onPause);
     };
-  }, [shouldShowVideo, participant.id]);
+  }, [participant.id]); // Removed shouldShowVideo as a dependency to prevent event listener churn
 
   const getInitials = (name: string) => {
     return name?.substring(0, 2).toUpperCase() || '??';
@@ -200,16 +207,19 @@ export default function ParticipantTile({
         'absolute inset-0 w-full h-full flex items-center justify-center bg-linear-to-br from-gray-700 to-gray-800 transition-opacity duration-300',
         (shouldShowVideo && isPlaying) ? 'opacity-0' : 'opacity-100'
       )}>
-        <div className="flex flex-col items-center gap-4">
+        <div className="relative flex flex-col items-center">
           <div className={cn(
             'w-24 h-24 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg transition-all duration-200',
             isSpeaking && !isVideoEnabled && 'ring-4 ring-green-500 shadow-xl shadow-green-500/50'
           )}>
             {getInitials(participant.username)}
           </div>
-          {shouldShowVideo && !isPlaying && (
+          <div className={cn(
+            "absolute -bottom-6 left-1/2 -translate-x-1/2 w-max transition-opacity duration-300",
+            (shouldShowVideo && !isPlaying) ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}>
             <p className="text-xs text-gray-400 animate-pulse italic">Connecting video...</p>
-          )}
+          </div>
         </div>
       </div>
 

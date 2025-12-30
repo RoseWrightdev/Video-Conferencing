@@ -16,6 +16,11 @@ export interface RoomClientState {
     currentUserId: string | null;
     error: string | null;
     isInitialState?: boolean;
+    // Derived state sets for UI efficiency
+    raisingHandParticipants?: Set<string>;
+    unmutedParticipants?: Set<string>;
+    cameraOnParticipants?: Set<string>;
+    sharingScreenParticipants?: Set<string>;
 }
 
 export class RoomClient {
@@ -25,6 +30,7 @@ export class RoomClient {
     // Authoritative State
     private participants: Map<string, Participant> = new Map();
     private waitingParticipants: Map<string, Participant> = new Map();
+
     // streamToUserMap maps Stream ID -> User ID. This differs from participants map (User ID -> Stream).
     // It is primarily used to lookup user when a track/stream event arrives with only StreamID.
     private streamToUserMap: Map<string, string> = new Map();
@@ -118,6 +124,34 @@ export class RoomClient {
         this.activeStreams.clear();
     }
 
+    /**
+     * Helper to broadcast participant state updates with all derived sets.
+     * This ensures the UI sets (raisingHand, unmuted, etc.) are always in sync with the Map.
+     */
+    private emitParticipantState() {
+        const newParticipants = new Map(this.participants);
+
+        const raisingHandParticipants = new Set<string>();
+        const unmutedParticipants = new Set<string>();
+        const cameraOnParticipants = new Set<string>();
+        const sharingScreenParticipants = new Set<string>();
+
+        newParticipants.forEach(p => {
+            if (p.isHandRaised) raisingHandParticipants.add(p.id);
+            if (p.isAudioEnabled) unmutedParticipants.add(p.id);
+            if (p.isVideoEnabled) cameraOnParticipants.add(p.id);
+            if (p.isScreenSharing) sharingScreenParticipants.add(p.id);
+        });
+
+        this.onStateChange({
+            participants: newParticipants,
+            raisingHandParticipants,
+            unmutedParticipants,
+            cameraOnParticipants,
+            sharingScreenParticipants
+        });
+    }
+
     public setLocalStream(userId: string, stream: MediaStream | null) {
         if (stream) {
             this.activeStreams.set(userId, stream);
@@ -129,9 +163,9 @@ export class RoomClient {
         if (p) {
             p.stream = stream || undefined;
             this.participants.set(userId, p);
-            // Updating internal map ensures next state emission includes stream (or lack thereof)
-            const newParticipants = new Map(this.participants);
-            this.onStateChange({ participants: newParticipants });
+
+            // Emit update with derived sets
+            this.emitParticipantState();
         }
     }
 
@@ -209,6 +243,17 @@ export class RoomClient {
                     if (msg.adminEvent.action === 'kicked') {
                         this.onStateChange({ error: `You were kicked: ${msg.adminEvent.reason}` });
                         this.disconnect();
+                    } else if (msg.adminEvent.action === 'room_closed') {
+                        this.onStateChange({ error: `The room has been closed by the host.` });
+                        this.disconnect();
+                    } else if (msg.adminEvent.action === 'ownership_transferred') {
+                        const newOwnerId = msg.adminEvent.reason;
+                        const isMe = newOwnerId === this.currentUserId;
+                        if (isMe) {
+                            // Local host status might be updated by roomState broadcast, 
+                            // but we can proactively alert the user.
+                            logger.info('You are now the host');
+                        }
                     }
                 }
                 break;
@@ -262,9 +307,8 @@ export class RoomClient {
 
             this.participants.set(userId, updated);
 
-            // Need to update the Map in the state
-            const newParticipants = new Map(this.participants);
-            this.onStateChange({ participants: newParticipants });
+            // Emit robust update
+            this.emitParticipantState();
         } else {
             logger.warn(`[RoomClient] updateParticipantState: User ${userId} not found in map.`);
         }
@@ -336,24 +380,34 @@ export class RoomClient {
 
         this.waitingParticipants = newWaiting;
 
-        // Dispatch Update
+        // Calculate Sets for Initial Emit
+        const raisingHandParticipants = new Set<string>();
+        const unmutedParticipants = new Set<string>();
+        const cameraOnParticipants = new Set<string>();
+        const sharingScreenParticipants = new Set<string>();
+
+        this.participants.forEach(p => {
+            if (p.isHandRaised) raisingHandParticipants.add(p.id);
+            if (p.isAudioEnabled) unmutedParticipants.add(p.id);
+            if (p.isVideoEnabled) cameraOnParticipants.add(p.id);
+            if (p.isScreenSharing) sharingScreenParticipants.add(p.id);
+        });
 
         this.onStateChange({
             participants: newParticipants,
             waitingParticipants: newWaiting,
             isWaitingRoom: amInWaitingRoom,
-            isInitialState: isInitial
+            isInitialState: isInitial,
+            raisingHandParticipants,
+            unmutedParticipants,
+            cameraOnParticipants,
+            sharingScreenParticipants
         });
     }
 
     private handleTrackAdded(event: { userId: string, streamId: string, trackKind: string }) {
         logger.info('Track Added Event', event);
         this.streamToUserMap.set(event.streamId, event.userId);
-
-        // No fuzzy resolution check anymore.
-        // If we have pending tracks for this streamId (unlikely with this order, but possible in future if we queue tracks),
-        // we would process them here. But we don't queue tracks anymore as we expect trackAdded -> handleRemoteTrack or vice versa
-        // AND strict matching.
     }
 
     private handleRemoteTrack(stream: MediaStream, track: MediaStreamTrack) {
@@ -369,8 +423,6 @@ export class RoomClient {
             streamId: stream.id,
             trackKind: track.kind
         });
-
-        // We do NOT use fuzzy logic anymore.
     }
 
     private assignStreamToUser(userId: string, stream: MediaStream) {
@@ -440,6 +492,15 @@ export class RoomClient {
         this.ws?.send({
             adminAction: {
                 action: 'kick',
+                targetUserId: userId
+            }
+        });
+    }
+
+    public transferOwnership(userId: string) {
+        this.ws?.send({
+            adminAction: {
+                action: 'transfer_ownership',
                 targetUserId: userId
             }
         });

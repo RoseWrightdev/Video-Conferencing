@@ -14,6 +14,7 @@ describe('participantSlice', () => {
 
     const mockRoomClient = {
         toggleHand: vi.fn(),
+        transferOwnership: vi.fn(),
     };
 
     beforeEach(() => {
@@ -175,6 +176,11 @@ describe('participantSlice', () => {
                     action: 'mute'
                 }
             });
+        });
+
+        it('should call roomClient.transferOwnership', () => {
+            slice.transferOwnership('p2');
+            expect(mockRoomClient.transferOwnership).toHaveBeenCalledWith('p2');
         });
     });
 });

@@ -206,4 +206,40 @@ describe('RoomClient', () => {
         expect(lastCall.messages[0].content).toBe('Hello World');
         expect(lastCall.messages[0].type).toBe('text');
     });
+
+    it('should handle admin events: room_closed', async () => {
+        await client.connect('room1', 'user1', 'token1');
+        const messageHandler = wsMock.onMessage.mock.calls[0][0];
+
+        messageHandler({
+            adminEvent: {
+                action: 'room_closed',
+                reason: 'Host left'
+            }
+        });
+
+        expect(onStateChange).toHaveBeenCalledWith(expect.objectContaining({
+            error: 'The room has been closed by the host.'
+        }));
+        expect(wsMock.disconnect).toHaveBeenCalled();
+    });
+
+    it('should handle admin events: ownership_transferred', async () => {
+        await client.connect('room1', 'user1', 'token1');
+        const messageHandler = wsMock.onMessage.mock.calls[0][0];
+
+        // This event doesn't trigger onStateChange directly with data (it waits for roomState)
+        // but we can check if it logs or doesn't crash.
+        // Actually, we added a log in RoomClient.ts
+        messageHandler({
+            adminEvent: {
+                action: 'ownership_transferred',
+                reason: 'user-2'
+            }
+        });
+
+        // No direct state change expected from our current implementation of ownership_transferred handler
+        // beyond the logger info.
+        expect(onStateChange).not.toHaveBeenCalled();
+    });
 });

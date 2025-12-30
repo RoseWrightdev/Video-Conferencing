@@ -139,6 +139,7 @@ export interface ParticipantSlice {
   kickParticipant: (participantId: string) => void;
   toggleParticipantAudio: (participantId: string) => void;
   toggleParticipantVideo: (participantId: string) => void;
+  transferOwnership: (participantId: string) => void;
   selectParticipant: (participantId: string | null) => void;
   toggleHand: () => Promise<void>;
   toggleParticipantsPanel: () => void; // Moved from UiSlice
@@ -175,6 +176,8 @@ export interface UiSlice {
 
   setGridLayout: (layout: GridLayout) => void;
   pinParticipant: (participantId: string | null) => void;
+  isLeaveDialogOpen: boolean;
+  setLeaveDialogOpen: (open: boolean) => void;
 }
 
 export type RoomStoreState = ChatSlice &

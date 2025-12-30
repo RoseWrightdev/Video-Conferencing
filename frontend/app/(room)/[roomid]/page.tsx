@@ -16,6 +16,7 @@ import SettingsPanel from '@/components/settings/components/SettingsPanel';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect, useRef } from 'react';
 import { useRoomStore } from '@/store/useRoomStore';
+import LeaveRoomDialog from '@/components/room/components/LeaveRoomDialog';
 
 const logger = createLogger('Room');
 
@@ -228,6 +229,9 @@ export default function RoomPage() {
           />
         )}
       </div>
+
+      {/* Global Modals */}
+      <LeaveRoomDialog />
     </div>
   );
 }

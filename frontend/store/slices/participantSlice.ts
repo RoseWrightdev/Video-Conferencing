@@ -241,6 +241,13 @@ export const createParticipantSlice: StateCreator<
     }
   },
 
+  transferOwnership: (participantId) => {
+    const { roomClient } = get();
+    if (roomClient) {
+      roomClient.transferOwnership(participantId);
+    }
+  },
+
   toggleHand: async () => {
     const { roomClient, currentUserId, raisingHandParticipants } = get();
     if (roomClient && currentUserId) {

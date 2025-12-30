@@ -11,6 +11,7 @@ export const createUISlice: StateCreator<
   gridLayout: 'gallery',
   isPinned: false,
   pinnedParticipantId: null,
+  isLeaveDialogOpen: false,
 
   toggleSettingsPanel: () => {
     set((state) => ({ isSettingsPanelOpen: !state.isSettingsPanelOpen }));
@@ -25,5 +26,9 @@ export const createUISlice: StateCreator<
       pinnedParticipantId: participantId,
       isPinned: participantId !== null,
     });
+  },
+
+  setLeaveDialogOpen: (open: boolean) => {
+    set({ isLeaveDialogOpen: open });
   },
 });

@@ -1,15 +1,14 @@
 'use client';
 
-import { X as XIcon, Users, Hand, Monitor, Check, Ban, Clock, MoreVertical, UserX, Mic, MicOff } from 'lucide-react';
+import { X as XIcon, Users, Hand, Monitor, Check, Ban, Clock, MoreVertical, UserX, Mic, MicOff, Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from '@/components/ui/select';
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useRoomStore } from '@/store/useRoomStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useMemo } from 'react';
@@ -33,6 +32,7 @@ interface ParticipantsPanelContentProps {
   onApprove: (id: string) => void;
   onKick: (id: string) => void;
   onToggleAudio: (id: string) => void;
+  onTransferOwnership?: (id: string) => void;
 }
 
 /**
@@ -52,6 +52,7 @@ export function ParticipantsPanelContent({
   onApprove,
   onKick,
   onToggleAudio,
+  onTransferOwnership,
 }: ParticipantsPanelContentProps) {
   // Sort participants: host first, then hand raised, then alphabetical
   const sortedParticipants = [...participants].sort((a, b) => {
@@ -67,7 +68,7 @@ export function ParticipantsPanelContent({
   });
 
   return (
-    <div className={cn('absolute left-4 top-4 bottom-6 h-[calc(100vh-7rem)] w-80 border-r rounded-2xl flex flex-col bg-white/60 frosted-2 z-50 overflow-hidden', className)}>
+    <div className={cn('absolute left-4 top-4 bottom-6 h-[calc(100vh-7rem)] w-120 border-r rounded-2xl flex flex-col bg-white/60 frosted-2 z-50 overflow-hidden', className)}>
       {/* Header */}
       <div className="p-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -228,34 +229,50 @@ export function ParticipantsPanelContent({
                     <div className="flex items-start gap-2 shrink-0">
                       {/* Host controls */}
                       {isHost && !isCurrentUser && (
-                        <div>
-                          <Select onValueChange={(value) => {
-                            if (value === 'mute' && isAudioOn) {
-                              onToggleAudio(participant.id);
-                            } else if (value === 'remove') {
-                              onKick(participant.id);
-                            }
-                          }}>
-                            <SelectTrigger>
-                              <MoreVertical />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {isAudioOn && (
-                                <SelectItem value="mute">
-                                  <div className="flex items-center gap-2">
-                                    <MicOff className="h-3 w-3" />
-                                    <span>Mute</span>
-                                  </div>
-                                </SelectItem>
-                              )}
-                              <SelectItem value="remove" className="text-destructive focus:text-destructive">
-                                <div className="flex items-center gap-2">
-                                  <UserX className="h-3 w-3" />
-                                  <span>Remove</span>
-                                </div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="flex items-center gap-1 mr-2">
+                          {isAudioOn && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => onToggleAudio(participant.id)}
+                                  className="h-7 w-7 rounded-sm hover:bg-yellow-50 text-muted-foreground hover:text-yellow-600"
+                                >
+                                  <MicOff className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Mute Participant</TooltipContent>
+                            </Tooltip>
+                          )}
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => onTransferOwnership?.(participant.id)}
+                                className="h-7 w-7 rounded-sm hover:bg-blue-50 text-muted-foreground hover:text-blue-600"
+                              >
+                                <Crown className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Make Host</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => onKick(participant.id)}
+                                className="h-7 w-7 rounded-sm hover:bg-red-50 text-muted-foreground hover:text-red-600"
+                              >
+                                <UserX className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Remove from Room</TooltipContent>
+                          </Tooltip>
                         </div>
                       )}
 
@@ -286,7 +303,7 @@ export function ParticipantsPanelContent({
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }
 
@@ -310,6 +327,7 @@ export default function ParticipantsPanel({
     approveParticipant,
     kickParticipant,
     toggleParticipantAudio,
+    transferOwnership,
   } = useRoomStore(useShallow(state => ({
     participantsMap: state.participants,
     waitingParticipantsMap: state.waitingParticipants,
@@ -323,6 +341,7 @@ export default function ParticipantsPanel({
     approveParticipant: state.approveParticipant,
     kickParticipant: state.kickParticipant,
     toggleParticipantAudio: state.toggleParticipantAudio,
+    transferOwnership: state.transferOwnership,
   })));
 
   const participants = useMemo(() => Array.from(participantsMap.values()), [participantsMap]);
@@ -343,6 +362,7 @@ export default function ParticipantsPanel({
       onApprove={approveParticipant}
       onKick={kickParticipant}
       onToggleAudio={toggleParticipantAudio}
+      onTransferOwnership={transferOwnership}
     />
   );
 }
