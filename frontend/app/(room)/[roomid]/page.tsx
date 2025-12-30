@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { useRoom, useChat, } from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
+import { useAudioDetection } from '@/hooks/useAudioDetection';
 import { createLogger } from '@/lib/logger';
 import ChatPanel from '@/components/chat-panel/components/ChatPanel';
 import ControlBar from '@/components/room/components/Controls';
@@ -37,7 +38,7 @@ export default function RoomPage() {
     }
     return false;
   });
-  const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
+
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -80,6 +81,12 @@ export default function RoomPage() {
     setGridLayout,
     pinParticipant,
   } = useRoomStore();
+
+  const speakingParticipants = useAudioDetection(
+    Array.from(participants.values()),
+    0.02,
+    permissionsGranted
+  );
 
   const {
     currentUserId,
