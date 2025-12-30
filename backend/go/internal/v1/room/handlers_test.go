@@ -418,3 +418,29 @@ func TestMultipleHandRaises(t *testing.T) {
 	assert.Equal(t, 4, raisedCount)
 	assert.False(t, users[0].GetIsHandRaised())
 }
+
+func TestHandleAdminAction_TransferOwnership(t *testing.T) {
+	ctx := context.Background()
+	mockBus := &MockBusService{}
+	r := NewRoom("test-room", nil, mockBus, nil)
+
+	host := newMockClient("host1", "Host", types.RoleTypeHost)
+	participant := newMockClient("user1", "User", types.RoleTypeParticipant)
+
+	r.AddHost(ctx, host)
+	r.AddParticipant(ctx, participant)
+	r.ownerID = host.ID
+
+	// Host transfers ownership to participant
+	req := &pb.AdminActionRequest{
+		Action:       "transfer_ownership",
+		TargetUserId: string(participant.GetID()),
+	}
+	r.HandleAdminAction(ctx, host, req)
+
+	// Owner ID should be updated
+	assert.Equal(t, participant.GetID(), r.ownerID)
+
+	// New owner should be a host
+	assert.Equal(t, types.RoleTypeHost, participant.GetRole())
+}

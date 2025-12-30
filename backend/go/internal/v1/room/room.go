@@ -165,6 +165,42 @@ func (r *Room) IsRoomEmpty() bool {
 	return r.isRoomEmptyLocked()
 }
 
+func (r *Room) hasHostLocked() bool {
+	for _, c := range r.clients {
+		if c.GetRole() == types.RoleTypeHost {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Room) HasHost() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasHostLocked()
+}
+
+func (r *Room) CloseRoom(reason string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.closeRoomLocked(reason)
+}
+
+func (r *Room) closeRoomLocked(reason string) {
+	slog.Info("Closing room", "room", r.ID, "reason", reason)
+
+	var targets []types.ClientInterface
+	for _, c := range r.clients {
+		targets = append(targets, c)
+	}
+
+	msg := buildRoomClosedMessage()
+	for _, c := range targets {
+		c.SendProto(msg)
+		c.Disconnect()
+	}
+}
+
 func (r *Room) HandleClientConnect(client types.ClientInterface) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -252,11 +288,11 @@ func (r *Room) HandleClientDisconnect(client types.ClientInterface) {
 
 	r.broadcastRoomStateLocked(ctx)
 
-	if r.isRoomEmptyLocked() {
-		if r.onEmpty == nil {
-			return
+	// Trigger cleanup if room is empty OR has no hosts
+	if r.isRoomEmptyLocked() || !r.hasHostLocked() {
+		if r.onEmpty != nil {
+			go r.onEmpty(r.ID)
 		}
-		go r.onEmpty(r.ID)
 	}
 }
 

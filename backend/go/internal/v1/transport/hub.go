@@ -140,8 +140,13 @@ func (h *Hub) removeRoom(roomID types.RoomIdType) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 
-		// Double-check room still exists and is empty before deleting
-		if r, ok := h.rooms[roomID]; ok && r.IsRoomEmpty() {
+		// Double-check room still exists and is empty OR hostless before deleting
+		if r, ok := h.rooms[roomID]; ok && (r.IsRoomEmpty() || !r.HasHost()) {
+			if !r.IsRoomEmpty() {
+				slog.Info("Closing hostless room", "roomId", roomID)
+				r.CloseRoom("Host has not returned.")
+			}
+
 			delete(h.rooms, roomID)
 			delete(h.pendingRoomCleanups, roomID)
 
@@ -149,12 +154,12 @@ func (h *Hub) removeRoom(roomID types.RoomIdType) {
 			metrics.ActiveRooms.Dec()
 			metrics.RoomParticipants.DeleteLabelValues(string(roomID))
 
-			slog.Info("Removed empty room from hub after grace period", "roomId", roomID)
+			slog.Info("Removed room from hub after grace period", "roomId", roomID, "wasEmpty", r.IsRoomEmpty())
 		} else {
 			// Room is no longer empty, cancel cleanup
 			delete(h.pendingRoomCleanups, roomID)
 			if ok {
-				slog.Info("Cancelled room cleanup - room is no longer empty", "roomId", roomID)
+				slog.Info("Cancelled room cleanup - room is active", "roomId", roomID)
 			}
 		}
 	})

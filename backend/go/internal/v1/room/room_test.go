@@ -302,3 +302,31 @@ func TestWaitingRoomOrdering(t *testing.T) {
 	front := room.waitingDrawOrderStack.Front()
 	assert.Equal(t, user3, front.Value)
 }
+
+func TestCloseRoom(t *testing.T) {
+	ctx := context.Background()
+	mockBus := &MockBusService{}
+	r := NewRoom("test-room", nil, mockBus, nil)
+
+	host := NewMockClient("host1", "Host", types.RoleTypeHost)
+	participant := NewMockClient("user1", "User", types.RoleTypeParticipant)
+
+	r.addHostLocked(ctx, host)
+	r.addParticipantLocked(ctx, participant)
+
+	// Close the room
+	r.CloseRoom("End of meeting")
+
+	// Both clients should be disconnected
+	assert.True(t, host.isDisconnected)
+	assert.True(t, participant.isDisconnected)
+
+	// Both clients should receive the room_closed message
+	assert.Greater(t, len(host.SentMessages), 0)
+	assert.Greater(t, len(participant.SentMessages), 0)
+
+	msg := host.SentMessages[len(host.SentMessages)-1]
+	adminEvent := msg.GetAdminEvent()
+	assert.NotNil(t, adminEvent)
+	assert.Equal(t, "room_closed", adminEvent.Action)
+}

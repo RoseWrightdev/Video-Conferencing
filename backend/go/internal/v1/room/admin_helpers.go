@@ -52,6 +52,18 @@ func buildKickMessage() *pb.WebSocketMessage {
 	}
 }
 
+// buildRoomClosedMessage creates the room closed notification message.
+func buildRoomClosedMessage() *pb.WebSocketMessage {
+	return &pb.WebSocketMessage{
+		Payload: &pb.WebSocketMessage_AdminEvent{
+			AdminEvent: &pb.AdminActionEvent{
+				Action: "room_closed",
+				Reason: "The host has left the room.",
+			},
+		},
+	}
+}
+
 // buildApprovalMessage creates the approval notification message for a waiting user.
 func buildApprovalMessage(userId string) *pb.WebSocketMessage {
 	return &pb.WebSocketMessage{
@@ -65,14 +77,27 @@ func buildApprovalMessage(userId string) *pb.WebSocketMessage {
 	}
 }
 
+// buildTransferOwnershipMessage creates the ownership transfer notification message.
+func buildTransferOwnershipMessage(newOwnerId string) *pb.WebSocketMessage {
+	return &pb.WebSocketMessage{
+		Payload: &pb.WebSocketMessage_AdminEvent{
+			AdminEvent: &pb.AdminActionEvent{
+				Action: "ownership_transferred",
+				Reason: newOwnerId,
+			},
+		},
+	}
+}
+
 // adminActionType represents the type of admin action
 type adminActionType string
 
 const (
-	AdminActionKick    adminActionType = "kick"
-	AdminActionApprove adminActionType = "approve"
-	AdminActionMute    adminActionType = "mute"
-	AdminActionUnmute  adminActionType = "unmute"
+	AdminActionKick              adminActionType = "kick"
+	AdminActionApprove           adminActionType = "approve"
+	AdminActionMute              adminActionType = "mute"
+	AdminActionUnmute            adminActionType = "unmute"
+	AdminActionTransferOwnership adminActionType = "transfer_ownership"
 )
 
 // parseAdminAction converts string action to typed action.

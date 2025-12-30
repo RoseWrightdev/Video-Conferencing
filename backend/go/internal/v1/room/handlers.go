@@ -212,5 +212,24 @@ func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterfa
 			r.toggleAudio(target, true)  // State change
 			go r.BroadcastRoomState(ctx) // I/O
 		}
+
+	case AdminActionTransferOwnership:
+		// Target must be a participant or host
+		if target != nil && (target.GetRole() == types.RoleTypeParticipant || target.GetRole() == types.RoleTypeHost) {
+			slog.Info("Transferring room ownership", "room", r.ID, "oldOwner", r.ownerID, "newOwner", target.GetID())
+			r.ownerID = target.GetID()
+
+			// Ensure new owner is a host
+			if target.GetRole() != types.RoleTypeHost {
+				r.addHostLocked(ctx, target)
+			}
+
+			// Notify everyone about the change
+			msg := buildTransferOwnershipMessage(string(target.GetID()))
+			r.broadcastLocked(msg)
+
+			// Broadcast state to sync roles
+			r.broadcastRoomStateLocked(ctx)
+		}
 	}
 }

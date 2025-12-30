@@ -107,10 +107,21 @@ func TestBuildApprovalMessage(t *testing.T) {
 	assert.Equal(t, userId, joinResp.UserId)
 }
 
+func TestBuildTransferOwnershipMessage(t *testing.T) {
+	newOwnerId := "user456"
+	msg := buildTransferOwnershipMessage(newOwnerId)
+	assert.NotNil(t, msg)
+	adminEvent := msg.GetAdminEvent()
+	assert.NotNil(t, adminEvent)
+	assert.Equal(t, "ownership_transferred", adminEvent.Action)
+	assert.Equal(t, newOwnerId, adminEvent.Reason)
+}
+
 func TestParseAdminAction(t *testing.T) {
 	assert.Equal(t, AdminActionKick, parseAdminAction("kick"))
 	assert.Equal(t, AdminActionApprove, parseAdminAction("approve"))
 	assert.Equal(t, AdminActionMute, parseAdminAction("mute"))
 	assert.Equal(t, AdminActionUnmute, parseAdminAction("unmute"))
+	assert.Equal(t, AdminActionTransferOwnership, parseAdminAction("transfer_ownership"))
 	assert.Equal(t, adminActionType("unknown"), parseAdminAction("unknown"))
 }
