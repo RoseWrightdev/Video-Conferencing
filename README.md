@@ -1,4 +1,4 @@
-# Scale.
+# Video Conferencing.
 
 **Distributed, high-performance video conferencing.**
 
