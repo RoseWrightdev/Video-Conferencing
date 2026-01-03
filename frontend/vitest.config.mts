@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// @ts-expect-error - Export exists in package.json but TS resolution might miss it
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,6 +21,21 @@ export default defineConfig({
     include: ['zustand']
   },
   test: {
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/**',
+        'types/proto/**',
+        '**/*.d.ts',
+        '**/*.config.*',
+        '**/*.setup.*',
+        '**/stories/**',
+        '.next/**',
+        'dist/**',
+        '**/*.shims.d.ts'
+      ]
+    },
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],

@@ -95,6 +95,7 @@ describe('RoomClient', () => {
         const sfuCallback = (SFUClient as any).mock.calls[0][1];
         const mockStream = {
             id: streamId,
+            active: true,
             getTracks: () => [{ id: 'track-1', kind: 'video' }]
         };
         const mockTrack = { id: 'track-1', kind: 'video' };

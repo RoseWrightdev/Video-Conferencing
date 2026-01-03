@@ -170,6 +170,11 @@ export const useAudioVisualizer = ({
 
         return () => {
             cancelAnimationFrame(animationFrameId);
+
+            // Cleanup all detections
+            const currentTrackedIds = Array.from(analysersRef.current.keys());
+            currentTrackedIds.forEach(id => cleanupDetection(id));
+
             // NOTE: We do NOT close the AudioContext here to persist it across re-renders
             // But we could clean it up if component unmounts for good. 
             // For now, we rely on the ref to keep it alive.

@@ -42,7 +42,10 @@ export class RoomClient {
     // as long as we keep it in sync. Let's simplifiy: Source of truth = participants.
     // However, handleRoomState wipes participants map. We need to remember streams.
     // So we need a persistent map of streams that survives handleRoomState updates.
-    private activeStreams: Map<string, MediaStream> = new Map(); // UserId -> Stream
+    // We maintain a list of active streams for each user.
+    // This allows us to handle multiple streams (e.g. Camera + Screen Share) and fallback correctly
+    // when one stops (e.g. Screen Share stops -> revert to Camera).
+    private activeStreams: Map<string, MediaStream[]> = new Map(); // UserId -> Streams[]
 
     private messages: ChatMessage[] = [];
     private currentUserId: string | null = null; // Stored locally for logic checks
@@ -125,6 +128,18 @@ export class RoomClient {
         this.activeStreams.clear();
     }
 
+    private getBestStream(streams: MediaStream[]): MediaStream | undefined {
+        // Filter out inactive streams (streams with no active tracks)
+        const active = streams.filter(s => s.active);
+
+        if (active.length === 0) return undefined;
+
+        // If multiple active streams (e.g. Camera + Screen), prefer the last one added?
+        // Or prefer one with more tracks?
+        // For now, Last-In-Wins (which usually means newest stream = screen share)
+        return active[active.length - 1];
+    }
+
     /**
      * Helper to broadcast participant state updates with all derived sets.
      * This ensures the UI sets (raisingHand, unmuted, etc.) are always in sync with the Map.
@@ -154,8 +169,13 @@ export class RoomClient {
     }
 
     public setLocalStream(userId: string, stream: MediaStream | null) {
+        // For local user, we just override the "Camera" stream slot or manage manually.
+        // But since activeStreams is now an array, we should probably just replace the current entry?
+        // Actually, setLocalStream is primarily for Camera/Mic updates from mediaSlice.
+        // mediaSlice manages screenShareStream separately for local user.
+        // So we can treat this as "The Main Stream".
         if (stream) {
-            this.activeStreams.set(userId, stream);
+            this.activeStreams.set(userId, [stream]);
         } else {
             this.activeStreams.delete(userId);
         }
@@ -285,30 +305,25 @@ export class RoomClient {
         const p = this.participants.get(userId);
         if (p) {
             // Ensure stream is consistent with our local map (source of truth for streams)
-            const localStreamRef = this.activeStreams.get(userId);
+            const localStreams = this.activeStreams.get(userId) || [];
+
+            // Re-evaluate the best stream to show (e.g. if screen share stopped)
+            // We want the last ACTIVE stream.
+            const bestStream = this.getBestStream(localStreams);
+            const localStreamRef = bestStream;
 
             // If we have a stream locally but it's not on the participant object, attach it
-            if (localStreamRef && !p.stream) {
-                p.stream = localStreamRef;
+
+            if (bestStream && !p.stream) {
                 logger.debug(`[RoomClient] updateParticipantState: Restored missing stream for ${userId}`);
             }
 
-            if (p.stream && !updates.stream) {
-                logger.debug(`[RoomClient] updateParticipantState checking stream for ${userId}: Stream ${p.stream.id} preserved.`);
-            } else if (!p.stream && !updates.stream) {
-                // Check one last time before warning
-                if (localStreamRef) {
-                    p.stream = localStreamRef;
-                } else {
-                    logger.warn(`[RoomClient] updateParticipantState: Participant ${userId} has NO stream before update!`);
-                }
-            }
-
             const updated = { ...p, ...updates };
-            // Ensure the stream is definitely on the updated object if we have it
-            if (localStreamRef && !updated.stream) {
-                updated.stream = localStreamRef;
-            }
+
+            // Always sync stream with the Best Active Stream
+            updated.stream = bestStream;
+
+            this.participants.set(userId, updated);
 
             this.participants.set(userId, updated);
 
@@ -347,7 +362,8 @@ export class RoomClient {
         // Process Participants
         state.participants.forEach((p: ParticipantInfo) => {
             // Check if we already have a stream for this user (from previous state or early track event)
-            const existingStream = this.activeStreams.get(p.id);
+            const streams = this.activeStreams.get(p.id) || [];
+            const existingStream = this.getBestStream(streams);
 
             newParticipants.set(p.id, {
                 id: p.id,
@@ -436,21 +452,24 @@ export class RoomClient {
 
         logger.info('Assigned stream to user', { userId, tracks: stream.getTracks().length, streamId: stream.id });
 
-        const currentStream = this.activeStreams.get(userId);
-        if (currentStream && currentStream.id !== stream.id) {
-            // Logic to handle stream *replacement* (e.g. screen share switching or re-negotiation leading to new stream ID)
-            // Stop old tracks if they aren't in the new stream?
-            // Actually, WebRTC usually reuses stream ID for same transceiver, but if it changes:
-            logger.info(`Replacing old stream ${currentStream.id} with new stream ${stream.id} for user ${userId}`);
+        let streams = this.activeStreams.get(userId) || [];
+
+        // Add if not exists
+        if (!streams.find(s => s.id === stream.id)) {
+            streams.push(stream);
         }
 
-        this.activeStreams.set(userId, stream);
+        // Update map
+        this.activeStreams.set(userId, streams);
+
+        // Notify
         this.onMediaTrackAdded(userId, stream);
 
         // Update internal participants map to keep it in sync
         const p = this.participants.get(userId);
         if (p) {
-            p.stream = stream;
+            // Pick best stream (prefer screen share/newest active)
+            p.stream = this.getBestStream(streams);
 
             // Self-Healing: If we received a video track, ensure isVideoEnabled is true
             if (stream.getVideoTracks().length > 0 && !p.isVideoEnabled) {
