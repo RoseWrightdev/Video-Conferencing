@@ -28,7 +28,13 @@ find . \( \
     -name "logs" -o \
     -name "tmp" -o \
     -name ".DS_Store" -o \
-    -name "designs" \
+    -name "designs" -o \
+    -name ".gemini" -o \
+    -name "brain" -o \
+    -name ".turbo" -o \
+    -name ".vercel" -o \
+    -name ".cache" -o \
+    -name "out" \
 \) -prune -o -type f \( \
     ! -name "*.png" -a \
     ! -name "*.jpg" -a \
@@ -61,7 +67,7 @@ find . \( \
     ! -name "*_pb.d.ts" -a \
     ! -name "*_pb.ts" -a \
     ! -name "*.json" \
-\) -print > /tmp/codebase_files.txt
+\) -print | grep -v '/types/proto/' > /tmp/codebase_files.txt
 
 # Count total files
 echo "Counting files..."
@@ -99,8 +105,16 @@ echo "YAML (no comments):      $YAML_LINES_NO_COMMENTS lines"
 RS_LINES_NO_COMMENTS=$(grep '\.rs$' /tmp/codebase_files.txt | xargs cat 2>/dev/null | sed '/^\s*\/\//d; /^\s*\/\*/,/\*\//d; /^\s*$/d' | wc -l)
 echo "Rust (no comments):      $RS_LINES_NO_COMMENTS lines"
 
+# Count Python without comments
+PY_LINES_NO_COMMENTS=$(grep -E '\.(py|pyw)$' /tmp/codebase_files.txt | xargs cat 2>/dev/null | sed '/^\s*#/d; /^\s*$/d' | wc -l)
+echo "Python (no comments):    $PY_LINES_NO_COMMENTS lines"
+
+# Count Shell scripts without comments
+SH_LINES_NO_COMMENTS=$(grep -E '\.(sh|bash)$' /tmp/codebase_files.txt | xargs cat 2>/dev/null | sed '/^\s*#/d; /^\s*$/d' | wc -l)
+echo "Shell (no comments):     $SH_LINES_NO_COMMENTS lines"
+
 # Total executable lines
-TOTAL_NO_COMMENTS=$((GO_LINES_NO_COMMENTS + TS_LINES_NO_COMMENTS + CSS_LINES_NO_COMMENTS + YAML_LINES_NO_COMMENTS + RS_LINES_NO_COMMENTS))
+TOTAL_NO_COMMENTS=$((GO_LINES_NO_COMMENTS + TS_LINES_NO_COMMENTS + CSS_LINES_NO_COMMENTS + YAML_LINES_NO_COMMENTS + RS_LINES_NO_COMMENTS + PY_LINES_NO_COMMENTS + SH_LINES_NO_COMMENTS))
 echo ""
 echo "🚀 Total executable lines (no comments/blanks): $TOTAL_NO_COMMENTS"
 
@@ -117,6 +131,8 @@ echo "===================="
 echo "Go files:        $(grep '\.go$' /tmp/codebase_files.txt | wc -l)"
 echo "Rust files:      $(grep '\.rs$' /tmp/codebase_files.txt | wc -l)"
 echo "TypeScript/JS:   $(grep -E '\.(ts|tsx|js|jsx)$' /tmp/codebase_files.txt | wc -l)"
+echo "Python files:    $(grep -E '\.(py|pyw)$' /tmp/codebase_files.txt | wc -l)"
+echo "Shell scripts:   $(grep -E '\.(sh|bash)$' /tmp/codebase_files.txt | wc -l)"
 echo "CSS/SCSS:        $(grep -E '\.(css|scss|sass)$' /tmp/codebase_files.txt | wc -l)"
 echo "Markdown:        $(grep '\.md$' /tmp/codebase_files.txt | wc -l)"
 echo "YAML/JSON:       $(grep -E '\.(yaml|yml|json)$' /tmp/codebase_files.txt | wc -l)"
@@ -133,14 +149,21 @@ echo ""
 echo "Directory breakdown (top level):"
 echo "=================================="
 for dir in */; do
-    if [[ "$dir" != "node_modules/" && "$dir" != ".git/" && "$dir" != "designs/" ]]; then
+    if [[ "$dir" != "node_modules/" && "$dir" != ".git/" && "$dir" != "designs/" && "$dir" != ".gemini/" ]]; then
         count=$(find "$dir" \( \
             -name "node_modules" -o \
             -name ".git" -o \
             -name ".next" -o \
             -name "dist" -o \
             -name "build" -o \
-            -name "coverage" \
+            -name "coverage" -o \
+            -name "target" -o \
+            -name ".gemini" -o \
+            -name "brain" -o \
+            -name ".turbo" -o \
+            -name ".vercel" -o \
+            -name ".cache" -o \
+            -name "out" \
         \) -prune -o -type f \( \
             ! -name "*.png" -a \
             ! -name "*.jpg" -a \
@@ -155,18 +178,25 @@ for dir in */; do
             ! -name "package-lock.json" -a \
             ! -name "yarn.lock" -a \
             ! -name "pnpm-lock.yaml" -a \
+            ! -name "Cargo.lock" -a \
+            ! -name "Pipfile.lock" -a \
+            ! -name "poetry.lock" -a \
+            ! -name "composer.lock" -a \
+            ! -name "Gemfile.lock" -a \
             ! -name "*.tsbuildinfo" -a \
             ! -name "coverage.out" -a \
             ! -name "*.log" -a \
             ! -name ".env" -a \
             ! -name ".env.*" -a \
+            ! -name "*.tmp" -a \
+            ! -name "*.temp" -a \
             ! -name "*.md" -a \
             ! -name "*.pb.go" -a \
             ! -name "*_pb.js" -a \
             ! -name "*_pb.d.ts" -a \
             ! -name "*_pb.ts" -a \
             ! -name "*.json" \
-        \) -print | wc -l)
+        \) -print | grep -v '/types/proto/' | wc -l)
         echo "$dir: $count files"
     fi
 done
