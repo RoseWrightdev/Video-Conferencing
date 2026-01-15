@@ -23,10 +23,12 @@ RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
     mkdir benches && \
     echo "fn main() {}" > benches/sfu_benchmarks.rs && \
+    echo "fn main() {}" > build.rs && \
     cargo build --release && \
-    rm -rf src benches
+    rm -rf src benches build.rs
 
-# Copy source code
+# Copy source code and build script
+COPY backend/rust/sfu/build.rs ./
 COPY backend/rust/sfu/src ./src
 COPY proto ./proto
 
