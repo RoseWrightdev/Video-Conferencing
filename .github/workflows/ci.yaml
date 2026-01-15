@@ -126,32 +126,56 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     
+    - name: Extract metadata for Backend
+      id: meta-backend
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}/backend
+        tags: |
+          type=raw,value=latest,enable={{is_default_branch}}
+          type=sha,prefix=
+    
     - name: Build and Push Backend
       uses: docker/build-push-action@v5
       with:
         context: .
         file: devops/docker/backend.dockerfile
         push: true
-        tags: |
-          ghcr.io/${{ github.repository }}/backend:latest
-          ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+        tags: ${{ steps.meta-backend.outputs.tags }}
+        labels: ${{ steps.meta-backend.outputs.labels }}
 
+    - name: Extract metadata for Frontend
+      id: meta-frontend
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}/frontend
+        tags: |
+          type=raw,value=latest,enable={{is_default_branch}}
+          type=sha,prefix=
+    
     - name: Build and Push Frontend
       uses: docker/build-push-action@v5
       with:
         context: .
         file: devops/docker/frontend.dockerfile
         push: true
-        tags: |
-          ghcr.io/${{ github.repository }}/frontend:latest
-          ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+        tags: ${{ steps.meta-frontend.outputs.tags }}
+        labels: ${{ steps.meta-frontend.outputs.labels }}
 
+    - name: Extract metadata for SFU
+      id: meta-sfu
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}/rust-sfu
+        tags: |
+          type=raw,value=latest,enable={{is_default_branch}}
+          type=sha,prefix=
+    
     - name: Build and Push SFU
       uses: docker/build-push-action@v5
       with:
         context: .
         file: devops/docker/rust-sfu.dockerfile
         push: true
-        tags: |
-          ghcr.io/${{ github.repository }}/rust-sfu:latest
-          ghcr.io/${{ github.repository }}/rust-sfu:${{ github.sha }}
+        tags: ${{ steps.meta-sfu.outputs.tags }}
+        labels: ${{ steps.meta-sfu.outputs.labels }}
