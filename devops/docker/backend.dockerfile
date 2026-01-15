@@ -38,8 +38,8 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates curl
 
 # Create non-root user
-RUN addgroup -g 65534 -S appuser && \
-    adduser -u 65534 -S appuser -G appuser
+RUN addgroup -g 10001 -S appuser && \
+    adduser -u 10001 -S appuser -G appuser
 
 # Copy timezone data
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
