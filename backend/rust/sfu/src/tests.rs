@@ -36,7 +36,9 @@ async fn test_broadcaster_add_writer() {
         "stream-1".to_owned(),
     ));
 
-    broadcaster.add_writer(track.clone(), 12345, 96).await;
+    broadcaster
+        .add_writer(track.clone(), "track-1".to_owned(), 12345, 96)
+        .await;
 
     let writers = broadcaster.writers.read().await;
     assert_eq!(writers.len(), 1);

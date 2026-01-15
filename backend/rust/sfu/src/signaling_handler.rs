@@ -93,4 +93,52 @@ mod tests {
         // Should run without panic
         perform_renegotiation(pc, event_tx, "user1".to_string(), signaling_lock, None).await;
     }
+
+    #[tokio::test]
+    async fn test_perform_renegotiation_with_track_event() {
+        let api = APIBuilder::new().build();
+        let pc = Arc::new(
+            api.new_peer_connection(RTCConfiguration::default())
+                .await
+                .unwrap(),
+        );
+        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+        let event_tx = Arc::new(Mutex::new(Some(tx)));
+        let signaling_lock = Arc::new(Mutex::new(()));
+
+        let track_event = Some(crate::pb::signaling::TrackAddedEvent {
+            user_id: "u1".to_string(),
+            stream_id: "s1".to_string(),
+            track_kind: "video".to_string(),
+        });
+
+        perform_renegotiation(
+            pc,
+            event_tx,
+            "user1".to_string(),
+            signaling_lock,
+            track_event,
+        )
+        .await;
+
+        // consume the event
+        let msg = rx.recv().await;
+        assert!(msg.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_perform_renegotiation_closed_channel() {
+        let api = APIBuilder::new().build();
+        let pc = Arc::new(
+            api.new_peer_connection(RTCConfiguration::default())
+                .await
+                .unwrap(),
+        );
+        // None channel
+        let event_tx = Arc::new(Mutex::new(None));
+        let signaling_lock = Arc::new(Mutex::new(()));
+
+        // Should just warn and return, no panic
+        perform_renegotiation(pc, event_tx, "user1".to_string(), signaling_lock, None).await;
+    }
 }

@@ -4,8 +4,7 @@ use tracing::{debug, error, info, warn};
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
-use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
-use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
+use webrtc::track::track_local::TrackLocalWriter;
 
 use crate::metrics::{
     SFU_KEYFRAMES_REQUESTED_TOTAL, SFU_PACKETS_DROPPED_TOTAL, SFU_PACKETS_FORWARDED_TOTAL,
@@ -43,7 +42,13 @@ impl TrackBroadcaster {
         }
     }
 
-    pub async fn add_writer(&self, track: Arc<TrackLocalStaticRTP>, ssrc: u32, payload_type: u8) {
+    pub async fn add_writer(
+        &self,
+        writer: Arc<dyn TrackLocalWriter + Send + Sync>,
+        track_id: String,
+        ssrc: u32,
+        payload_type: u8,
+    ) {
         // Buffer of 128 packets. At 50fps video, this is ~2.5 seconds.
         // For audio (20ms packets), this is ~2.5 seconds.
         let (tx, mut rx) = mpsc::channel::<webrtc::rtp::packet::Packet>(128);
@@ -56,13 +61,12 @@ impl TrackBroadcaster {
         });
 
         let kind = self.kind.clone();
-        let track_id = track.id().to_owned();
 
         // Spawn dedicated sender task for this writer
         tokio::spawn(async move {
             debug!(kind = %kind, track = %track_id, "[SFU] Started writer task");
             while let Some(packet) = rx.recv().await {
-                if let Err(e) = track.write_rtp(&packet).await {
+                if let Err(e) = writer.write_rtp(&packet).await {
                     if e.to_string().contains("Broken pipe")
                         || e.to_string().contains("Connection reset")
                     {
@@ -186,6 +190,7 @@ mod tests {
     use super::*;
     use webrtc::api::APIBuilder;
     use webrtc::peer_connection::configuration::RTCConfiguration;
+    use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 
     #[tokio::test]
     async fn test_broadcaster_add_writer_and_broadcast() {
@@ -209,7 +214,9 @@ mod tests {
         ));
 
         // Add writer
-        broadcaster.add_writer(track.clone(), 111, 96).await;
+        broadcaster
+            .add_writer(track.clone(), "track1".to_string(), 111, 96)
+            .await;
 
         assert_eq!(broadcaster.writers.read().await.len(), 1);
 
@@ -244,5 +251,76 @@ mod tests {
             12345,
         );
         broadcaster_audio.request_keyframe().await;
+    }
+
+    #[derive(Debug)]
+    struct MockTrackWriter {
+        fail_kind: Option<std::io::ErrorKind>,
+        fail_msg: Option<String>,
+        write_called: Arc<tokio::sync::Mutex<bool>>,
+    }
+
+    #[async_trait::async_trait]
+    impl TrackLocalWriter for MockTrackWriter {
+        async fn write_rtp(
+            &self,
+            _p: &webrtc::rtp::packet::Packet,
+        ) -> Result<usize, webrtc::Error> {
+            *self.write_called.lock().await = true;
+            if let Some(_kind) = self.fail_kind {
+                let msg = self.fail_msg.clone().unwrap_or("MOCK ERROR".to_string());
+                // Use generic error construction
+                return Err(webrtc::Error::new(msg));
+            }
+            Ok(100)
+        }
+        async fn write(&self, _b: &[u8]) -> Result<usize, webrtc::Error> {
+            Ok(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_broadcaster_writer_error_handling() {
+        let api = APIBuilder::new().build();
+        let config = RTCConfiguration::default();
+        let pc = Arc::new(api.new_peer_connection(config).await.unwrap());
+        let codec = RTCRtpCodecCapability {
+            mime_type: "video/vp8".into(),
+            ..Default::default()
+        };
+        let broadcaster = TrackBroadcaster::new("video".into(), codec, pc, 12345);
+
+        // 1. Test "Broken pipe" (should be debug log)
+        let called1 = Arc::new(tokio::sync::Mutex::new(false));
+        let writer1 = Arc::new(MockTrackWriter {
+            fail_kind: Some(std::io::ErrorKind::BrokenPipe),
+            fail_msg: Some("Broken pipe".into()),
+            write_called: called1.clone(),
+        });
+
+        broadcaster.add_writer(writer1, "w1".into(), 111, 96).await;
+
+        let mut packet = webrtc::rtp::packet::Packet::default();
+        packet.header.ssrc = 12345;
+
+        broadcaster.broadcast(&mut packet).await;
+
+        // Give time for async task
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        assert!(*called1.lock().await);
+
+        // 2. Test Other Error (should be warn log)
+        let called2 = Arc::new(tokio::sync::Mutex::new(false));
+        let writer2 = Arc::new(MockTrackWriter {
+            fail_kind: Some(std::io::ErrorKind::Other),
+            fail_msg: Some("Random failure".into()),
+            write_called: called2.clone(),
+        });
+
+        broadcaster.add_writer(writer2, "w2".into(), 222, 96).await;
+        broadcaster.broadcast(&mut packet).await;
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        assert!(*called2.lock().await);
     }
 }

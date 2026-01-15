@@ -1,7 +1,12 @@
+use anyhow::Result;
+use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace, warn};
+use webrtc::interceptor::Attributes;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
+use webrtc::rtp::packet::Packet;
+use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::TrackLocal;
 use webrtc::track::track_remote::TrackRemote;
@@ -9,6 +14,42 @@ use webrtc::track::track_remote::TrackRemote;
 use crate::broadcaster::TrackBroadcaster;
 use crate::pb;
 use crate::signaling_handler::perform_renegotiation;
+
+#[async_trait]
+pub trait RemoteTrackSource: Send + Sync {
+    fn id(&self) -> String;
+    fn stream_id(&self) -> String;
+    fn kind(&self) -> String;
+    fn ssrc(&self) -> u32;
+    fn codec_capability(&self) -> RTCRtpCodecCapability;
+    fn payload_type(&self) -> u8;
+    async fn read_rtp(&self) -> Result<(Packet, Attributes)>;
+}
+
+#[async_trait]
+impl RemoteTrackSource for TrackRemote {
+    fn id(&self) -> String {
+        self.id().to_owned()
+    }
+    fn stream_id(&self) -> String {
+        self.stream_id().to_owned()
+    }
+    fn kind(&self) -> String {
+        self.kind().to_string()
+    }
+    fn ssrc(&self) -> u32 {
+        self.ssrc()
+    }
+    fn codec_capability(&self) -> RTCRtpCodecCapability {
+        self.codec().capability.clone()
+    }
+    fn payload_type(&self) -> u8 {
+        self.payload_type()
+    }
+    async fn read_rtp(&self) -> Result<(Packet, Attributes)> {
+        self.read_rtp().await.map_err(|e| e.into())
+    }
+}
 
 pub fn attach_track_handler(
     pc: &Arc<RTCPeerConnection>,
@@ -51,7 +92,7 @@ pub fn attach_track_handler(
 }
 
 pub async fn handle_new_track(
-    track: Arc<TrackRemote>,
+    track: Arc<dyn RemoteTrackSource>,
     user_id: String,
     room_id: String,
     peers: crate::types::PeerMap,
@@ -59,13 +100,13 @@ pub async fn handle_new_track(
     pc_capture: Arc<RTCPeerConnection>,
     room_manager: Arc<crate::room_manager::RoomManager>,
 ) {
-    let track_kind = track.kind().to_string();
+    let track_kind = track.kind();
     let track_ssrc = track.ssrc();
 
     info!(user_id = %user_id, kind = %track.kind(), "Received track from user");
 
     // 1. Create Broadcaster
-    let capability = track.codec().capability.clone();
+    let capability = track.codec_capability();
     let broadcaster = Arc::new(TrackBroadcaster::new(
         track_kind.clone(),
         capability,
@@ -76,8 +117,8 @@ pub async fn handle_new_track(
     let track_key = (
         room_id.clone(),
         user_id.clone(),
-        track.stream_id().to_owned(),
-        track.id().to_owned(),
+        track.stream_id(),
+        track.id(),
     );
     info!(?track_key, "[SFU] Created broadcaster for track");
     tracks_map.insert(track_key, broadcaster.clone());
@@ -98,10 +139,10 @@ pub async fn handle_new_track(
             info!(target_user = %other_peer.user_id, "[SFU] Forwarding new track");
 
             let broadcaster_clone = broadcaster.clone();
-            let track_id_clone = track.id().to_owned();
-            let track_stream_id_clone = track.stream_id().to_owned();
-            let track_kind_clone = track.kind().to_string();
-            let capability_clone = track.codec().capability.clone();
+            let track_id_clone = track.id();
+            let track_stream_id_clone = track.stream_id();
+            let track_kind_clone = track.kind();
+            let capability_clone = track.codec_capability();
             let source_user_id = user_id.clone();
 
             let other_peer_pc = other_peer.pc.clone();
@@ -153,7 +194,10 @@ pub async fn handle_new_track(
                     incoming_pt
                 };
                 info!(outgoing_pt = %pt, ssrc = %ssrc, "[SFU] on_track forwarding: Resolved Outgoing PT");
-                broadcaster_clone.add_writer(local_track, ssrc, pt).await;
+                let track_id_for_writer = local_track.id().to_owned();
+                broadcaster_clone
+                    .add_writer(local_track, track_id_for_writer, ssrc, pt)
+                    .await;
 
                 // Delayed Keyframe Request - Burst Mode to ensure delivery after DTLS
                 broadcaster_clone.clone().schedule_pli_retry();
@@ -180,8 +224,8 @@ pub async fn handle_new_track(
     // 3. Start Forwarding Loop
     // Read from `track` (Remote), Write to `broadcaster` (Locals)
     let _media_ssrc = track.ssrc();
-    let track_id_log = track.id().to_owned();
-    let mime_type = track.codec().capability.mime_type.to_lowercase();
+    let track_id_log = track.id();
+    let mime_type = track.codec_capability().mime_type.to_lowercase();
 
     tokio::spawn(async move {
         let mut packet_count = 0;
@@ -356,5 +400,141 @@ mod tests {
         assert!(true); // Just to use the block.
                        // Actually, to fix "unused assignment", we must READ found.
         let _ = found;
+    }
+    struct MockTrack {
+        id: String,
+        stream_id: String,
+        kind: String,
+        ssrc: u32,
+        capability: RTCRtpCodecCapability,
+        // We use a Mutex to allow mutable access in the async method
+        packet_rx: Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<Result<Packet>>>>,
+    }
+
+    #[async_trait]
+    impl RemoteTrackSource for MockTrack {
+        fn id(&self) -> String {
+            self.id.clone()
+        }
+        fn stream_id(&self) -> String {
+            self.stream_id.clone()
+        }
+        fn kind(&self) -> String {
+            self.kind.clone()
+        }
+        fn ssrc(&self) -> u32 {
+            self.ssrc
+        }
+        fn codec_capability(&self) -> RTCRtpCodecCapability {
+            self.capability.clone()
+        }
+        fn payload_type(&self) -> u8 {
+            96
+        }
+        async fn read_rtp(&self) -> Result<(Packet, Attributes)> {
+            let mut rx = self.packet_rx.lock().await;
+            let rx_ref: &mut tokio::sync::mpsc::Receiver<Result<Packet>> = &mut *rx;
+            match rx_ref.recv().await {
+                Some(Ok(p)) => Ok((p, Attributes::new())),
+                Some(Err(e)) => Err(e),
+                None => Err(anyhow::anyhow!("Mock channel closed")),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_new_track_mocked() {
+        let api = MediaSetup::create_webrtc_api();
+        let config = RTCConfiguration::default();
+        let pc_capture = Arc::new(api.new_peer_connection(config).await.unwrap());
+
+        let peers = Arc::new(DashMap::new());
+        let tracks = Arc::new(DashMap::new());
+        let room_manager = Arc::new(crate::room_manager::RoomManager::new());
+
+        // Create mock track channel
+        let (tx, rx): (
+            tokio::sync::mpsc::Sender<Result<Packet>>,
+            tokio::sync::mpsc::Receiver<Result<Packet>>,
+        ) = tokio::sync::mpsc::channel(10);
+        let mock_track = Arc::new(MockTrack {
+            id: "mock_track_id".into(),
+            stream_id: "mock_stream_id".into(),
+            kind: "video".into(),
+            ssrc: 12345,
+            capability: RTCRtpCodecCapability {
+                mime_type: "video/vp8".into(),
+                ..Default::default()
+            },
+            packet_rx: Arc::new(tokio::sync::Mutex::new(rx)),
+        });
+
+        let room_id = "mock_room".to_string();
+        let user_id = "mock_user".to_string();
+
+        // Spawn handler
+        // We do this in a spawn to let it run concurrently, but we can also just let it run until we close channel?
+        // Actually `handle_new_track` spawns the forwarding loop and returns.
+        // Wait, `handle_new_track` signature is `pub async fn`.
+        // In `handle_new_track`, it spawns `tokio::spawn(async move { loop { ... } })` at the end.
+        // So calling it awaits the setup, but returns while the loop runs.
+        handle_new_track(
+            mock_track.clone(),
+            user_id.clone(),
+            room_id.clone(),
+            peers.clone(),
+            tracks.clone(),
+            pc_capture.clone(),
+            room_manager.clone(),
+        )
+        .await;
+
+        // Verify Broadcaster Created
+        let track_key = (
+            room_id.clone(),
+            user_id.clone(),
+            "mock_stream_id".to_string(),
+            "mock_track_id".to_string(),
+        );
+        assert!(tracks.contains_key(&track_key));
+        let broadcaster = tracks.get(&track_key).unwrap().value().clone();
+
+        // Add a writer to the broadcaster to verify packet forwarding
+        // We need a TrackLocal to add a writer.
+        let codec = RTCRtpCodecCapability {
+            mime_type: "video/vp8".into(),
+            ..Default::default()
+        };
+        let track_local = Arc::new(TrackLocalStaticRTP::new(
+            codec,
+            "l_id".into(),
+            "l_stream".into(),
+        ));
+
+        broadcaster
+            .add_writer(track_local.clone(), "l_id".into(), 555, 96)
+            .await;
+
+        // Send a packet
+        let mut packet = Packet::default();
+        packet.header.ssrc = 12345;
+        packet.payload = vec![0x00, 0x01, 0x02].into(); // Not a keyframe (VP8 first byte 0 -> keyframe? payload[0]&1 == 0)
+                                                        // 0x00 is binary 00000000. & 1 is 0. So it IS a keyframe?
+                                                        // VP8 keyframe: (payload[0] & 0x01) == 0. Yes.
+
+        let payload: Result<Packet> = Ok(packet.clone());
+        tx.send(payload).await.unwrap();
+
+        // Give it a moment to process
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Check if keyframe was marked (since we sent a keyframe)
+        let last_kf = broadcaster
+            .last_keyframe_ts
+            .load(std::sync::atomic::Ordering::Relaxed);
+        assert!(last_kf > 0, "Keyframe should have been detected");
+
+        // Close channel to stop the loop
+        drop(tx);
     }
 }

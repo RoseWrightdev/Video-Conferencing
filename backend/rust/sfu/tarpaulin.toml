@@ -2,5 +2,8 @@
 files = [
     "src/generated/*",
     "src/sfu_load_sim.rs",
+    "src/main.rs",
+    "src/metrics.rs",
+    "src/tests.rs",
     "build.rs"
 ]

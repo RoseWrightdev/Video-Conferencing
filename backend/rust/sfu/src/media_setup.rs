@@ -1,4 +1,5 @@
 use std::env;
+use tracing::error;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
@@ -9,7 +10,6 @@ use webrtc::peer_connection::policy::bundle_policy::RTCBundlePolicy;
 use webrtc::rtp_transceiver::rtp_codec::{
     RTCRtpCodecCapability, RTCRtpHeaderExtensionCapability, RTPCodecType,
 };
-use tracing::error;
 
 pub struct MediaSetup;
 
@@ -193,7 +193,9 @@ impl MediaSetup {
                         "[SFU] subscribe_to_existing_tracks: Resolved PT: {}, SSRC: {}",
                         pt, ssrc
                     );
-                    broadcaster.add_writer(local_track, ssrc, pt).await;
+                    broadcaster
+                        .add_writer(local_track, t_track.clone(), ssrc, pt)
+                        .await;
 
                     // delayed Keyframe Request
                     broadcaster.clone().schedule_pli_retry();
