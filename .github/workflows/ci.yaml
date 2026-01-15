@@ -57,6 +57,11 @@ jobs:
         cd frontend
         npm ci
 
+    - name: Install Playwright Browsers
+      run: |
+        cd frontend
+        npx playwright install --with-deps chromium
+
     - name: Lint
       run: |
         cd frontend
