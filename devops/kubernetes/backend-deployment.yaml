@@ -24,7 +24,7 @@ metadata:
   labels:
     app.kubernetes.io/name: backend
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: social-media-platform
+    app.kubernetes.io/part-of: video-conferencing-platform
 spec:
   replicas: 2
   strategy:
@@ -41,7 +41,7 @@ spec:
       labels:
         app.kubernetes.io/name: backend
         app.kubernetes.io/component: api
-        app.kubernetes.io/part-of: social-media-platform
+        app.kubernetes.io/part-of: video-conferencing-platform
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
@@ -71,7 +71,7 @@ spec:
       containers:
       # Main backend container
       - name: backend
-        image: social-media/backend:latest
+        image: video-conferencing/backend:latest
         imagePullPolicy: Always
         ports:
         - name: http
@@ -129,7 +129,7 @@ metadata:
   labels:
     app.kubernetes.io/name: backend
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: social-media-platform
+    app.kubernetes.io/part-of: video-conferencing-platform
 spec:
   type: ClusterIP
   selector:

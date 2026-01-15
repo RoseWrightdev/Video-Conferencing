@@ -111,7 +111,7 @@ deploy_platform() {
     deploy "devops/kubernetes/security-policies.yaml" "Security Policies and RBAC"
     deploy "devops/kubernetes/backend-secrets.yaml" "Backend Secrets"
     deploy "devops/kubernetes/backend-deployment.yaml" "Backend Services"
-    deploy "devops/kubernetes/rust-sfu-deployment.yaml" "Rust SFU Services"
+    deploy "devops/kubernetes/rust-sfu-fleet.yaml" "Rust SFU Fleet"
     deploy "devops/kubernetes/gateway/gateway.yaml" "Gateway Configuration"
     deploy "devops/kubernetes/gateway/envoy-config.yaml" "Envoy Configuration"
     deploy "devops/kubernetes/gateway/routes.yaml" "HTTP Routes"
