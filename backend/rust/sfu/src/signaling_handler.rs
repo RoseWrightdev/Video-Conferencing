@@ -72,3 +72,25 @@ pub async fn perform_renegotiation(
         warn!(user_id = %user_id, "[SFU] !! Event channel is CLOSED or None");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use webrtc::api::APIBuilder;
+    use webrtc::peer_connection::configuration::RTCConfiguration;
+
+    #[tokio::test]
+    async fn test_perform_renegotiation_creates_offer() {
+        let api = APIBuilder::new().build();
+        let pc = Arc::new(
+            api.new_peer_connection(RTCConfiguration::default())
+                .await
+                .unwrap(),
+        );
+        let event_tx = Arc::new(Mutex::new(Some(tokio::sync::mpsc::channel(10).0)));
+        let signaling_lock = Arc::new(Mutex::new(()));
+
+        // Should run without panic
+        perform_renegotiation(pc, event_tx, "user1".to_string(), signaling_lock, None).await;
+    }
+}

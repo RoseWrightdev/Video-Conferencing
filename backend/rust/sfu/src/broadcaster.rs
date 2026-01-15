@@ -180,3 +180,69 @@ impl TrackBroadcaster {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use webrtc::api::APIBuilder;
+    use webrtc::peer_connection::configuration::RTCConfiguration;
+
+    #[tokio::test]
+    async fn test_broadcaster_add_writer_and_broadcast() {
+        let api = APIBuilder::new().build();
+        let pc = Arc::new(
+            api.new_peer_connection(RTCConfiguration::default())
+                .await
+                .unwrap(),
+        );
+        let codec = RTCRtpCodecCapability {
+            mime_type: "video/VP8".to_owned(),
+            ..Default::default()
+        };
+        let broadcaster =
+            TrackBroadcaster::new("video".to_string(), codec.clone(), pc.clone(), 12345);
+
+        let track = Arc::new(TrackLocalStaticRTP::new(
+            codec,
+            "track1".to_owned(),
+            "stream1".to_owned(),
+        ));
+
+        // Add writer
+        broadcaster.add_writer(track.clone(), 111, 96).await;
+
+        assert_eq!(broadcaster.writers.read().await.len(), 1);
+
+        // Broadcast a packet
+        let mut packet = webrtc::rtp::packet::Packet::default();
+        packet.header.ssrc = 12345;
+        packet.payload = vec![1, 2, 3].into();
+
+        broadcaster.broadcast(&mut packet).await;
+    }
+
+    #[tokio::test]
+    async fn test_request_keyframe() {
+        let api = APIBuilder::new().build();
+        let pc = Arc::new(
+            api.new_peer_connection(RTCConfiguration::default())
+                .await
+                .unwrap(),
+        );
+        let codec = RTCRtpCodecCapability {
+            mime_type: "video/VP8".to_owned(),
+            ..Default::default()
+        };
+        let broadcaster = TrackBroadcaster::new("video".to_string(), codec, pc, 12345);
+
+        broadcaster.request_keyframe().await;
+
+        let broadcaster_audio = TrackBroadcaster::new(
+            "audio".to_string(),
+            RTCRtpCodecCapability::default(),
+            Arc::clone(&broadcaster.source_pc),
+            12345,
+        );
+        broadcaster_audio.request_keyframe().await;
+    }
+}

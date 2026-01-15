@@ -9,13 +9,13 @@ use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 use crate::media_setup::MediaSetup;
+use crate::metrics::{SFU_ACTIVE_PEERS, SFU_ACTIVE_ROOMS};
 use crate::pb;
 use crate::pb::sfu::sfu_service_server::SfuService;
 use crate::pb::sfu::{
     CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, DeleteSessionResponse,
     ListenRequest, SfuEvent, SignalMessage, SignalResponse,
 };
-use crate::metrics::{SFU_ACTIVE_PEERS, SFU_ACTIVE_ROOMS};
 use crate::peer_manager::Peer;
 use crate::room_manager::RoomManager;
 use crate::track_handler;
@@ -31,9 +31,8 @@ pub struct MySfu {
     pub room_manager: Arc<RoomManager>,
 }
 
-#[tonic::async_trait]
-impl SfuService for MySfu {
-    async fn create_session(
+impl MySfu {
+    pub async fn create_session_internal(
         &self,
         request: Request<CreateSessionRequest>,
     ) -> Result<Response<CreateSessionResponse>, Status> {
@@ -42,7 +41,9 @@ impl SfuService for MySfu {
         let user_id = req.user_id.clone();
 
         if room_id.is_empty() || user_id.is_empty() {
-             return Err(Status::invalid_argument("room_id and user_id must not be empty"));
+            return Err(Status::invalid_argument(
+                "room_id and user_id must not be empty",
+            ));
         }
 
         info!(room = %room_id, user = %user_id, "CreateSession called");
@@ -98,7 +99,7 @@ impl SfuService for MySfu {
         // 6. Save to Map
         let session_key = (room_id.clone(), user_id.clone());
         self.peers.insert(session_key.clone(), peer);
-        
+
         // 7. Add to RoomManager & Update Metrics
         SFU_ACTIVE_PEERS.inc();
         if self.room_manager.add_user(room_id.clone(), user_id.clone()) {
@@ -125,24 +126,10 @@ impl SfuService for MySfu {
                 gather_complete.recv(),
             )
             .await;
-            
+
             if timeout_res.is_err() {
-                 tracing::warn!(session = ?session_key, "ICE gathering timed out");
-                 // We could return Status::unavailable("ICE gathering timed out") here if we want to be strict,
-                 // or just proceed with what we have. The prompt suggests unavailable if ICE fails or times out.
-                 // let's be strict only if it's completely failed, usually partial candidates are fine. 
-                 // But strictly following prompt: "Status::unavailable: If ICE gathering fails or times out"
-                 // However, usually we send what we have. Let's log warning mostly, unless peer connection is closed.
-                 // If we interpret the prompt strictly:
-                 // return Err(Status::unavailable("ICE gathering timed out"));
-                 // But often 'timed out' just means 'stopped waiting', not necessarily 'failed'.
-                 // Let's assume the user wants to signal retry if it fails.
-                 // I will stick to warning for timeout but proceed, unless it's critical. 
-                 // Actually, if we don't have candidates, connection might fail.
-                 // Let's stick to the current flow but add a comment or better handling if needed.
-                 // Re-reading prompt: "Status::unavailable: If ICE gathering fails or times out (implies retry might work)."
-                 // Okay, I will return Unavailable on timeout.
-                 return Err(Status::unavailable("ICE gathering timed out, please retry"));
+                tracing::warn!(session = ?session_key, "ICE gathering timed out");
+                return Err(Status::unavailable("ICE gathering timed out, please retry"));
             }
         }
 
@@ -154,6 +141,71 @@ impl SfuService for MySfu {
         Ok(Response::new(CreateSessionResponse { sdp_offer: sdp }))
     }
 
+    pub async fn listen_events_internal(
+        &self,
+        request: Request<ListenRequest>,
+    ) -> Result<Response<ReceiverStream<Result<SfuEvent, Status>>>, Status> {
+        let req = request.into_inner();
+        let session_key = (req.room_id.clone(), req.user_id.clone());
+
+        if req.room_id.is_empty() || req.user_id.is_empty() {
+            return Err(Status::invalid_argument(
+                "room_id and user_id must not be empty",
+            ));
+        }
+
+        info!(?session_key, "ListenEvents called");
+
+        let (tx, rx) = mpsc::channel(100);
+
+        if let Some(peer) = self.peers.get(&session_key) {
+            let mut event_tx = peer.event_tx.lock().await;
+            *event_tx = Some(tx.clone());
+
+            // Send initial mappings for existing tracks that THIS peer is subscribed to
+            let mapping = peer.track_mapping.clone();
+            for mapping_entry in mapping.iter() {
+                let stream_id = mapping_entry.key();
+                let source_user_id = mapping_entry.value();
+
+                let mut track_kind = "video".to_string();
+                // Find the broadcaster to get the correct kind
+                for track_entry in self.tracks.iter() {
+                    let (t_room, t_user, t_stream, _t_track) = track_entry.key();
+                    if t_room == &req.room_id && t_user == source_user_id && t_stream == stream_id {
+                        track_kind = track_entry.value().kind.clone();
+                        break;
+                    }
+                }
+
+                let event = SfuEvent {
+                    payload: Some(pb::sfu::sfu_event::Payload::TrackEvent(
+                        pb::signaling::TrackAddedEvent {
+                            user_id: source_user_id.clone(),
+                            stream_id: stream_id.clone(),
+                            track_kind,
+                        },
+                    )),
+                };
+                let _ = tx.send(Ok(event)).await;
+            }
+        } else {
+            return Err(Status::not_found("Session not found"));
+        }
+
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tonic::async_trait]
+impl SfuService for MySfu {
+    async fn create_session(
+        &self,
+        request: Request<CreateSessionRequest>,
+    ) -> Result<Response<CreateSessionResponse>, Status> {
+        self.create_session_internal(request).await
+    }
+
     async fn listen_events(
         &self,
         request: Request<ListenRequest>,
@@ -162,7 +214,9 @@ impl SfuService for MySfu {
         let session_key = (req.room_id.clone(), req.user_id.clone());
 
         if req.room_id.is_empty() || req.user_id.is_empty() {
-            return Err(Status::invalid_argument("room_id and user_id must not be empty"));
+            return Err(Status::invalid_argument(
+                "room_id and user_id must not be empty",
+            ));
         }
 
         info!(?session_key, "ListenEvents called");
@@ -227,10 +281,13 @@ impl SfuService for MySfu {
                 pb::sfu::signal_message::Payload::SdpAnswer(sdp) => {
                     info!(session = ?session_key, "Applying SDP Answer");
                     let desc = RTCSessionDescription::answer(sdp).map_err(|e| {
-                         Status::invalid_argument(format!("Invalid SDP Answer: {}", e))
+                        Status::invalid_argument(format!("Invalid SDP Answer: {}", e))
                     })?;
                     pc.set_remote_description(desc).await.map_err(|e| {
-                        Status::invalid_argument(format!("Failed to set remote description (answer): {}", e))
+                        Status::invalid_argument(format!(
+                            "Failed to set remote description (answer): {}",
+                            e
+                        ))
                     })?;
                 }
                 pb::sfu::signal_message::Payload::IceCandidate(candidate_str) => {
@@ -329,5 +386,85 @@ impl SfuService for MySfu {
             }
         }
         Ok(Response::new(DeleteSessionResponse { success: true }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pb::sfu::sfu_service_server::SfuService;
+    use dashmap::DashMap; // Ensure trait is in scope
+
+    fn create_test_sfu() -> MySfu {
+        MySfu {
+            peers: Arc::new(DashMap::new()),
+            tracks: Arc::new(DashMap::new()),
+            room_manager: Arc::new(RoomManager::new()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_session_missing_args() {
+        let sfu = create_test_sfu();
+        let req = Request::new(CreateSessionRequest {
+            room_id: "".to_string(),
+            user_id: "user1".to_string(),
+        });
+        let res = sfu.create_session(req).await;
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn test_create_session_success() {
+        let sfu = create_test_sfu();
+        let req = Request::new(CreateSessionRequest {
+            room_id: "room1".to_string(),
+            user_id: "user1".to_string(),
+        });
+        let res = sfu.create_session(req).await;
+        assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_listen_events_missing_args() {
+        let sfu = create_test_sfu();
+        let req = Request::new(ListenRequest {
+            room_id: "".to_string(),
+            user_id: "user1".to_string(),
+        });
+        let res = sfu.listen_events(req).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_listen_events_session_not_found() {
+        let sfu = create_test_sfu();
+        let req = Request::new(ListenRequest {
+            room_id: "room1".to_string(),
+            user_id: "user1".to_string(),
+        });
+        let res = sfu.listen_events(req).await;
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn test_delete_session() {
+        let sfu = create_test_sfu();
+
+        let req = Request::new(CreateSessionRequest {
+            room_id: "room1".to_string(),
+            user_id: "user1".to_string(),
+        });
+        let _ = sfu.create_session(req).await.unwrap();
+
+        let req_del = Request::new(DeleteSessionRequest {
+            room_id: "room1".to_string(),
+            user_id: "user1".to_string(),
+        });
+        let res = sfu.delete_session(req_del).await;
+        assert!(res.is_ok());
+        assert_eq!(sfu.peers.len(), 0);
     }
 }

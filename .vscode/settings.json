@@ -1,5 +1,8 @@
 {
   "typescript.suggest.autoImports": true,
+  "rust-analyzer.linkedProjects": [
+    "backend/rust/sfu/Cargo.toml"
+  ],
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
   },

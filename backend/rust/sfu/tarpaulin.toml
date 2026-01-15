@@ -1,0 +1,6 @@
+[ignore]
+files = [
+    "src/generated/*",
+    "src/sfu_load_sim.rs",
+    "build.rs"
+]
