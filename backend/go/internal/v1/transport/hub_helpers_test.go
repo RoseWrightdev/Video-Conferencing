@@ -16,7 +16,7 @@ import (
 func TestExtractToken_FromHeader(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -37,7 +37,7 @@ func TestExtractToken_FromHeader(t *testing.T) {
 func TestExtractToken_FromQuery(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -57,7 +57,7 @@ func TestExtractToken_FromQuery(t *testing.T) {
 func TestExtractToken_Missing(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -131,7 +131,7 @@ func TestValidateOrigin_SchemeAndHostMatchRequired(t *testing.T) {
 func TestAuthenticateUser_Valid(t *testing.T) {
 	validator := &MockTokenValidator{shouldFail: false}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	claims, err := hub.authenticateUser("valid-token")
 
@@ -143,7 +143,7 @@ func TestAuthenticateUser_Valid(t *testing.T) {
 func TestAuthenticateUser_Invalid(t *testing.T) {
 	validator := &MockTokenValidator{shouldFail: true}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	claims, err := hub.authenticateUser("invalid-token")
 
@@ -157,7 +157,7 @@ func TestAuthenticateUser_Invalid(t *testing.T) {
 func TestSetupClientConnection_WithUsername(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	mockConn := &MockConnection{}
 	claims := &auth.CustomClaims{
@@ -187,7 +187,7 @@ func TestSetupClientConnection_WithUsername(t *testing.T) {
 func TestSetupClientConnection_WithoutUsername(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	mockConn := &MockConnection{}
 	claims := &auth.CustomClaims{
@@ -215,7 +215,7 @@ func TestSetupClientConnection_WithoutUsername(t *testing.T) {
 func TestSetupClientConnection_FallbackToEmail(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	mockConn := &MockConnection{}
 	claims := &auth.CustomClaims{
@@ -243,7 +243,7 @@ func TestSetupClientConnection_FallbackToEmail(t *testing.T) {
 func TestSetupClientConnection_DevModeOverride(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, true)
+	hub := NewHub(validator, mockBus, true, newMockRateLimiter())
 
 	mockConn := &MockConnection{}
 	claims := &auth.CustomClaims{

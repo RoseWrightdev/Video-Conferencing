@@ -1,4 +1,6 @@
 backend/go/.env
+.env*
+**/.env*
 backend/go/session
 .DS_Store
 temp

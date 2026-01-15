@@ -10,6 +10,7 @@ import (
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/ratelimit"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/room"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 
@@ -28,6 +29,7 @@ type Hub struct {
 	cleanupGracePeriod  time.Duration                    // Optional grace period for room deletion w/ no users
 	devMode             bool                             // Disable rate limiting in development mode
 	sfu                 types.SFUProvider
+	rateLimiter         *ratelimit.RateLimiter
 }
 
 // getSFUClientFromEnv is a helper to connect to SFU based on environment variables.
@@ -53,12 +55,12 @@ func getSFUClientFromEnv() types.SFUProvider {
 }
 
 // NewHub creates a new Hub and configures it with its dependencies.
-func NewHub(validator types.TokenValidator, bus types.BusService, devMode bool) *Hub {
-	return NewHubWithSFU(validator, bus, devMode, getSFUClientFromEnv())
+func NewHub(validator types.TokenValidator, bus types.BusService, devMode bool, rateLimiter *ratelimit.RateLimiter) *Hub {
+	return NewHubWithSFU(validator, bus, devMode, getSFUClientFromEnv(), rateLimiter)
 }
 
 // NewHubWithSFU creates a new Hub with a specific SFU provider.
-func NewHubWithSFU(validator types.TokenValidator, bus types.BusService, devMode bool, sfu types.SFUProvider) *Hub {
+func NewHubWithSFU(validator types.TokenValidator, bus types.BusService, devMode bool, sfu types.SFUProvider, rateLimiter *ratelimit.RateLimiter) *Hub {
 	return &Hub{
 		rooms:               make(map[types.RoomIdType]*room.Room),
 		validator:           validator,
@@ -67,11 +69,18 @@ func NewHubWithSFU(validator types.TokenValidator, bus types.BusService, devMode
 		cleanupGracePeriod:  5 * time.Second,
 		devMode:             devMode,
 		sfu:                 sfu,
+		rateLimiter:         rateLimiter,
 	}
 }
 
 // ServeWs authenticates the user and upgrades to WebSocket connection.
 func (h *Hub) ServeWs(c *gin.Context) {
+	// 0. Rate Limiting Check (IP based first)
+	// We check this before anything else to save resources
+	if !h.rateLimiter.CheckWebSocket(c) {
+		return // Response already written by CheckWebSocket
+	}
+
 	// 1-3. Validation (pure logic + Gin bridge)
 	tokenResult, err := h.extractToken(c)
 	if err != nil {

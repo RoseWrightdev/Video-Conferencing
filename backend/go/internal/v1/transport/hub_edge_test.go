@@ -5,10 +5,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/ratelimit"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/room"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 	"github.com/stretchr/testify/assert"
 )
+
+func newMockRateLimiter() *ratelimit.RateLimiter {
+	cfg := &config.Config{
+		RateLimitApiGlobal:   "1000-M",
+		RateLimitApiPublic:   "100-M",
+		RateLimitApiRooms:    "100-M",
+		RateLimitApiMessages: "500-M",
+		RateLimitWsIp:        "100-M",
+		RateLimitWsUser:      "10-M",
+	}
+	rl, _ := ratelimit.NewRateLimiter(cfg, nil)
+	return rl
+}
 
 // Additional NewHub tests for better coverage
 
@@ -16,7 +31,7 @@ func TestNewHub_WithDevMode(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
 
-	hub := NewHub(validator, mockBus, true)
+	hub := NewHub(validator, mockBus, true, newMockRateLimiter())
 
 	assert.NotNil(t, hub)
 	assert.True(t, hub.devMode, "devMode should be enabled")
@@ -26,7 +41,7 @@ func TestNewHub_WithDevMode(t *testing.T) {
 func TestNewHub_WithoutBus(t *testing.T) {
 	validator := &MockTokenValidator{}
 
-	hub := NewHub(validator, nil, false)
+	hub := NewHub(validator, nil, false, newMockRateLimiter())
 
 	assert.NotNil(t, hub)
 	assert.Nil(t, hub.bus, "bus should be nil")
@@ -36,7 +51,7 @@ func TestNewHub_InitializesEmptyMaps(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
 
-	hub := NewHub(validator, mockBus, false)
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	assert.NotNil(t, hub.rooms)
 	assert.Equal(t, 0, len(hub.rooms), "rooms map should be empty initially")

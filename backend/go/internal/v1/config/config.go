@@ -28,6 +28,14 @@ type Config struct {
 	SkipAuth        bool
 	DevelopmentMode bool
 	AllowedOrigins  string
+
+	// Rate Limits
+	RateLimitApiGlobal   string
+	RateLimitApiPublic   string
+	RateLimitApiRooms    string
+	RateLimitApiMessages string
+	RateLimitWsIp        string
+	RateLimitWsUser      string
 }
 
 // ValidateEnv validates all required environment variables and returns a Config object
@@ -96,6 +104,14 @@ func ValidateEnv() (*Config, error) {
 	cfg.DevelopmentMode = os.Getenv("DEVELOPMENT_MODE") == "true"
 	cfg.AllowedOrigins = os.Getenv("ALLOWED_ORIGINS")
 
+	// Rate Limits (Defaults: M = Minute, H = Hour)
+	cfg.RateLimitApiGlobal = getEnvOrDefault("RATE_LIMIT_API_GLOBAL", "1000-M")
+	cfg.RateLimitApiPublic = getEnvOrDefault("RATE_LIMIT_API_PUBLIC", "100-M")
+	cfg.RateLimitApiRooms = getEnvOrDefault("RATE_LIMIT_API_ROOMS", "100-M")
+	cfg.RateLimitApiMessages = getEnvOrDefault("RATE_LIMIT_API_MESSAGES", "500-M")
+	cfg.RateLimitWsIp = getEnvOrDefault("RATE_LIMIT_WS_IP", "100-M")
+	cfg.RateLimitWsUser = getEnvOrDefault("RATE_LIMIT_WS_USER", "10-M")
+
 	// If there are validation errors, return them
 	if len(errors) > 0 {
 		return nil, fmt.Errorf("environment validation failed:\n  - %s", strings.Join(errors, "\n  - "))
@@ -140,7 +156,16 @@ func logValidatedConfig(cfg *Config) {
 		"go_env", cfg.GoEnv,
 		"log_level", cfg.LogLevel,
 		"development_mode", cfg.DevelopmentMode,
+		"rate_limit_api_global", cfg.RateLimitApiGlobal,
 	)
+}
+
+// getEnvOrDefault returns the value of the environment variable or a default value if not set
+func getEnvOrDefault(key, defaultValue string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultValue
 }
 
 // redactSecret redacts a secret by showing only the first 8 characters

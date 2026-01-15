@@ -70,6 +70,39 @@ var (
 		Name:      "connection_attempts_total",
 		Help:      "Total WebRTC connection attempts",
 	}, []string{"status"})
+
+	// CircuitBreakerState tracks the current state of the circuit breaker (GaugeVec)
+	// 0: Closed (Healthy), 1: Open (Failure), 2: Half-Open (Recovering)
+	CircuitBreakerState = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "video_conference",
+		Subsystem: "circuit_breaker",
+		Name:      "state",
+		Help:      "Current state of the circuit breaker (0: Closed, 1: Open, 2: Half-Open)",
+	}, []string{"service"})
+
+	// CircuitBreakerFailures tracks the total number of requests rejected by the circuit breaker
+	CircuitBreakerFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "video_conference",
+		Subsystem: "circuit_breaker",
+		Name:      "failures_total",
+		Help:      "Total requests rejected by the circuit breaker",
+	}, []string{"service"})
+
+	// RateLimitExceeded tracks the total number of requests that exceeded the rate limit
+	RateLimitExceeded = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "video_conference",
+		Subsystem: "rate_limit",
+		Name:      "exceeded_total",
+		Help:      "Total number of requests that exceeded the rate limit",
+	}, []string{"endpoint", "reason"})
+
+	// RateLimitRequests tracks the total number of requests checked against the rate limiter
+	RateLimitRequests = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "video_conference",
+		Subsystem: "rate_limit",
+		Name:      "requests_total",
+		Help:      "Total number of requests checked against the rate limiter",
+	}, []string{"endpoint"})
 )
 
 func IncConnection() {

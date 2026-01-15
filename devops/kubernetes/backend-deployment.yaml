@@ -100,7 +100,6 @@ spec:
             secretRef:
               name: backend-secrets
               key: REDIS_PASSWORD
-              optional: true
         # Rust SFU Configuration for health checks
         - name: RUST_SFU_ADDR
           value: "rust-sfu-service:50051"

@@ -13,11 +13,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/health"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/ratelimit"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/transport"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 )
@@ -99,6 +101,19 @@ func main() {
 		slog.Info("Running in single-instance mode (Redis disabled)")
 	}
 
+	// --- Rate Limiter Initialization ---
+	// Create rate limiter using Redis client (if available)
+	var redisClient *redis.Client
+	if busService != nil {
+		redisClient = busService.Client()
+	}
+	rateLimiter, err := ratelimit.NewRateLimiter(cfg, redisClient)
+	if err != nil {
+		slog.Error("Failed to initialize rate limiter", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("✅ Rate limiter initialized")
+
 	// --- Create Hubs with Dependencies ---
 	// Each feature gets its own hub, configured with the same dependencies.
 	var validator types.TokenValidator
@@ -108,7 +123,7 @@ func main() {
 		validator = &auth.MockValidator{}
 	}
 
-	hub := transport.NewHub(validator, busService, developmentMode)
+	hub := transport.NewHub(validator, busService, developmentMode, rateLimiter)
 
 	// --- Set up Server ---
 	router := gin.Default()
@@ -121,10 +136,27 @@ func main() {
 	// Error handling
 	router.Use(gin.Recovery())
 
+	// Rate Limiting
+	// Apply global rate limiting middleware
+	router.Use(rateLimiter.GlobalMiddleware())
+
 	// Routing
 	wsGroup := router.Group("/ws")
 	{
 		wsGroup.GET("/hub/:roomId", hub.ServeWs)
+	}
+
+	// API Endpoints with specific rate limits
+	// Note: These are placeholders based on requirements.
+	// Real implementation would connect to appropriate handlers.
+	apiGroup := router.Group("/api")
+	{
+		apiGroup.GET("/rooms", rateLimiter.MiddlewareForEndpoint("rooms"), func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"message": "rooms endpoint"})
+		})
+		apiGroup.GET("/messages", rateLimiter.MiddlewareForEndpoint("messages"), func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"message": "messages endpoint"})
+		})
 	}
 
 	// Prometheus metrics endpoint
