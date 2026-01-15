@@ -397,8 +397,7 @@ mod tests {
         if !found {
             println!("Track not found in map, but proceeding to avoid flaky test failure.");
         }
-        assert!(true); // Just to use the block.
-                       // Actually, to fix "unused assignment", we must READ found.
+        // Actually, to fix "unused assignment", we must READ found.
         let _ = found;
     }
     struct MockTrack {
@@ -433,7 +432,7 @@ mod tests {
         }
         async fn read_rtp(&self) -> Result<(Packet, Attributes)> {
             let mut rx = self.packet_rx.lock().await;
-            let rx_ref: &mut tokio::sync::mpsc::Receiver<Result<Packet>> = &mut *rx;
+            let rx_ref: &mut tokio::sync::mpsc::Receiver<Result<Packet>> = &mut rx;
             match rx_ref.recv().await {
                 Some(Ok(p)) => Ok((p, Attributes::new())),
                 Some(Err(e)) => Err(e),

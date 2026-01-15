@@ -21,11 +21,9 @@ COPY backend/rust/sfu/Cargo.toml backend/rust/sfu/Cargo.lock ./
 # Create dummy files to cache dependencies
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
-    mkdir benches && \
-    echo "fn main() {}" > benches/sfu_benchmarks.rs && \
     echo "fn main() {}" > build.rs && \
-    cargo build --release && \
-    rm -rf src benches build.rs
+    cargo build --release --bin sfu && \
+    rm -rf src build.rs
 
 # Copy source code and build script
 COPY backend/rust/sfu/build.rs ./
