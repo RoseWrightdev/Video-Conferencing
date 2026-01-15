@@ -9,7 +9,9 @@ pub mod pb {
 
 pub mod broadcaster;
 pub mod media_setup;
+pub mod metrics;
 pub mod peer_manager;
+pub mod room_manager;
 pub mod sfu_service;
 pub mod signaling_handler;
 pub mod track_handler;

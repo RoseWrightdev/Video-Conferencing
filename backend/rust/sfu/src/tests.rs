@@ -2,6 +2,7 @@ use super::*;
 use crate::broadcaster::TrackBroadcaster;
 use crate::pb::sfu::sfu_service_server::SfuService;
 use crate::pb::sfu::{CreateSessionRequest, ListenRequest};
+use crate::room_manager::RoomManager;
 use crate::sfu_service::MySfu;
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -46,6 +47,7 @@ async fn test_signaling_flow_and_track_notification() {
     let sfu = MySfu {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
+        room_manager: Arc::new(RoomManager::new()),
     };
 
     let room_id = "test-room".to_string();
@@ -98,6 +100,7 @@ async fn test_webrtc_api_configuration() {
     let _sfu = MySfu {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
+        room_manager: Arc::new(RoomManager::new()),
     };
 
     let api = MediaSetup::create_webrtc_api();
@@ -160,6 +163,7 @@ async fn test_subscribe_logic() {
     let sfu = MySfu {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
+        room_manager: Arc::new(RoomManager::new()),
     };
 
     let room_id = "room1".to_string();

@@ -16,12 +16,14 @@ pub fn attach_track_handler(
     room_id: String,
     peers: crate::types::PeerMap,
     tracks: crate::types::TrackMap,
+    room_manager: Arc<crate::room_manager::RoomManager>,
 ) {
     let peers_clone = peers.clone();
     let tracks_map = tracks.clone();
     let user_id_clone = user_id.clone();
     let room_id_clone = room_id.clone();
     let pc_for_ontrack = pc.clone();
+    let room_manager_clone = room_manager.clone();
 
     pc.on_track(Box::new(move |track: Arc<TrackRemote>, _receiver, _transceiver| {
         let track_id = track.id().to_owned();
@@ -41,6 +43,7 @@ pub fn attach_track_handler(
         let peers = peers_clone.clone();
         let tracks_map = tracks_map.clone();
         let pc_capture = pc_for_ontrack.clone();
+        let room_manager = room_manager_clone.clone();
 
         Box::pin(async move {
             info!(user_id = %user_id, kind = %track.kind(), "Received track from user");
@@ -64,11 +67,18 @@ pub fn attach_track_handler(
             tracks_map.insert(track_key, broadcaster.clone());
 
             // 2. Notify Existing Peers & Add Writer to them
-            info!(count = %peers.len(), "[SFU] Notifying peers about new track");
-            for peer_entry in peers.iter() {
-                let other_peer = peer_entry.value();
-                debug!(peer = %other_peer.user_id, matching_room = %other_peer.room_id, "[SFU] Checking peer");
-                if other_peer.room_id == room_id && other_peer.user_id != user_id {
+            // OPTIMIZED: Use RoomManager to find peers in the room (O(room_participants))
+            let users_in_room = room_manager.get_users(&room_id);
+            info!(count = %users_in_room.len(), "[SFU] Notifying peers in room about new track");
+
+            for other_user_id in users_in_room {
+                if other_user_id == user_id {
+                    continue;
+                }
+                
+                let session_key = (room_id.clone(), other_user_id.clone());
+                if let Some(peer_entry) = peers.get(&session_key) {
+                    let other_peer = peer_entry.value();
                     info!(target_user = %other_peer.user_id, "[SFU] Forwarding new track");
 
                     let broadcaster_clone = broadcaster.clone();

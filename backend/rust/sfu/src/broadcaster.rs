@@ -7,6 +7,10 @@ use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 
+use crate::metrics::{
+    SFU_KEYFRAMES_REQUESTED_TOTAL, SFU_PACKETS_DROPPED_TOTAL, SFU_PACKETS_FORWARDED_TOTAL,
+};
+
 pub struct BroadcasterWriter {
     pub tx: mpsc::Sender<webrtc::rtp::packet::Packet>,
     pub ssrc: u32,
@@ -96,6 +100,7 @@ impl TrackBroadcaster {
         }
 
         info!(source_ssrc = %self.source_ssrc, "[SFU] Requesting keyframe");
+        SFU_KEYFRAMES_REQUESTED_TOTAL.inc();
         let pli = PictureLossIndication {
             sender_ssrc: 0,
             media_ssrc: self.source_ssrc,
@@ -149,6 +154,9 @@ impl TrackBroadcaster {
             if let Err(e) = w.tx.try_send(packet_clone) {
                 match e {
                     mpsc::error::TrySendError::Full(_) => {
+                        SFU_PACKETS_DROPPED_TOTAL
+                            .with_label_values(&["buffer_full"])
+                            .inc();
                         // Only log occasionally to avoid log flooding
                         static DROP_COUNT: std::sync::atomic::AtomicU64 =
                             std::sync::atomic::AtomicU64::new(0);
@@ -158,9 +166,16 @@ impl TrackBroadcaster {
                         }
                     }
                     mpsc::error::TrySendError::Closed(_) => {
+                        SFU_PACKETS_DROPPED_TOTAL
+                            .with_label_values(&["channel_closed"])
+                            .inc();
                         // Peer session likely closed, entry will be cleaned up eventually
                     }
                 }
+            } else {
+                SFU_PACKETS_FORWARDED_TOTAL
+                    .with_label_values(&[&self.kind])
+                    .inc();
             }
         }
     }

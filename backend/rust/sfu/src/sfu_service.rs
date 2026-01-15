@@ -15,7 +15,9 @@ use crate::pb::sfu::{
     CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, DeleteSessionResponse,
     ListenRequest, SfuEvent, SignalMessage, SignalResponse,
 };
+use crate::metrics::{SFU_ACTIVE_PEERS, SFU_ACTIVE_ROOMS};
 use crate::peer_manager::Peer;
+use crate::room_manager::RoomManager;
 use crate::track_handler;
 use crate::types::{PeerMap, TrackMap}; // Used in code as pb::signaling
 
@@ -25,6 +27,8 @@ pub struct MySfu {
     pub peers: PeerMap,
     // Map: (RoomID, UserID, StreamID, TrackID) -> Broadcaster
     pub tracks: TrackMap,
+    // Room Manager for efficient lookup
+    pub room_manager: Arc<RoomManager>,
 }
 
 #[tonic::async_trait]
@@ -36,6 +40,10 @@ impl SfuService for MySfu {
         let req = request.into_inner();
         let room_id = req.room_id.clone();
         let user_id = req.user_id.clone();
+
+        if room_id.is_empty() || user_id.is_empty() {
+             return Err(Status::invalid_argument("room_id and user_id must not be empty"));
+        }
 
         info!(room = %room_id, user = %user_id, "CreateSession called");
 
@@ -84,13 +92,20 @@ impl SfuService for MySfu {
             room_id.clone(),
             self.peers.clone(),
             self.tracks.clone(),
+            self.room_manager.clone(),
         );
 
         // 6. Save to Map
         let session_key = (room_id.clone(), user_id.clone());
         self.peers.insert(session_key.clone(), peer);
+        
+        // 7. Add to RoomManager & Update Metrics
+        SFU_ACTIVE_PEERS.inc();
+        if self.room_manager.add_user(room_id.clone(), user_id.clone()) {
+            SFU_ACTIVE_ROOMS.inc();
+        }
 
-        // 7. Create Offer for THIS client
+        // 8. Create Offer for THIS client
         let offer = peer_pc
             .create_offer(None)
             .await
@@ -105,11 +120,30 @@ impl SfuService for MySfu {
         use webrtc::ice_transport::ice_gathering_state::RTCIceGatheringState;
         if peer_pc.ice_gathering_state() != RTCIceGatheringState::Complete {
             info!(session = ?session_key, "[SFU] Waiting for initial ICE gathering");
-            let _ = tokio::time::timeout(
+            let timeout_res = tokio::time::timeout(
                 tokio::time::Duration::from_millis(1500),
                 gather_complete.recv(),
             )
             .await;
+            
+            if timeout_res.is_err() {
+                 tracing::warn!(session = ?session_key, "ICE gathering timed out");
+                 // We could return Status::unavailable("ICE gathering timed out") here if we want to be strict,
+                 // or just proceed with what we have. The prompt suggests unavailable if ICE fails or times out.
+                 // let's be strict only if it's completely failed, usually partial candidates are fine. 
+                 // But strictly following prompt: "Status::unavailable: If ICE gathering fails or times out"
+                 // However, usually we send what we have. Let's log warning mostly, unless peer connection is closed.
+                 // If we interpret the prompt strictly:
+                 // return Err(Status::unavailable("ICE gathering timed out"));
+                 // But often 'timed out' just means 'stopped waiting', not necessarily 'failed'.
+                 // Let's assume the user wants to signal retry if it fails.
+                 // I will stick to warning for timeout but proceed, unless it's critical. 
+                 // Actually, if we don't have candidates, connection might fail.
+                 // Let's stick to the current flow but add a comment or better handling if needed.
+                 // Re-reading prompt: "Status::unavailable: If ICE gathering fails or times out (implies retry might work)."
+                 // Okay, I will return Unavailable on timeout.
+                 return Err(Status::unavailable("ICE gathering timed out, please retry"));
+            }
         }
 
         let local_desc = peer_pc.local_description().await.unwrap_or_default();
@@ -126,6 +160,10 @@ impl SfuService for MySfu {
     ) -> Result<Response<Self::ListenEventsStream>, Status> {
         let req = request.into_inner();
         let session_key = (req.room_id.clone(), req.user_id.clone());
+
+        if req.room_id.is_empty() || req.user_id.is_empty() {
+            return Err(Status::invalid_argument("room_id and user_id must not be empty"));
+        }
 
         info!(?session_key, "ListenEvents called");
 
@@ -188,9 +226,11 @@ impl SfuService for MySfu {
             match payload {
                 pb::sfu::signal_message::Payload::SdpAnswer(sdp) => {
                     info!(session = ?session_key, "Applying SDP Answer");
-                    let desc = RTCSessionDescription::answer(sdp).unwrap();
+                    let desc = RTCSessionDescription::answer(sdp).map_err(|e| {
+                         Status::invalid_argument(format!("Invalid SDP Answer: {}", e))
+                    })?;
                     pc.set_remote_description(desc).await.map_err(|e| {
-                        Status::internal(format!("Failed to set remote description: {}", e))
+                        Status::invalid_argument(format!("Failed to set remote description (answer): {}", e))
                     })?;
                 }
                 pb::sfu::signal_message::Payload::IceCandidate(candidate_str) => {
@@ -200,7 +240,7 @@ impl SfuService for MySfu {
                         Ok(c) => c,
                         Err(e) => {
                             error!(session = ?session_key, error = %e, "Failed to parse ICE candidate");
-                            return Err(Status::internal(format!(
+                            return Err(Status::invalid_argument(format!(
                                 "Failed to parse ICE candidate: {}",
                                 e
                             )));
@@ -213,10 +253,12 @@ impl SfuService for MySfu {
                 }
                 pb::sfu::signal_message::Payload::SdpOffer(sdp) => {
                     info!(session = ?session_key, sdp_part = %sdp.chars().take(50).collect::<String>(), "Received SDP Offer");
-                    let desc = RTCSessionDescription::offer(sdp).unwrap();
+                    let desc = RTCSessionDescription::offer(sdp).map_err(|e| {
+                        Status::invalid_argument(format!("Invalid SDP Offer: {}", e))
+                    })?;
                     pc.set_remote_description(desc).await.map_err(|e| {
                         error!(session = ?session_key, error = %e, "Failed to set remote description");
-                        Status::internal(format!("Failed to set remote description: {}", e))
+                        Status::invalid_argument(format!("Failed to set remote description (offer): {}", e))
                     })?;
 
                     let answer = pc
@@ -278,6 +320,12 @@ impl SfuService for MySfu {
             for key in tracks_to_remove {
                 info!(?key, "[SFU] Removing broadcast track");
                 self.tracks.remove(&key);
+            }
+
+            // Remove from RoomManager & Update Metrics
+            SFU_ACTIVE_PEERS.dec();
+            if self.room_manager.remove_user(&req.room_id, &req.user_id) {
+                SFU_ACTIVE_ROOMS.dec();
             }
         }
         Ok(Response::new(DeleteSessionResponse { success: true }))
