@@ -2,7 +2,7 @@
 # Multi-stage build for production optimization
 
 # Stage 1: Build the Rust application
-FROM rust:1.75-alpine AS builder
+FROM rust:1.92-alpine AS builder
 
 # Set working directory
 WORKDIR /app
