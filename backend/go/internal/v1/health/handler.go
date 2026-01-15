@@ -16,11 +16,56 @@ import (
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 )
 
+// SFUChecker checks the health of the SFU
+type SFUChecker interface {
+	Check(ctx context.Context, addr string) string
+}
+
+// DefaultSFUChecker is the default implementation of SFUChecker
+type DefaultSFUChecker struct{}
+
+// Check verifies gRPC connectivity to Rust SFU using health check protocol
+func (c *DefaultSFUChecker) Check(ctx context.Context, addr string) string {
+	// Create gRPC connection with timeout
+	conn, err := grpc.DialContext(
+		ctx,
+		addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		slog.Error("Failed to connect to Rust SFU for health check", "error", err, "addr", addr)
+		return "unhealthy"
+	}
+	defer conn.Close()
+
+	// Create health check client
+	healthClient := healthpb.NewHealthClient(conn)
+
+	// Check health status
+	resp, err := healthClient.Check(ctx, &healthpb.HealthCheckRequest{
+		Service: "", // Empty string checks overall server health
+	})
+	if err != nil {
+		slog.Error("Rust SFU health check RPC failed", "error", err)
+		return "unhealthy"
+	}
+
+	// Verify the service is SERVING
+	if resp.Status != healthpb.HealthCheckResponse_SERVING {
+		slog.Warn("Rust SFU is not serving", "status", resp.Status.String())
+		return "unhealthy"
+	}
+
+	return "healthy"
+}
+
 // Handler manages health check endpoints
 type Handler struct {
 	redisService *bus.Service
 	sfuAddr      string
 	sfuEnabled   bool
+	sfuChecker   SFUChecker
 }
 
 // NewHandler creates a new health check handler
@@ -38,6 +83,7 @@ func NewHandler(redisService *bus.Service) *Handler {
 		redisService: redisService,
 		sfuAddr:      sfuAddr,
 		sfuEnabled:   enabled,
+		sfuChecker:   &DefaultSFUChecker{},
 	}
 }
 
@@ -127,38 +173,12 @@ func (h *Handler) checkRedis(ctx context.Context) string {
 
 // checkRustSFU verifies gRPC connectivity to Rust SFU using health check protocol
 func (h *Handler) checkRustSFU(ctx context.Context) string {
-	// Create gRPC connection with timeout
-	conn, err := grpc.DialContext(
-		ctx,
-		h.sfuAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		slog.Error("Failed to connect to Rust SFU for health check", "error", err, "addr", h.sfuAddr)
+	if h.sfuChecker == nil {
+		// Fallback or error if not initialized, though NewHandler ensures it is.
+		// For safety in tests that might create struct directly without checker:
 		return "unhealthy"
 	}
-	defer conn.Close()
-
-	// Create health check client
-	healthClient := healthpb.NewHealthClient(conn)
-
-	// Check health status
-	resp, err := healthClient.Check(ctx, &healthpb.HealthCheckRequest{
-		Service: "", // Empty string checks overall server health
-	})
-	if err != nil {
-		slog.Error("Rust SFU health check RPC failed", "error", err)
-		return "unhealthy"
-	}
-
-	// Verify the service is SERVING
-	if resp.Status != healthpb.HealthCheckResponse_SERVING {
-		slog.Warn("Rust SFU is not serving", "status", resp.Status.String())
-		return "unhealthy"
-	}
-
-	return "healthy"
+	return h.sfuChecker.Check(ctx, h.sfuAddr)
 }
 
 // HealthCheckResponse is a generic health check response for backward compatibility

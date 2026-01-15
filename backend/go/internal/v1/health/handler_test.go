@@ -1,6 +1,7 @@
 package health
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -69,10 +70,24 @@ func TestReadiness_NilRedis(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "healthy")
 }
 
+type MockSFUChecker struct {
+	status string
+}
+
+func (m *MockSFUChecker) Check(ctx context.Context, addr string) string {
+	return m.status
+}
+
 func TestReadiness_ResponseFormat(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := NewHandler(nil)
+	// Use mock checker that returns healthy
+	handler := &Handler{
+		redisService: nil,
+		sfuEnabled:   true,
+		sfuAddr:      "localhost:50051",
+		sfuChecker:   &MockSFUChecker{status: "healthy"},
+	}
 
 	// Create test request
 	w := httptest.NewRecorder()
@@ -90,6 +105,7 @@ func TestReadiness_ResponseFormat(t *testing.T) {
 	assert.Contains(t, body, "checks")
 	assert.Contains(t, body, "timestamp")
 	assert.Contains(t, body, "redis")
+	assert.Contains(t, body, "rust_sfu")
 }
 
 func TestReadiness_SFUDisabled(t *testing.T) {
