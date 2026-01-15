@@ -18,11 +18,13 @@ RUN apk add --no-cache \
 # Copy Cargo files
 COPY backend/rust/sfu/Cargo.toml backend/rust/sfu/Cargo.lock ./
 
-# Create a dummy main to cache dependencies
+# Create dummy files to cache dependencies
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
+    mkdir benches && \
+    echo "fn main() {}" > benches/sfu_benchmarks.rs && \
     cargo build --release && \
-    rm -rf src
+    rm -rf src benches
 
 # Copy source code
 COPY backend/rust/sfu/src ./src
