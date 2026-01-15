@@ -39,7 +39,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
-    include: ['__tests__/**/*.test.ts', '__tests__/**/*.test.tsx', 'stories/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
+    include: ['__tests__/**/*.test.ts', '__tests__/**/*.test.tsx', 'components/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
     exclude: ['node_modules/**/*'],
     projects: [
       // Unit tests project
