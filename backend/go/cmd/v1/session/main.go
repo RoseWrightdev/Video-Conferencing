@@ -16,6 +16,8 @@ import (
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/health"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/transport"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 )
@@ -38,11 +40,18 @@ func main() {
 		slog.Warn("No .env file found in any expected location, relying on environment variables")
 	}
 
-	// Get Auth0 configuration from environment variables.
-	auth0Domain := os.Getenv("AUTH0_DOMAIN")
-	auth0Audience := os.Getenv("AUTH0_AUDIENCE")
-	skipAuth := os.Getenv("SKIP_AUTH") == "true"
-	developmentMode := os.Getenv("DEVELOPMENT_MODE") == "true"
+	// Validate environment variables before starting the server
+	cfg, err := config.ValidateEnv()
+	if err != nil {
+		slog.Error("Environment validation failed", "error", err)
+		os.Exit(1)
+	}
+
+	// Get Auth0 configuration from validated config
+	auth0Domain := cfg.Auth0Domain
+	auth0Audience := cfg.Auth0Audience
+	skipAuth := cfg.SkipAuth
+	developmentMode := cfg.DevelopmentMode
 
 	if developmentMode {
 		slog.Info("Running in DEVELOPMENT MODE")
@@ -77,22 +86,14 @@ func main() {
 	// --- Redis Bus Initialization (Optional) ---
 	// Initialize Redis for distributed pub/sub if enabled
 	var busService *bus.Service
-	redisEnabled := os.Getenv("REDIS_ENABLED") == "true"
-	if redisEnabled {
-		redisAddr := os.Getenv("REDIS_ADDR")
-		redisPassword := os.Getenv("REDIS_PASSWORD")
-
-		if redisAddr == "" {
-			redisAddr = "localhost:6379" // Default Redis address
-		}
-
+	if cfg.RedisEnabled {
 		var err error
-		busService, err = bus.NewService(redisAddr, redisPassword)
+		busService, err = bus.NewService(cfg.RedisAddr, cfg.RedisPassword)
 		if err != nil {
 			slog.Error("Failed to connect to Redis, running in single-instance mode", "error", err)
 			busService = nil // Fallback to single-instance mode
 		} else {
-			slog.Info("✅ Redis pub/sub initialized for distributed messaging", "addr", redisAddr)
+			slog.Info("✅ Redis pub/sub initialized for distributed messaging", "addr", cfg.RedisAddr)
 		}
 	} else {
 		slog.Info("Running in single-instance mode (Redis disabled)")
@@ -113,7 +114,7 @@ func main() {
 	router := gin.Default()
 	// Cors
 	config := cors.DefaultConfig()
-	allowedOrigins := auth.GetAllowedOriginsFromEnv("ALLOWED_ORIGINS", []string{"http://localhost:3000"})
+	allowedOrigins := auth.GetAllowedOriginsFromEnv(cfg.AllowedOrigins, []string{"http://localhost:3000"})
 	config.AllowOrigins = allowedOrigins
 	router.Use(cors.New(config))
 
@@ -129,21 +130,21 @@ func main() {
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Health check endpoint
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
-	})
+	// Health check endpoints
+	healthHandler := health.NewHandler(busService)
+	router.GET("/health/live", healthHandler.Liveness)
+	router.GET("/health/ready", healthHandler.Readiness)
 
 	// Start the server.
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + cfg.Port,
 		Handler: router,
 	}
 
 	// --- Graceful Shutdown ---
 	// Start the server in a goroutine so it doesn't block.
 	go func() {
-		slog.Info("API server starting on :8080")
+		slog.Info("API server starting", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Failed to run server", "error", err)
 			syscall.Kill(os.Getpid(), syscall.SIGTERM)
@@ -156,10 +157,15 @@ func main() {
 	<-quit
 	slog.Info("Shutting down server...")
 
-	// The context is used to inform the server it has 5 seconds to finish
+	// The context is used to inform the server it has 30 seconds to finish
 	// the requests it is currently handling
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Close all active rooms and WebSocket connections gracefully
+	if err := hub.Shutdown(ctx); err != nil {
+		slog.Error("Error during Hub shutdown:", "error", err)
+	}
 
 	// Shutdown HTTP server
 	if err := srv.Shutdown(ctx); err != nil {

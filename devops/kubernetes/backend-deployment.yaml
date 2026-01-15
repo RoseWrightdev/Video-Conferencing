@@ -47,6 +47,7 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      terminationGracePeriodSeconds: 45
       serviceAccountName: video-conferencing-backend-sa
       
       # Pod anti-affinity to spread pods across nodes
@@ -80,6 +81,10 @@ spec:
         - name: websocket
           containerPort: 8080
           protocol: TCP
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
         env:
         - name: PORT
           value: "8080"
@@ -96,6 +101,11 @@ spec:
               name: backend-secrets
               key: REDIS_PASSWORD
               optional: true
+        # Rust SFU Configuration for health checks
+        - name: RUST_SFU_ADDR
+          value: "rust-sfu-service:50051"
+        - name: RUST_SFU_HEALTH_CHECK_ENABLED
+          value: "true"
         envFrom:
         - configMapRef:
             name: backend-config
@@ -110,7 +120,7 @@ spec:
             cpu: "200m"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: http
           initialDelaySeconds: 15
           periodSeconds: 10
@@ -118,11 +128,11 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health/ready
             port: http
           initialDelaySeconds: 5
           periodSeconds: 5
-          timeoutSeconds: 3
+          timeoutSeconds: 5
           failureThreshold: 3
         securityContext:
           allowPrivilegeEscalation: false

@@ -22,6 +22,7 @@ use crate::track_handler;
 use crate::types::{PeerMap, TrackMap}; // Used in code as pb::signaling
 
 // The Server State
+#[derive(Clone)]
 pub struct MySfu {
     // Thread-safe map: (RoomID, UserID) -> Peer
     pub peers: PeerMap,
@@ -194,6 +195,31 @@ impl MySfu {
         }
 
         Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    /// Gracefully shutdown all active peer connections
+    pub async fn shutdown(&self) {
+        info!("Closing {} active peer connections", self.peers.len());
+
+        // Collect all session keys
+        let session_keys: Vec<_> = self.peers.iter().map(|entry| entry.key().clone()).collect();
+
+        // Close each peer connection
+        for session_key in session_keys {
+            if let Some((_, peer)) = self.peers.remove(&session_key) {
+                info!(?session_key, "Closing peer connection");
+
+                // Close the peer connection
+                if let Err(e) = peer.pc.close().await {
+                    tracing::warn!(?session_key, error = %e, "Error closing peer connection");
+                }
+            }
+        }
+
+        // Clear all tracks
+        self.tracks.clear();
+
+        info!("All peer connections closed");
     }
 }
 

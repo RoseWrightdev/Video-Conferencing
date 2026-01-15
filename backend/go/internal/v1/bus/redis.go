@@ -200,6 +200,16 @@ func (s *Service) Subscribe(ctx context.Context, roomID string, handler func(Pub
 	}()
 }
 
+// Ping checks Redis connectivity using the PING command
+// Used by health checks to verify Redis is reachable
+func (s *Service) Ping(ctx context.Context) error {
+	if s == nil || s.client == nil {
+		return nil // Single-instance mode, no Redis available
+	}
+
+	return s.client.Ping(ctx).Err()
+}
+
 // Close gracefully shuts down the Redis connection
 func (s *Service) Close() error {
 	if s == nil || s.client == nil {

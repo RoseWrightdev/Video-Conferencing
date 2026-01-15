@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
@@ -191,4 +192,44 @@ func (h *Hub) getOrCreateRoom(roomID types.RoomIdType) *room.Room {
 	// Metrics: Track room creation
 	metrics.ActiveRooms.Inc()
 	return r
+}
+
+// Shutdown gracefully closes all active rooms and connections
+func (h *Hub) Shutdown(ctx context.Context) error {
+	slog.Info("Shutting down Hub - closing all active rooms...")
+
+	h.mu.Lock()
+	// Cancel all pending cleanup timers
+	for roomID, timer := range h.pendingRoomCleanups {
+		timer.Stop()
+		delete(h.pendingRoomCleanups, roomID)
+		slog.Debug("Cancelled pending cleanup timer", "roomId", roomID)
+	}
+
+	// Get snapshot of all rooms
+	rooms := make([]*room.Room, 0, len(h.rooms))
+	for _, r := range h.rooms {
+		rooms = append(rooms, r)
+	}
+	h.mu.Unlock()
+
+	// Close all rooms (sends close frames to WebSocket connections)
+	for _, r := range rooms {
+		r.CloseRoom("Server shutting down")
+	}
+
+	slog.Info("All rooms closed", "count", len(rooms))
+
+	// Close SFU connection if present
+	if h.sfu != nil {
+		if sfuClient, ok := h.sfu.(interface{ Close() error }); ok {
+			if err := sfuClient.Close(); err != nil {
+				slog.Error("Failed to close SFU connection", "error", err)
+				return err
+			}
+			slog.Info("SFU connection closed")
+		}
+	}
+
+	return nil
 }

@@ -40,6 +40,7 @@ spec:
         
       template:
         spec:
+          terminationGracePeriodSeconds: 45
           serviceAccountName: video-conferencing-backend-sa
           
           securityContext:
@@ -65,6 +66,11 @@ spec:
             - name: grpc
               containerPort: 50051
               protocol: TCP
+            
+            lifecycle:
+              preStop:
+                exec:
+                  command: ["/bin/sh", "-c", "sleep 15"]
             
             env:
             # Standard K8s Downward API
@@ -105,5 +111,5 @@ spec:
                 command: ["/bin/grpc_health_probe", "-addr=:50051"]
               initialDelaySeconds: 5
               periodSeconds: 5
-              timeoutSeconds: 3
+              timeoutSeconds: 5
               failureThreshold: 3

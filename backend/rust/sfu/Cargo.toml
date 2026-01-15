@@ -11,6 +11,7 @@ tokio-stream = "0.1"
 
 # gRPC
 tonic = "0.9"
+tonic-health = "0.9"
 prost = "0.11"
 bytes = "1.0"
 

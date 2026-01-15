@@ -8,6 +8,7 @@ pub mod pb {
 }
 
 pub mod broadcaster;
+pub mod health;
 pub mod media_setup;
 pub mod metrics;
 pub mod peer_manager;

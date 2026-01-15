@@ -10,6 +10,7 @@ import (
 
 type SFUClient struct {
 	client pb.SfuServiceClient
+	conn   *grpc.ClientConn
 }
 
 func NewSFUClient(address string) (*SFUClient, error) {
@@ -20,6 +21,7 @@ func NewSFUClient(address string) (*SFUClient, error) {
 	}
 	return &SFUClient{
 		client: pb.NewSfuServiceClient(conn),
+		conn:   conn,
 	}, nil
 }
 
@@ -75,4 +77,12 @@ func (s *SFUClient) ListenEvents(ctx context.Context, uid string, roomID string)
 		UserId: uid,
 		RoomId: roomID,
 	})
+}
+
+// Close gracefully closes the gRPC connection to the SFU
+func (s *SFUClient) Close() error {
+	if s.conn != nil {
+		return s.conn.Close()
+	}
+	return nil
 }
