@@ -33,7 +33,7 @@ COPY backend/rust/sfu/src ./src
 COPY proto ./proto
 
 # Build the actual application
-RUN cargo build --release
+RUN cargo build --release --bins
 
 # Install grpc-health-probe
 RUN GRPC_HEALTH_PROBE_VERSION=v0.4.19 && \
