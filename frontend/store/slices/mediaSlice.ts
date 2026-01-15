@@ -239,6 +239,11 @@ export const createMediaSlice: StateCreator<
 
   startScreenShare: async () => {
     try {
+      const { isHost, roomSettings } = get();
+      if (!isHost && roomSettings && !roomSettings.allowScreenShare) {
+        throw new Error('Screen sharing is not allowed for participants');
+      }
+
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       set({ screenShareStream: stream, isScreenSharing: true });
 

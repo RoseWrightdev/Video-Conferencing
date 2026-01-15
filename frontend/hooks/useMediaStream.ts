@@ -83,16 +83,16 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
+
       // CRITICAL: Disable all tracks IMMEDIATELY before storing stream
       // This must happen synchronously before any other code can access the stream
       const audioTracks = stream.getAudioTracks();
       const videoTracks = stream.getVideoTracks();
       audioTracks.forEach(track => { track.enabled = false; });
       videoTracks.forEach(track => { track.enabled = false; });
-      
+
       streamRef.current = stream;
-      
+
       // Store stream in Zustand store (tracks already disabled)
       setLocalStream(stream);
 
@@ -107,7 +107,7 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to initialize media stream';
-      
+
       setState(prev => ({
         ...prev,
         isStarting: false,

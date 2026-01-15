@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createMediaSlice } from '@/store/slices/mediaSlice';
-import { type RoomStoreState } from '@/store/types';
+import { createMediaSlice } from '../../store/slices/mediaSlice';
+import { RoomStoreState } from '../../store/types';
 
 describe('mediaSlice', () => {
     let mockGet: () => Partial<RoomStoreState>;
@@ -33,6 +33,15 @@ describe('mediaSlice', () => {
         kind: 'audio',
         enabled: true,
         stop: vi.fn(),
+    };
+
+    const mockRoomSettings = {
+        allowScreenShare: false,
+        allowChat: true,
+        allowParticipantAudio: true,
+        allowParticipantVideo: true,
+        maxParticipants: 50,
+        requireApproval: false
     };
 
     let mockStream: any;
@@ -78,6 +87,8 @@ describe('mediaSlice', () => {
             sfuClient: mockSfuClient as any,
             wsClient: mockWsClient as any,
             currentUserId: 'me',
+            isHost: true,
+            roomSettings: { ...mockRoomSettings, allowScreenShare: false },
             // Mock other slice methods called by mediaSlice
             setParticipantStream: vi.fn(),
             setAudioEnabled: vi.fn(),
@@ -155,9 +166,6 @@ describe('mediaSlice', () => {
             slice.setLocalStream(mockStream as any);
 
             expect(oldTrack.stop).toHaveBeenCalled();
-            // Should check if it tried to remove track from PC
-            // In our mock, getSenders returns a sender with 'track-id', so if old track id matches it would call removeTrack
-            // But here ids differ. Let's align ids if we want to test removeTrack logic.
         });
     });
 
@@ -219,6 +227,10 @@ describe('mediaSlice', () => {
 
     describe('Screen Share', () => {
         it('should start screen share', async () => {
+            // Ensure permissions allow it by default in this test setup (host=true)
+            currentState.isHost = true;
+            currentState.roomSettings = { ...mockRoomSettings, allowScreenShare: false };
+
             await slice.startScreenShare();
 
             expect(navigator.mediaDevices.getDisplayMedia).toHaveBeenCalledWith({ video: true });
@@ -237,6 +249,31 @@ describe('mediaSlice', () => {
             expect(currentState.isScreenSharing).toBe(false);
             expect(currentState.screenShareStream).toBeNull();
             expect(mockWsClient.send).toHaveBeenCalledWith({ screenShare: { isSharing: false } });
+        });
+
+        it('should allow non-host if roomSettings.allowScreenShare is true', async () => {
+            currentState.isHost = false;
+            currentState.roomSettings = { ...mockRoomSettings, allowScreenShare: true };
+
+            await slice.startScreenShare();
+
+            expect(navigator.mediaDevices.getDisplayMedia).toHaveBeenCalled();
+        });
+
+        it('should throw error when non-host tries to share screen and roomSettings.allowScreenShare is false', async () => {
+            currentState.isHost = false;
+            currentState.roomSettings = { ...mockRoomSettings, allowScreenShare: false };
+
+            try {
+                await slice.startScreenShare();
+            } catch (e) {
+                // Ignore expected error
+            }
+
+            expect(navigator.mediaDevices.getDisplayMedia).not.toHaveBeenCalled();
+            // Note: In the consolidated file, mockWsClient is defined at the top level, unlike the original file which checked mockSet
+            // We can check currentState or mockWsClient
+            expect(currentState.isScreenSharing).toBe(false);
         });
     });
 });
