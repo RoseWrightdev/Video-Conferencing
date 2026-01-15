@@ -30,6 +30,7 @@ RUN mkdir -p src benches && \
 # Copy source code and build script
 COPY backend/rust/sfu/build.rs ./
 COPY backend/rust/sfu/src ./src
+COPY backend/rust/sfu/benches ./benches
 COPY proto ./proto
 
 # Build the actual application
