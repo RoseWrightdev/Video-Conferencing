@@ -1,7 +1,7 @@
 import { StateCreator } from 'zustand';
 import { type ChatSlice, type RoomStoreState } from '../types';
 import DOMPurify from 'dompurify';
-import { throttle } from 'lodash';
+import throttle from 'lodash/throttle';
 
 export const createChatSlice: StateCreator<
   RoomStoreState,
