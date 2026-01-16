@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vitest/config';
+import { loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import path from 'node:path';
@@ -8,6 +9,10 @@ import { fileURLToPath } from 'node:url';
 // @ts-expect-error - Export exists in package.json but TS resolution might miss it
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
+
+// Load environment variables from .env.test to satisfy next.config.ts validation
+const env = loadEnv('test', process.cwd(), '');
+Object.assign(process.env, env);
 
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
