@@ -184,7 +184,7 @@ func (h *Handler) checkRustSFU(ctx context.Context) string {
 // HealthCheckResponse is a generic health check response for backward compatibility
 type HealthCheckResponse struct {
 	Status string                 `json:"status"`
-	Data   map[string]interface{} `json:"data,omitempty"`
+	Data   map[string]any `json:"data,omitempty"`
 }
 
 // MarshalJSON implements custom JSON marshaling for better formatting
