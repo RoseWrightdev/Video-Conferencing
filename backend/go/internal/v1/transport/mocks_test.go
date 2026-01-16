@@ -31,7 +31,7 @@ func (m *MockBusService) PublishDirect(ctx context.Context, targetUserId string,
 	return nil
 }
 
-func (m *MockBusService) Subscribe(ctx context.Context, roomID string, handler func(bus.PubSubPayload)) {
+func (m *MockBusService) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGroup, handler func(bus.PubSubPayload)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subscribeCalls++

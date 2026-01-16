@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
@@ -176,7 +177,7 @@ func (s *Service) PublishDirect(ctx context.Context, targetUserId string, event 
 
 // Subscribe starts a background goroutine that listens for messages from OTHER pods.
 // handler: A function that will be executed for every valid message received.
-func (s *Service) Subscribe(ctx context.Context, roomID string, handler func(PubSubPayload)) {
+func (s *Service) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGroup, handler func(PubSubPayload)) {
 	if s == nil || s.client == nil {
 		return // Single-instance mode, no Redis available
 	}
@@ -192,8 +193,14 @@ func (s *Service) Subscribe(ctx context.Context, roomID string, handler func(Pub
 	pubsub := s.client.Subscribe(ctx, channel)
 
 	// Start the listener loop in a goroutine
+	if wg != nil {
+		wg.Add(1)
+	}
 	go func() {
 		defer pubsub.Close()
+		if wg != nil {
+			defer wg.Done()
+		}
 
 		slog.Info("Subscribed to Redis channel", "channel", channel)
 

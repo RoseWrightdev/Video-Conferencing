@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"sync"
+
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
@@ -82,7 +84,7 @@ type TokenValidator interface {
 type BusService interface {
 	Publish(ctx context.Context, roomID string, event string, payload any, senderID string, roles []string) error
 	PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error
-	Subscribe(ctx context.Context, roomID string, handler func(bus.PubSubPayload))
+	Subscribe(ctx context.Context, roomID string, wg *sync.WaitGroup, handler func(bus.PubSubPayload))
 	Close() error
 	// Redis Set operations for distributed state management
 	SetAdd(ctx context.Context, key string, value string) error

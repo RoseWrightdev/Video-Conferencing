@@ -17,7 +17,7 @@ func TestCreateSFUSession_Success(t *testing.T) {
 	room := &MockRoom{ID: "test-room"}
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
-	err := CreateSFUSession(ctx, room, client, mockSFU)
+	err := CreateSFUSession(ctx, room, client, mockSFU, nil)
 	assert.NoError(t, err)
 
 	// Verify SFU methods were called correctly
@@ -31,7 +31,7 @@ func TestCreateSFUSession_NoSFU(t *testing.T) {
 	room := &MockRoom{ID: "test-room"}
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
-	err := CreateSFUSession(ctx, room, client, nil)
+	err := CreateSFUSession(ctx, room, client, nil, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SFU client not initialized")
 }
@@ -44,7 +44,7 @@ func TestCreateSFUSession_CreateFails(t *testing.T) {
 	room := &MockRoom{ID: "test-room"}
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
-	err := CreateSFUSession(ctx, room, client, mockSFU)
+	err := CreateSFUSession(ctx, room, client, mockSFU, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "mock create session error")
 }
@@ -57,7 +57,7 @@ func TestCreateSFUSession_ListenEventsFails(t *testing.T) {
 	room := &MockRoom{ID: "test-room"}
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
-	err := CreateSFUSession(ctx, room, client, mockSFU)
+	err := CreateSFUSession(ctx, room, client, mockSFU, nil)
 	// Should still succeed even if listen fails
 	assert.NoError(t, err)
 }
@@ -80,7 +80,7 @@ func TestCreateSFUSession_TrackAddedEvent(t *testing.T) {
 	room := &MockRoom{ID: "test-room"}
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
-	err := CreateSFUSession(ctx, room, client, mockSFU)
+	err := CreateSFUSession(ctx, room, client, mockSFU, nil)
 	assert.NoError(t, err)
 
 	// Verify SFU was called and event stream was set up
@@ -102,7 +102,7 @@ func TestCreateSFUSession_RenegotiationEvent(t *testing.T) {
 	room := &MockRoom{ID: "test-room"}
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
-	err := CreateSFUSession(ctx, room, client, mockSFU)
+	err := CreateSFUSession(ctx, room, client, mockSFU, nil)
 	assert.NoError(t, err)
 
 	// Wait for event processing
@@ -126,7 +126,7 @@ func TestCreateSFUSession_SdpAnswerEvent(t *testing.T) {
 	room := &MockRoom{ID: "test-room"}
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
-	err := CreateSFUSession(ctx, room, client, mockSFU)
+	err := CreateSFUSession(ctx, room, client, mockSFU, nil)
 	assert.NoError(t, err)
 
 	// Wait for event processing
@@ -150,7 +150,7 @@ func TestCreateSFUSession_IceCandidateEvent(t *testing.T) {
 	room := &MockRoom{ID: "test-room"}
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
-	err := CreateSFUSession(ctx, room, client, mockSFU)
+	err := CreateSFUSession(ctx, room, client, mockSFU, nil)
 	assert.NoError(t, err)
 
 	// Wait for event processing

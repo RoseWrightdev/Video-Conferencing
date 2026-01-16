@@ -16,8 +16,8 @@ func (r *Room) subscribeToRedis() {
 		return
 	}
 
-	ctx := context.Background()
-	r.bus.Subscribe(ctx, string(r.ID), func(payload bus.PubSubPayload) {
+	ctx := r.ctx
+	r.bus.Subscribe(ctx, string(r.ID), &r.wg, func(payload bus.PubSubPayload) {
 		r.handleRedisMessage(payload)
 	})
 	slog.Info("Subscribed to Redis", "roomId", r.ID)

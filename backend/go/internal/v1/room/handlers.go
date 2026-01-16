@@ -197,24 +197,38 @@ func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterfa
 			r.deleteWaitingLocked(target)                                  // State change
 			r.addParticipantLocked(ctx, target)                            // State change
 			target.SendProto(buildApprovalMessage(string(target.GetID()))) // I/O
+			r.wg.Add(1)
 			go func() {
+				defer r.wg.Done()
 				if err := r.CreateSFUSession(ctx, target); err != nil {
 					slog.Error("Failed to create SFU session", "room", r.ID, "userId", target.GetID(), "error", err)
 				}
 			}()
-			go r.BroadcastRoomState(ctx) // I/O
+			r.wg.Add(1)
+			go func() {
+				defer r.wg.Done()
+				r.BroadcastRoomState(ctx)
+			}()
 		}
 
 	case AdminActionMute:
 		if shouldMuteClient(target) {
 			r.toggleAudio(target, false) // State change
-			go r.BroadcastRoomState(ctx) // I/O
+			r.wg.Add(1)
+			go func() {
+				defer r.wg.Done()
+				r.BroadcastRoomState(ctx)
+			}()
 		}
 
 	case AdminActionUnmute:
 		if shouldMuteClient(target) {
-			r.toggleAudio(target, true)  // State change
-			go r.BroadcastRoomState(ctx) // I/O
+			r.toggleAudio(target, true) // State change
+			r.wg.Add(1)
+			go func() {
+				defer r.wg.Done()
+				r.BroadcastRoomState(ctx)
+			}()
 		}
 
 	case AdminActionTransferOwnership:

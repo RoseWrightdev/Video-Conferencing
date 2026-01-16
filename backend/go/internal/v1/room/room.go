@@ -30,6 +30,10 @@ type Room struct {
 	onEmpty func(types.RoomIdType)
 	bus     types.BusService
 	sfu     types.SFUProvider
+
+	wg     sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func (r *Room) GetID() types.RoomIdType {
@@ -37,11 +41,29 @@ func (r *Room) GetID() types.RoomIdType {
 }
 
 func (r *Room) CreateSFUSession(ctx context.Context, client types.ClientInterface) error {
-	return signaling.CreateSFUSession(ctx, r, client, r.sfu)
+	// Use r.ctx to ensure the SFU event listener (spawned inside) is cancelled when Room shuts down
+	return signaling.CreateSFUSession(r.ctx, r, client, r.sfu, &r.wg)
 }
 
 func (r *Room) HandleSFUSignal(ctx context.Context, client types.ClientInterface, signal *pb.SignalRequest) {
 	signaling.HandleSFUSignal(ctx, r, client, r.sfu, signal)
+}
+
+func (r *Room) Shutdown(ctx context.Context) error {
+	r.cancel()
+
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		r.wg.Wait()
+	}()
+
+	select {
+	case <-c:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func NewRoom(id types.RoomIdType, onEmptyCallback func(types.RoomIdType), busService types.BusService, sfuClient types.SFUProvider) *Room {
@@ -60,6 +82,7 @@ func NewRoom(id types.RoomIdType, onEmptyCallback func(types.RoomIdType), busSer
 		bus:     busService,
 		sfu:     sfuClient,
 	}
+	room.ctx, room.cancel = context.WithCancel(context.Background())
 
 	if busService != nil {
 		room.subscribeToRedis()
@@ -188,6 +211,7 @@ func (r *Room) CloseRoom(reason string) {
 
 func (r *Room) closeRoomLocked(reason string) {
 	slog.Info("Closing room", "room", r.ID, "reason", reason)
+	r.cancel()
 
 	var targets []types.ClientInterface
 	for _, c := range r.clients {
@@ -372,7 +396,11 @@ func (r *Room) broadcastLocked(msg *pb.WebSocketMessage) {
 		client.SendProto(msg)
 	}
 
-	go r.publishToRedis(context.Background(), msg)
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.publishToRedis(context.Background(), msg)
+	}()
 }
 
 // Broadcast sends a message to everyone.

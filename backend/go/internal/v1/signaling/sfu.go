@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 
+	"sync"
+
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 )
 
 // CreateSFUSession initializes the user in Rust and sends the SDP Offer back to the UI
-func CreateSFUSession(ctx context.Context, r types.Roomer, client types.ClientInterface, sfu types.SFUProvider) error {
+func CreateSFUSession(ctx context.Context, r types.Roomer, client types.ClientInterface, sfu types.SFUProvider, wg *sync.WaitGroup) error {
 	if sfu == nil {
 		return fmt.Errorf("SFU client not initialized")
 	}
@@ -53,7 +55,13 @@ func CreateSFUSession(ctx context.Context, r types.Roomer, client types.ClientIn
 		slog.Error("Failed to start listening for SFU events", "error", err, "clientId", client.GetID())
 		// Non-fatal, but video might not work properly
 	} else if stream != nil {
+		if wg != nil {
+			wg.Add(1)
+		}
 		go func() {
+			if wg != nil {
+				defer wg.Done()
+			}
 			for {
 				event, err := stream.Recv()
 				if err != nil {
