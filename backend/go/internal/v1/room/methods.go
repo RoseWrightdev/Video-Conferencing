@@ -54,7 +54,9 @@ func (r *Room) deleteParticipantLocked(ctx context.Context, client types.ClientI
 		clientInfo := types.ClientInfo{ClientId: client.GetID(), DisplayName: client.GetDisplayName()}
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:participants", r.ID)
-		r.bus.SetRem(ctx, key, string(data))
+		if err := r.bus.SetRem(ctx, key, string(data)); err != nil {
+			slog.Error("Redis error: failed to remove participant", "room", r.ID, "key", key, "error", err)
+		}
 	}
 }
 
@@ -75,7 +77,9 @@ func (r *Room) addHostLocked(ctx context.Context, client types.ClientInterface) 
 		clientInfo := types.ClientInfo{ClientId: client.GetID(), DisplayName: client.GetDisplayName()}
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:hosts", r.ID)
-		r.bus.SetAdd(ctx, key, string(data))
+		if err := r.bus.SetAdd(ctx, key, string(data)); err != nil {
+			slog.Error("Redis error: failed to add host", "room", r.ID, "key", key, "error", err)
+		}
 	}
 }
 
@@ -99,7 +103,9 @@ func (r *Room) deleteHostLocked(ctx context.Context, client types.ClientInterfac
 		clientInfo := types.ClientInfo{ClientId: client.GetID(), DisplayName: client.GetDisplayName()}
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:hosts", r.ID)
-		r.bus.SetRem(ctx, key, string(data))
+		if err := r.bus.SetRem(ctx, key, string(data)); err != nil {
+			slog.Error("Redis error: failed to remove host", "room", r.ID, "key", key, "error", err)
+		}
 	}
 }
 

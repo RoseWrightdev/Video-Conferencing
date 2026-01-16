@@ -20,21 +20,21 @@ func setupTestEnv(t *testing.T) func() {
 	}
 
 	// Clear all env vars
-	os.Unsetenv("JWT_SECRET")
-	os.Unsetenv("PORT")
-	os.Unsetenv("RUST_SFU_ADDR")
-	os.Unsetenv("REDIS_ENABLED")
-	os.Unsetenv("REDIS_ADDR")
-	os.Unsetenv("GO_ENV")
-	os.Unsetenv("LOG_LEVEL")
+	_ = os.Unsetenv("JWT_SECRET")
+	_ = os.Unsetenv("PORT")
+	_ = os.Unsetenv("RUST_SFU_ADDR")
+	_ = os.Unsetenv("REDIS_ENABLED")
+	_ = os.Unsetenv("REDIS_ADDR")
+	_ = os.Unsetenv("GO_ENV")
+	_ = os.Unsetenv("LOG_LEVEL")
 
 	// Return cleanup function
 	return func() {
 		for key, val := range origVars {
 			if val != "" {
-				os.Setenv(key, val)
+				_ = os.Setenv(key, val)
 			} else {
-				os.Unsetenv(key)
+				_ = os.Unsetenv(key)
 			}
 		}
 	}
@@ -45,10 +45,10 @@ func TestValidateEnv_ValidConfiguration(t *testing.T) {
 	defer cleanup()
 
 	// Set valid environment variables
-	os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
-	os.Setenv("PORT", "8080")
-	os.Setenv("RUST_SFU_ADDR", "localhost:50051")
-	os.Setenv("REDIS_ENABLED", "false")
+	_ = os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
+	_ = os.Setenv("PORT", "8080")
+	_ = os.Setenv("RUST_SFU_ADDR", "localhost:50051")
+	_ = os.Setenv("REDIS_ENABLED", "false")
 
 	cfg, err := ValidateEnv()
 	if err != nil {
@@ -76,8 +76,8 @@ func TestValidateEnv_MissingJWTSecret(t *testing.T) {
 	cleanup := setupTestEnv(t)
 	defer cleanup()
 
-	os.Setenv("PORT", "8080")
-	os.Setenv("RUST_SFU_ADDR", "localhost:50051")
+	_ = os.Setenv("PORT", "8080")
+	_ = os.Setenv("RUST_SFU_ADDR", "localhost:50051")
 
 	_, err := ValidateEnv()
 	if err == nil {
@@ -92,9 +92,9 @@ func TestValidateEnv_ShortJWTSecret(t *testing.T) {
 	cleanup := setupTestEnv(t)
 	defer cleanup()
 
-	os.Setenv("JWT_SECRET", "short")
-	os.Setenv("PORT", "8080")
-	os.Setenv("RUST_SFU_ADDR", "localhost:50051")
+	_ = os.Setenv("JWT_SECRET", "short")
+	_ = os.Setenv("PORT", "8080")
+	_ = os.Setenv("RUST_SFU_ADDR", "localhost:50051")
 
 	_, err := ValidateEnv()
 	if err == nil {
@@ -109,8 +109,8 @@ func TestValidateEnv_MissingPort(t *testing.T) {
 	cleanup := setupTestEnv(t)
 	defer cleanup()
 
-	os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
-	os.Setenv("RUST_SFU_ADDR", "localhost:50051")
+	_ = os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
+	_ = os.Setenv("RUST_SFU_ADDR", "localhost:50051")
 
 	_, err := ValidateEnv()
 	if err == nil {
@@ -125,9 +125,9 @@ func TestValidateEnv_InvalidPort(t *testing.T) {
 	cleanup := setupTestEnv(t)
 	defer cleanup()
 
-	os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
-	os.Setenv("PORT", "99999")
-	os.Setenv("RUST_SFU_ADDR", "localhost:50051")
+	_ = os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
+	_ = os.Setenv("PORT", "99999")
+	_ = os.Setenv("RUST_SFU_ADDR", "localhost:50051")
 
 	_, err := ValidateEnv()
 	if err == nil {
@@ -142,11 +142,11 @@ func TestValidateEnv_InvalidRedisAddr(t *testing.T) {
 	cleanup := setupTestEnv(t)
 	defer cleanup()
 
-	os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
-	os.Setenv("PORT", "8080")
-	os.Setenv("RUST_SFU_ADDR", "localhost:50051")
-	os.Setenv("REDIS_ENABLED", "true")
-	os.Setenv("REDIS_ADDR", "invalid-format")
+	_ = os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
+	_ = os.Setenv("PORT", "8080")
+	_ = os.Setenv("RUST_SFU_ADDR", "localhost:50051")
+	_ = os.Setenv("REDIS_ENABLED", "true")
+	_ = os.Setenv("REDIS_ADDR", "invalid-format")
 
 	_, err := ValidateEnv()
 	if err == nil {
@@ -161,9 +161,9 @@ func TestValidateEnv_InvalidRustSFUAddr(t *testing.T) {
 	cleanup := setupTestEnv(t)
 	defer cleanup()
 
-	os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
-	os.Setenv("PORT", "8080")
-	os.Setenv("RUST_SFU_ADDR", "no-port-here")
+	_ = os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
+	_ = os.Setenv("PORT", "8080")
+	_ = os.Setenv("RUST_SFU_ADDR", "no-port-here")
 
 	_, err := ValidateEnv()
 	if err == nil {
@@ -178,9 +178,9 @@ func TestValidateEnv_OptionalDefaults(t *testing.T) {
 	cleanup := setupTestEnv(t)
 	defer cleanup()
 
-	os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
-	os.Setenv("PORT", "8080")
-	os.Setenv("RUST_SFU_ADDR", "localhost:50051")
+	_ = os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
+	_ = os.Setenv("PORT", "8080")
+	_ = os.Setenv("RUST_SFU_ADDR", "localhost:50051")
 
 	cfg, err := ValidateEnv()
 	if err != nil {
@@ -199,10 +199,10 @@ func TestValidateEnv_RedisDefaultAddr(t *testing.T) {
 	cleanup := setupTestEnv(t)
 	defer cleanup()
 
-	os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
-	os.Setenv("PORT", "8080")
-	os.Setenv("RUST_SFU_ADDR", "localhost:50051")
-	os.Setenv("REDIS_ENABLED", "true")
+	_ = os.Setenv("JWT_SECRET", "this-is-a-very-long-secret-key-for-testing-purposes")
+	_ = os.Setenv("PORT", "8080")
+	_ = os.Setenv("RUST_SFU_ADDR", "localhost:50051")
+	_ = os.Setenv("REDIS_ENABLED", "true")
 	// Don't set REDIS_ADDR
 
 	cfg, err := ValidateEnv()

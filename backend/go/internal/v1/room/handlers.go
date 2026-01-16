@@ -197,8 +197,12 @@ func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterfa
 			r.deleteWaitingLocked(target)                                  // State change
 			r.addParticipantLocked(ctx, target)                            // State change
 			target.SendProto(buildApprovalMessage(string(target.GetID()))) // I/O
-			go r.CreateSFUSession(ctx, target)                             // I/O
-			go r.BroadcastRoomState(ctx)                                   // I/O
+			go func() {
+				if err := r.CreateSFUSession(ctx, target); err != nil {
+					slog.Error("Failed to create SFU session", "room", r.ID, "userId", target.GetID(), "error", err)
+				}
+			}()
+			go r.BroadcastRoomState(ctx) // I/O
 		}
 
 	case AdminActionMute:
