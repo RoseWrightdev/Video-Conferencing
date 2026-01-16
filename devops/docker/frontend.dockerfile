@@ -14,14 +14,20 @@ RUN apk add --no-cache libc6-compat
 COPY frontend/package.json frontend/package-lock.json* ./
 
 # Install dependencies
-RUN npm ci --only=production --ignore-scripts
+RUN npm ci
 
 # Copy source code
 COPY frontend/ .
 
+
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+
+# Build time requirements
+ARG NEXT_PUBLIC_WS_URL=ws://localhost:8000
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+ENV CYPRESS_INSTALL_BINARY=0
 
 # Build the application
 RUN npm run build
