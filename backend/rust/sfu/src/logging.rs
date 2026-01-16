@@ -1,13 +1,4 @@
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use tonic::{Request, Status};
-use tower::Service;
-use tower_layer::Layer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-
-// Constants
-pub const CORRELATION_ID_HEADER: &str = "x-correlation-id";
 
 /// Initialize the tracing subscriber with JSON formatter for production
 pub fn init(rust_log: &str) {
@@ -22,14 +13,6 @@ pub fn init(rust_log: &str) {
         .with(env_filter)
         .with(fmt_layer)
         .init();
-}
-
-/// Helper to extract correlation ID from gRPC metadata
-pub fn get_correlation_id<T>(req: &Request<T>) -> Option<String> {
-    req.metadata()
-        .get(CORRELATION_ID_HEADER)
-        .and_then(|val| val.to_str().ok())
-        .map(|s| s.to_string())
 }
 
 // NOTE: Ideally we would implement a full tower middleware for this,
