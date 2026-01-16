@@ -11,6 +11,7 @@ use sfu::pb;
 use sfu::sfu_service::MySfu;
 
 mod config;
+mod logging;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,10 +22,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Initialize tracing with validated RUST_LOG
-    std::env::set_var("RUST_LOG", &cfg.rust_log);
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    // Initialize tracing with validated RUST_LOG
+    logging::init(&cfg.rust_log);
 
     // Initialize Metrics
     register_metrics();

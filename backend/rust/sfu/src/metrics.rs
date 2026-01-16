@@ -26,6 +26,16 @@ lazy_static! {
         "Total number of PLIs (Keyframe requests) sent to sources"
     )
     .unwrap();
+    pub static ref SFU_WEBRTC_CONNECTIONS_TOTAL: IntCounter = register_int_counter!(
+        "sfu_webrtc_connections_total",
+        "Total number of WebRTC connections established"
+    )
+    .unwrap();
+    pub static ref SFU_WEBRTC_CONNECTION_FAILURES_TOTAL: IntCounter = register_int_counter!(
+        "sfu_webrtc_connection_failures_total",
+        "Total number of WebRTC connection failures"
+    )
+    .unwrap();
 }
 
 pub fn register_metrics() {
@@ -37,4 +47,6 @@ pub fn register_metrics() {
         .get();
     let _ = SFU_PACKETS_DROPPED_TOTAL.with_label_values(&["none"]).get();
     let _ = SFU_KEYFRAMES_REQUESTED_TOTAL.get();
+    let _ = SFU_WEBRTC_CONNECTIONS_TOTAL.get();
+    let _ = SFU_WEBRTC_CONNECTION_FAILURES_TOTAL.get();
 }

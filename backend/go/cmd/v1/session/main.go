@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,11 +13,14 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/health"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/middleware"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/ratelimit"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/transport"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
@@ -32,20 +34,33 @@ func main() {
 
 	for _, path := range envPaths {
 		if err := godotenv.Load(path); err == nil {
-			slog.Info("Loaded environment from", "path", path)
 			envLoaded = true
 			break
 		}
 	}
 
-	if !envLoaded {
-		slog.Warn("No .env file found in any expected location, relying on environment variables")
+	// Temporarily load config to check development mode for logger init
+	tempCfg, _ := config.ValidateEnv()
+
+	// Initialize Logger
+	if err := logging.Initialize(tempCfg.DevelopmentMode); err != nil {
+		panic("Failed to initialize logger: " + err.Error())
+	}
+	// Ensure buffered logs are flushed
+	defer logging.GetLogger().Sync()
+
+	ctx := context.Background()
+
+	if envLoaded {
+		logging.Info(ctx, "Loaded environment from .env file")
+	} else {
+		logging.Warn(ctx, "No .env file found in any expected location, relying on environment variables")
 	}
 
 	// Validate environment variables before starting the server
 	cfg, err := config.ValidateEnv()
 	if err != nil {
-		slog.Error("Environment validation failed", "error", err)
+		logging.Error(ctx, "Environment validation failed", zap.Error(err))
 		os.Exit(1)
 	}
 
@@ -56,17 +71,17 @@ func main() {
 	developmentMode := cfg.DevelopmentMode
 
 	if developmentMode {
-		slog.Info("Running in DEVELOPMENT MODE")
+		logging.Info(ctx, "Running in DEVELOPMENT MODE")
 	}
 
 	var authValidator *auth.Validator
 	if !skipAuth {
 		// FALLBACK: If in dev mode and credentials missing, auto-skip
 		if developmentMode && (auth0Domain == "" || auth0Audience == "") {
-			slog.Warn("⚠️  Development Mode: Auth0 credentials missing. Auto-enabling SKIP_AUTH.")
+			logging.Warn(ctx, "⚠️  Development Mode: Auth0 credentials missing. Auto-enabling SKIP_AUTH.")
 			skipAuth = true
 		} else if auth0Domain == "" || auth0Audience == "" {
-			slog.Error("AUTH0_DOMAIN and AUTH0_AUDIENCE must be set in environment when SKIP_AUTH=false")
+			logging.Error(ctx, "AUTH0_DOMAIN and AUTH0_AUDIENCE must be set in environment when SKIP_AUTH=false")
 			return
 		}
 	}
@@ -76,12 +91,12 @@ func main() {
 		var err error
 		authValidator, err = auth.NewValidator(context.Background(), auth0Domain, auth0Audience)
 		if err != nil {
-			slog.Error("Failed to create auth validator", "error", err)
+			logging.Error(ctx, "Failed to create auth validator", zap.Error(err))
 			return
 		}
-		slog.Info("✅ Auth0 validator initialized", "domain", auth0Domain, "audience", auth0Audience)
+		logging.Info(ctx, "✅ Auth0 validator initialized", zap.String("domain", auth0Domain), zap.String("audience", auth0Audience))
 	} else {
-		slog.Warn("⚠️ Authentication DISABLED for development - DO NOT USE IN PRODUCTION")
+		logging.Warn(ctx, "⚠️ Authentication DISABLED for development - DO NOT USE IN PRODUCTION")
 		authValidator = nil
 	}
 
@@ -92,13 +107,13 @@ func main() {
 		var err error
 		busService, err = bus.NewService(cfg.RedisAddr, cfg.RedisPassword)
 		if err != nil {
-			slog.Error("Failed to connect to Redis, running in single-instance mode", "error", err)
+			logging.Error(ctx, "Failed to connect to Redis, running in single-instance mode", zap.Error(err))
 			busService = nil // Fallback to single-instance mode
 		} else {
-			slog.Info("✅ Redis pub/sub initialized for distributed messaging", "addr", cfg.RedisAddr)
+			logging.Info(ctx, "✅ Redis pub/sub initialized for distributed messaging", zap.String("addr", cfg.RedisAddr))
 		}
 	} else {
-		slog.Info("Running in single-instance mode (Redis disabled)")
+		logging.Info(ctx, "Running in single-instance mode (Redis disabled)")
 	}
 
 	// --- Rate Limiter Initialization ---
@@ -109,10 +124,10 @@ func main() {
 	}
 	rateLimiter, err := ratelimit.NewRateLimiter(cfg, redisClient)
 	if err != nil {
-		slog.Error("Failed to initialize rate limiter", "error", err)
+		logging.Error(ctx, "Failed to initialize rate limiter", zap.Error(err))
 		os.Exit(1)
 	}
-	slog.Info("✅ Rate limiter initialized")
+	logging.Info(ctx, "✅ Rate limiter initialized")
 
 	// --- Create Hubs with Dependencies ---
 	// Each feature gets its own hub, configured with the same dependencies.
@@ -126,15 +141,19 @@ func main() {
 	hub := transport.NewHub(validator, busService, developmentMode, rateLimiter)
 
 	// --- Set up Server ---
-	router := gin.Default()
+	router := gin.New() // Use New() to avoid default logger
+	router.Use(gin.Recovery())
+
+	// Add Correlation ID middleware
+	router.Use(middleware.CorrelationID())
+
 	// Cors
 	config := cors.DefaultConfig()
 	allowedOrigins := auth.GetAllowedOriginsFromEnv(cfg.AllowedOrigins, []string{"http://localhost:3000"})
 	config.AllowOrigins = allowedOrigins
+	// Expose header so frontend can read it
+	config.ExposeHeaders = []string{middleware.HeaderXCorrelationID}
 	router.Use(cors.New(config))
-
-	// Error handling
-	router.Use(gin.Recovery())
 
 	// Rate Limiting
 	// Apply global rate limiting middleware
@@ -157,6 +176,36 @@ func main() {
 		apiGroup.GET("/messages", rateLimiter.MiddlewareForEndpoint("messages"), func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "messages endpoint"})
 		})
+
+		// New endpoint for frontend logs
+		apiGroup.POST("/logs", func(c *gin.Context) {
+			// In a real implementation, we would parse and log these properly
+			// For now, valid JSON is enough to accept it
+			var json map[string]interface{}
+			if err := c.ShouldBindJSON(&json); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			// Extract correlation ID if present in body, or take from header (middleware already set it)
+			cid := c.GetString(string(logging.CorrelationIDKey))
+
+			// Extract level and message
+			level, _ := json["level"].(string)
+			msg, _ := json["message"].(string)
+
+			// Log it - we use a specific "frontend" service field if possible,
+			// but for now just logging it as incoming log
+			logging.GetLogger().Info("Frontend Log",
+				zap.String("correlation_id", cid),
+				zap.Any("payload", json),
+				zap.String("original_level", level),
+				zap.String("original_message", msg),
+				zap.String("service", "frontend"), // Override service to frontend
+			)
+
+			c.Status(http.StatusOK)
+		})
 	}
 
 	// Prometheus metrics endpoint
@@ -176,9 +225,9 @@ func main() {
 	// --- Graceful Shutdown ---
 	// Start the server in a goroutine so it doesn't block.
 	go func() {
-		slog.Info("API server starting", "port", cfg.Port)
+		logging.Info(ctx, "API server starting", zap.String("port", cfg.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Failed to run server", "error", err)
+			logging.Error(ctx, "Failed to run server", zap.Error(err))
 			syscall.Kill(os.Getpid(), syscall.SIGTERM)
 		}
 	}()
@@ -187,31 +236,31 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	slog.Info("Shutting down server...")
+	logging.Info(ctx, "Shutting down server...")
 
 	// The context is used to inform the server it has 30 seconds to finish
 	// the requests it is currently handling
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Close all active rooms and WebSocket connections gracefully
-	if err := hub.Shutdown(ctx); err != nil {
-		slog.Error("Error during Hub shutdown:", "error", err)
+	if err := hub.Shutdown(shutdownCtx); err != nil {
+		logging.Error(ctx, "Error during Hub shutdown:", zap.Error(err))
 	}
 
 	// Shutdown HTTP server
-	if err := srv.Shutdown(ctx); err != nil {
-		slog.Error("Server forced to shutdown:", "error", err)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logging.Error(ctx, "Server forced to shutdown:", zap.Error(err))
 	}
 
 	// Close Redis connection if it was initialized
 	if busService != nil {
 		if err := busService.Close(); err != nil {
-			slog.Error("Failed to close Redis connection:", "error", err)
+			logging.Error(ctx, "Failed to close Redis connection:", zap.Error(err))
 		} else {
-			slog.Info("Redis connection closed")
+			logging.Info(ctx, "Redis connection closed")
 		}
 	}
 
-	slog.Info("Server exiting")
+	logging.Info(ctx, "Server exiting")
 }

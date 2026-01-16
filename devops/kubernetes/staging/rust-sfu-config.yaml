@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rust-sfu-config
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: rust-sfu
+    app.kubernetes.io/component: media
+data:
+  LOG_LEVEL: "info"
+  # Add other SFU configuration variables here as needed

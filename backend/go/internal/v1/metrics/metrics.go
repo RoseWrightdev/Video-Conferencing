@@ -103,6 +103,23 @@ var (
 		Name:      "requests_total",
 		Help:      "Total number of requests checked against the rate limiter",
 	}, []string{"endpoint"})
+
+	// RedisOperationsTotal tracks the total number of Redis operations (CounterVec)
+	RedisOperationsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "video_conference",
+		Subsystem: "redis",
+		Name:      "operations_total",
+		Help:      "Total number of Redis operations",
+	}, []string{"operation", "status"})
+
+	// RedisOperationDuration tracks the duration of Redis operations (HistogramVec)
+	RedisOperationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "video_conference",
+		Subsystem: "redis",
+		Name:      "operation_duration_seconds",
+		Help:      "Duration of Redis operations",
+		Buckets:   prometheus.DefBuckets,
+	}, []string{"operation"})
 )
 
 func IncConnection() {

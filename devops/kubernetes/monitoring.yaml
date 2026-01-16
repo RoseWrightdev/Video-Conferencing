@@ -41,6 +41,7 @@ spec:
         summary: "High WebSocket connection failure rate"
         description: "WebSocket connection failure rate is {{ $value | humanizePercentage }}"
         value: "{{ $value | humanizePercentage }}"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-high-websocket-failure.md"
     
     - alert: BackendDown
       expr: up{job="backend"} == 0
@@ -51,6 +52,7 @@ spec:
       annotations:
         summary: "Backend service is down"
         description: "Backend API is not responding - all video conferencing features are unavailable"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-backend-down.md"
     
     - alert: RustSFUDown
       expr: up{job="rust-sfu"} == 0
@@ -62,6 +64,7 @@ spec:
       annotations:
         summary: "Rust SFU service is down"
         description: "Media routing is unavailable - users cannot establish WebRTC connections"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-rust-sfu-down.md"
     
     - alert: HighRoomCount
       expr: webrtc_rooms_active > 100
@@ -74,6 +77,7 @@ spec:
         summary: "High number of active rooms"
         description: "Active rooms count is {{ $value }} - consider scaling"
         value: "{{ $value }}"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-high-room-count.md"
     
     - alert: HighMessageProcessingLatency
       expr: histogram_quantile(0.95, rate(message_processing_duration_seconds_bucket[5m])) > 1
@@ -86,6 +90,7 @@ spec:
         summary: "High message processing latency"
         description: "95th percentile message processing latency is {{ $value }}s - users may experience delays"
         value: "{{ $value }}s"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-high-latency.md"
     
     - alert: HighPodMemoryUsage
       expr: container_memory_usage_bytes{namespace="video-conferencing"} / container_spec_memory_limit_bytes{namespace="video-conferencing"} > 0.9
@@ -96,6 +101,63 @@ spec:
       annotations:
         summary: "High memory usage detected"
         description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of memory limit"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-high-memory.md"
+
+    - alert: RedisConnectionFailure
+      expr: redis_up == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: data-store
+      annotations:
+        summary: "Redis connection failed"
+        description: "Unable to connect to Redis instance. State management is down."
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-redis-connection-failure.md"
+
+    - alert: GRPCHighErrorRate
+      expr: rate(grpc_server_handled_total{grpc_code!="OK"}[5m]) > 0.05
+      for: 2m
+      labels:
+        severity: critical
+        service: backend
+      annotations:
+        summary: "High gRPC error rate"
+        description: "gRPC error rate is > 5%"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-grpc-high-error-rate.md"
+
+    - alert: WebRTCConnectionFailureRate
+      expr: rate(webrtc_connection_failed_total[5m]) > 0.1
+      for: 2m
+      labels:
+        severity: critical
+        category: webrtc
+        service: rust-sfu
+      annotations:
+        summary: "High WebRTC connection failure rate"
+        description: "More than 10% of WebRTC connections are failing"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-webrtc-connection-failure-rate.md"
+
+    - alert: DiskSpaceWarning
+      expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.2
+      for: 10m
+      labels:
+        severity: warning
+        service: infrastructure
+      annotations:
+        summary: "Low disk space"
+        description: "Disk space is below 20%"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-disk-space-warning.md"
+
+    - alert: CertificateExpiringSoon
+      expr: (cert_expiry_timestamp - time()) < 7*24*60*60
+      for: 1h
+      labels:
+        severity: warning
+        service: infrastructure
+      annotations:
+        summary: "Certificate expiring soon"
+        description: "SSL Certificate expires in less than 7 days"
+        runbook_url: "https://github.com/RoseWrightdev/Video-Conferencing/blob/main/docs/runbooks/alert-certificate-expiring-soon.md"
 
 ---
 # HorizontalPodAutoscaler for frontend

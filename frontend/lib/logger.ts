@@ -1,154 +1,123 @@
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';
+import { v4 as uuidv4 } from 'uuid';
 
-const LOG_LEVEL_VALUES: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-  none: 4,
-};
+type LogLevel = 'info' | 'warn' | 'error';
 
-interface LoggerConfig {
-  minLevel: LogLevel;
-  enableTimestamps: boolean;
-  enableColors: boolean;
-  enabledNamespaces: string[] | '*';
-}
-
-const defaultConfig: LoggerConfig = {
-  minLevel: process.env.NODE_ENV === 'production' ? 'warn' : 'debug',
-  enableTimestamps: true,
-  enableColors: true,
-  enabledNamespaces: '*',
-};
-
-let globalConfig = { ...defaultConfig };
-
-export function configureLogger(config: Partial<LoggerConfig>): void {
-  globalConfig = { ...globalConfig, ...config };
+interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  message: string;
+  correlation_id: string;
+  service: 'frontend';
+  [key: string]: any;
 }
 
 class Logger {
-  constructor(private namespace: string) {}
+  private correlationId: string;
+  private backendUrl: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
 
-  private shouldLog(level: LogLevel): boolean {
-    if (LOG_LEVEL_VALUES[level] < LOG_LEVEL_VALUES[globalConfig.minLevel]) return false;
-    
-    if (globalConfig.enabledNamespaces === '*') return true;
-    
-    return globalConfig.enabledNamespaces.some(ns => 
-      this.namespace.startsWith(ns) || ns === this.namespace
-    );
-  }
-
-  private formatMessage(level: string, message: string, data?: unknown): string {
-    const timestamp = globalConfig.enableTimestamps 
-      ? `[${new Date().toISOString().split('T')[1].slice(0, -1)}]` 
-      : '';
-    
-    return `${timestamp} [${this.namespace}] ${level}: ${message}${data ? '\n' + JSON.stringify(data, null, 2) : ''}`;
-  }
-
-  private getColor(level: LogLevel): string {
-    if (!globalConfig.enableColors) return '';
-    
-    const colors: Record<LogLevel, string> = {
-      debug: 'color: gray',
-      info: 'color: green',
-      warn: 'color: orange',
-      error: 'color: red',
-      none: '',
-    };
-    
-    return colors[level];
-  }
-
-  debug(message: string, data?: unknown): void {
-    if (process.env.NODE_ENV === 'production') return;
-    if (!this.shouldLog('debug')) return;
-    const formatted = this.formatMessage('DEBUG', message, data);
-    console.log(`%c${formatted}`, this.getColor('debug'));
-  }
-
-  info(message: string, data?: unknown): void {
-    if (process.env.NODE_ENV === 'production') return;
-    if (!this.shouldLog('info')) return;
-    const formatted = this.formatMessage('INFO', message, data);
-    console.log(`%c${formatted}`, this.getColor('info'));
-  }
-
-  warn(message: string, data?: unknown): void {
-    if (process.env.NODE_ENV === 'production') return;
-    if (!this.shouldLog('warn')) return;
-    const formatted = this.formatMessage('WARN', message, data);
-    console.warn(`%c${formatted}`, this.getColor('warn'));
-  }
-
-  error(message: string, error?: unknown): void {
-    if (process.env.NODE_ENV === 'production') return;
-    if (!this.shouldLog('error')) return;
-    const errorData = error instanceof Error 
-      ? { message: error.message, stack: error.stack }
-      : error;
-    const formatted = this.formatMessage('ERROR', message, errorData);
-    console.error(`%c${formatted}`, this.getColor('error'));
-  }
-
-  time(label: string): { end: () => void } {
-    const startTime = performance.now();
-    
-    return {
-      end: () => {
-        const duration = performance.now() - startTime;
-        this.debug(`${label} took ${duration.toFixed(2)}ms`);
+  constructor() {
+    // Generate or retrieve correlation ID (could be from session storage if we want persistence across reloads)
+    if (typeof window !== 'undefined') {
+      let cid = sessionStorage.getItem('correlation_id');
+      if (!cid) {
+        cid = uuidv4();
+        sessionStorage.setItem('correlation_id', cid);
       }
-    };
-  }
-
-  group(label: string): { end: () => void } {
-    if (process.env.NODE_ENV === 'production') return { end: () => {} };
-    if (!this.shouldLog('info')) return { end: () => {} };
-    
-    console.group(`[${this.namespace}] ${label}`);
-    return {
-      end: () => console.groupEnd()
-    };
-  }
-
-  table(data: unknown[]): void {
-    if (process.env.NODE_ENV === 'production') return;
-    if (!this.shouldLog('info')) return;
-    console.table(data);
-  }
-
-  assert(condition: boolean, message: string): void {
-    if (process.env.NODE_ENV === 'production') return;
-    if (!condition) {
-      this.error(`Assertion failed: ${message}`);
+      this.correlationId = cid;
+    } else {
+      this.correlationId = uuidv4();
     }
   }
 
-  trace(message: string): void {
-    if (process.env.NODE_ENV === 'production') return;
-    if (!this.shouldLog('debug')) return;
-    console.trace(`[${this.namespace}] ${message}`);
+  public getCorrelationId(): string {
+    return this.correlationId;
+  }
+
+  private redact(obj: any): any {
+    if (typeof obj === 'string') {
+      // Simple email redaction
+      if (obj.includes('@')) {
+        return obj.replace(/([\w.]+)@([\w.]+)/g, (match, local, domain) => {
+          return '***@' + domain;
+        });
+      }
+      return obj;
+    }
+
+    if (typeof obj === 'object' && obj !== null) {
+      const newObj: any = Array.isArray(obj) ? [] : {};
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          // Sensitive keys to redact fully
+          if (['password', 'token', 'secret', 'authorization'].some(k => key.toLowerCase().includes(k))) {
+            newObj[key] = '[REDACTED]';
+          } else {
+            newObj[key] = this.redact(obj[key]);
+          }
+        }
+      }
+      return newObj;
+    }
+
+    return obj;
+  }
+
+  private async log(level: LogLevel, message: string, context: Record<string, any> = {}) {
+    // Redact context
+    const redactedContext = this.redact(context);
+
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      correlation_id: this.correlationId,
+      service: 'frontend',
+      ...redactedContext,
+    };
+
+    // Console logging (always in dev, maybe restricted in prod)
+    const consoleMethod = level === 'info' ? console.log : level === 'warn' ? console.warn : console.error;
+    consoleMethod(`[${level.toUpperCase()}] ${message}`, redactedContext);
+
+    // Send to backend in production (or if configured)
+    // For this MVP, we indiscriminately try to send errors and warnings to backend
+    if (level === 'error' || level === 'warn') {
+      this.sendToBackend(entry);
+    }
+  }
+
+  private async sendToBackend(entry: LogEntry) {
+    try {
+      if (typeof window === 'undefined') return; // Don't try sending from server-side rendering yet
+
+      // Fire and forget, or define logic elsewhere
+      fetch(`${this.backendUrl}/logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Correlation-ID': this.correlationId,
+        },
+        body: JSON.stringify(entry),
+        keepalive: true, // Attempt to ensure request sends even if page unloads
+      }).catch(err => {
+        console.error('Failed to send log to backend', err);
+      });
+    } catch (e) {
+      // Prevent infinite loops if logging fails
+    }
+  }
+
+  public info(message: string, context?: Record<string, any>) {
+    this.log('info', message, context);
+  }
+
+  public warn(message: string, context?: Record<string, any>) {
+    this.log('warn', message, context);
+  }
+
+  public error(message: string, context?: Record<string, any>) {
+    this.log('error', message, context);
   }
 }
 
-const loggerCache = new Map<string, Logger>();
-
-export function createLogger(namespace: string): Logger {
-  if (!loggerCache.has(namespace)) {
-    loggerCache.set(namespace, new Logger(namespace));
-  }
-  return loggerCache.get(namespace)!;
-}
-
-// Pre-configured loggers for common modules
-export const loggers = {
-  webrtc: createLogger('WebRTC'),
-  websocket: createLogger('WebSocket'),
-  media: createLogger('Media'),
-  room: createLogger('Room'),
-  ui: createLogger('UI'),
-};
+export const logger = new Logger();
