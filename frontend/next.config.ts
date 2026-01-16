@@ -4,6 +4,11 @@ import type { NextConfig } from "next";
 function validateBuildEnv() {
   const errors: string[] = [];
 
+  // Skip validation during tests
+  if (process.env.NODE_ENV === 'test') {
+    return;
+  }
+
   // Validate NEXT_PUBLIC_WS_URL
   const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
   if (!wsUrl) {
