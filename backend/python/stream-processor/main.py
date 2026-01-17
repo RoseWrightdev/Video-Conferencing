@@ -24,6 +24,20 @@ class CaptioningService(cc_pb2_grpc.CaptioningServiceServicer):
     def __init__(self):
         # Use 'tiny' (multilingual) instead of 'tiny.en' to support translation/non-English input
         self.transcriber = AudioTranscriber(model_size="tiny", device="cpu", compute_type="int8")
+        
+        # Initialize Redis
+        import redis
+        try:
+            # Assume Redis is at localhost:6379 or use env var
+            import os
+            redis_host = os.getenv("REDIS_HOST", "localhost")
+            redis_port = int(os.getenv("REDIS_PORT", 6379))
+            self.redis_client = redis.Redis(host=redis_host, port=redis_port, db=0)
+            logger.info(f"Connected to Redis at {redis_host}:{redis_port}")
+        except Exception as e:
+            logger.error(f"Failed to connect to Redis: {e}")
+            self.redis_client = None
+
         logger.info("CaptioningService initialized")
 
     async def StreamAudio(self, request_iterator, context):
@@ -44,6 +58,29 @@ class CaptioningService(cc_pb2_grpc.CaptioningServiceServicer):
                 for res in results:
                     if res['text']:
                         logger.info(f"[{session_id}] {res['text']}")
+                        # Parse session_id (room_id:user_id)
+                        parts = session_id.split(":")
+                        room_id = parts[0] if len(parts) > 0 else "unknown"
+                        user_id = parts[1] if len(parts) > 1 else "unknown"
+
+                        # Push to Redis for summarization
+                        # Format: transcript:{room_id} -> JSON list of events
+                        # We use RPUSH to append.
+                        try:
+                            import json
+                            import time
+                            event_data = {
+                                "user_id": user_id,
+                                "text": res['text'],
+                                "timestamp": time.time(),
+                                "confidence": res['confidence']
+                            }
+                            # self.redis_client is initialized in __init__
+                            if self.redis_client:
+                                self.redis_client.rpush(f"transcript:{room_id}", json.dumps(event_data))
+                        except Exception as e:
+                            logger.error(f"Redis error: {e}")
+
                         yield cc_pb2.CaptionEvent(
                             session_id=session_id,
                             text=res['text'],

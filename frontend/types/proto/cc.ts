@@ -26,6 +26,16 @@ export interface CaptionEvent {
   confidence: number;
 }
 
+export interface SummaryRequest {
+  roomId: string;
+}
+
+export interface SummaryResponse {
+  roomId: string;
+  summary: string;
+  actionItems: string[];
+}
+
 function createBaseAudioChunk(): AudioChunk {
   return { sessionId: "", audioData: new Uint8Array(0), targetLanguage: "" };
 }
@@ -178,9 +188,130 @@ export const CaptionEvent: MessageFns<CaptionEvent> = {
   },
 };
 
+function createBaseSummaryRequest(): SummaryRequest {
+  return { roomId: "" };
+}
+
+export const SummaryRequest: MessageFns<SummaryRequest> = {
+  encode(message: SummaryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.roomId !== "") {
+      writer.uint32(10).string(message.roomId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SummaryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSummaryRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.roomId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SummaryRequest>, I>>(base?: I): SummaryRequest {
+    return SummaryRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SummaryRequest>, I>>(object: I): SummaryRequest {
+    const message = createBaseSummaryRequest();
+    message.roomId = object.roomId ?? "";
+    return message;
+  },
+};
+
+function createBaseSummaryResponse(): SummaryResponse {
+  return { roomId: "", summary: "", actionItems: [] };
+}
+
+export const SummaryResponse: MessageFns<SummaryResponse> = {
+  encode(message: SummaryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.roomId !== "") {
+      writer.uint32(10).string(message.roomId);
+    }
+    if (message.summary !== "") {
+      writer.uint32(18).string(message.summary);
+    }
+    for (const v of message.actionItems) {
+      writer.uint32(26).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SummaryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSummaryResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.roomId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.summary = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.actionItems.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SummaryResponse>, I>>(base?: I): SummaryResponse {
+    return SummaryResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SummaryResponse>, I>>(object: I): SummaryResponse {
+    const message = createBaseSummaryResponse();
+    message.roomId = object.roomId ?? "";
+    message.summary = object.summary ?? "";
+    message.actionItems = object.actionItems?.map((e) => e) || [];
+    return message;
+  },
+};
+
 export interface CaptioningService {
   /** Bidirectional streaming: SFU sends audio chunks, Service sends back captions. */
   StreamAudio(request: Observable<AudioChunk>): Observable<CaptionEvent>;
+}
+
+export interface SummaryService {
+  /** Generates a summary for a concluded meeting room. */
+  Summarize(request: SummaryRequest): Promise<SummaryResponse>;
 }
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;

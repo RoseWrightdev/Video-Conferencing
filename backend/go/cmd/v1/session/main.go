@@ -17,6 +17,7 @@ import (
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/cc"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/health"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
@@ -129,6 +130,26 @@ func main() {
 	}
 	logging.Info(ctx, "✅ Rate limiter initialized")
 
+	// --- Summary Service (Python) Initialization ---
+	// Hardcoded port 50052 as defined in summary-service/main.py
+	// In k8s, this would be a service DNS name
+	summaryAddr := "localhost:50052"
+	if os.Getenv("SUMMARY_SERVICE_ADDR") != "" {
+		summaryAddr = os.Getenv("SUMMARY_SERVICE_ADDR")
+	}
+
+	var summaryClient *cc.SummaryClient
+	var errSummary error
+	// Attempt connection but don't block startup
+	summaryClient, errSummary = cc.NewSummaryClient(summaryAddr)
+	if errSummary != nil {
+		logging.Error(ctx, "Failed to connect to Summary Service", zap.Error(errSummary))
+		// Continue running, handler will just error out
+	} else {
+		logging.Info(ctx, "✅ Connected to Summary Service", zap.String("addr", summaryAddr))
+		defer summaryClient.Close()
+	}
+
 	// --- Create Hubs with Dependencies ---
 	// Each feature gets its own hub, configured with the same dependencies.
 	var validator types.TokenValidator
@@ -205,6 +226,25 @@ func main() {
 			)
 
 			c.Status(http.StatusOK)
+		})
+
+		// Summary Endpoint
+		apiGroup.POST("/rooms/:roomId/summary", func(c *gin.Context) {
+			if summaryClient == nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Summary service unavailable"})
+				return
+			}
+			roomId := c.Param("roomId")
+
+			// Call the RPC
+			resp, err := summaryClient.Summarize(c.Request.Context(), roomId)
+			if err != nil {
+				logging.Error(ctx, "Summary request failed", zap.String("roomId", roomId), zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate summary", "details": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, resp)
 		})
 	}
 

@@ -149,6 +149,110 @@ func (x *CaptionEvent) GetConfidence() float64 {
 	return 0
 }
 
+type SummaryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SummaryRequest) Reset() {
+	*x = SummaryRequest{}
+	mi := &file_proto_cc_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SummaryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SummaryRequest) ProtoMessage() {}
+
+func (x *SummaryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_cc_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SummaryRequest.ProtoReflect.Descriptor instead.
+func (*SummaryRequest) Descriptor() ([]byte, []int) {
+	return file_proto_cc_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SummaryRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+type SummaryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	Summary       string                 `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	ActionItems   []string               `protobuf:"bytes,3,rep,name=action_items,json=actionItems,proto3" json:"action_items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SummaryResponse) Reset() {
+	*x = SummaryResponse{}
+	mi := &file_proto_cc_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SummaryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SummaryResponse) ProtoMessage() {}
+
+func (x *SummaryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_cc_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SummaryResponse.ProtoReflect.Descriptor instead.
+func (*SummaryResponse) Descriptor() ([]byte, []int) {
+	return file_proto_cc_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SummaryResponse) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *SummaryResponse) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *SummaryResponse) GetActionItems() []string {
+	if x != nil {
+		return x.ActionItems
+	}
+	return nil
+}
+
 var File_proto_cc_proto protoreflect.FileDescriptor
 
 const file_proto_cc_proto_rawDesc = "" +
@@ -168,9 +272,17 @@ const file_proto_cc_proto_rawDesc = "" +
 	"\bis_final\x18\x03 \x01(\bR\aisFinal\x12\x1e\n" +
 	"\n" +
 	"confidence\x18\x04 \x01(\x01R\n" +
-	"confidence2H\n" +
+	"confidence\")\n" +
+	"\x0eSummaryRequest\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\"g\n" +
+	"\x0fSummaryResponse\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x18\n" +
+	"\asummary\x18\x02 \x01(\tR\asummary\x12!\n" +
+	"\faction_items\x18\x03 \x03(\tR\vactionItems2H\n" +
 	"\x11CaptioningService\x123\n" +
-	"\vStreamAudio\x12\x0e.cc.AudioChunk\x1a\x10.cc.CaptionEvent(\x010\x01BHZFgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/cc/proto;ccb\x06proto3"
+	"\vStreamAudio\x12\x0e.cc.AudioChunk\x1a\x10.cc.CaptionEvent(\x010\x012F\n" +
+	"\x0eSummaryService\x124\n" +
+	"\tSummarize\x12\x12.cc.SummaryRequest\x1a\x13.cc.SummaryResponseBHZFgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/cc/proto;ccb\x06proto3"
 
 var (
 	file_proto_cc_proto_rawDescOnce sync.Once
@@ -184,16 +296,20 @@ func file_proto_cc_proto_rawDescGZIP() []byte {
 	return file_proto_cc_proto_rawDescData
 }
 
-var file_proto_cc_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_proto_cc_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proto_cc_proto_goTypes = []any{
-	(*AudioChunk)(nil),   // 0: cc.AudioChunk
-	(*CaptionEvent)(nil), // 1: cc.CaptionEvent
+	(*AudioChunk)(nil),      // 0: cc.AudioChunk
+	(*CaptionEvent)(nil),    // 1: cc.CaptionEvent
+	(*SummaryRequest)(nil),  // 2: cc.SummaryRequest
+	(*SummaryResponse)(nil), // 3: cc.SummaryResponse
 }
 var file_proto_cc_proto_depIdxs = []int32{
 	0, // 0: cc.CaptioningService.StreamAudio:input_type -> cc.AudioChunk
-	1, // 1: cc.CaptioningService.StreamAudio:output_type -> cc.CaptionEvent
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: cc.SummaryService.Summarize:input_type -> cc.SummaryRequest
+	1, // 2: cc.CaptioningService.StreamAudio:output_type -> cc.CaptionEvent
+	3, // 3: cc.SummaryService.Summarize:output_type -> cc.SummaryResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -210,9 +326,9 @@ func file_proto_cc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_cc_proto_rawDesc), len(file_proto_cc_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_proto_cc_proto_goTypes,
 		DependencyIndexes: file_proto_cc_proto_depIdxs,

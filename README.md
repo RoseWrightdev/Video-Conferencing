@@ -36,8 +36,11 @@ graph TD
     BE -- gRPC --> SFU
     BE -- Pub/Sub --> Redis
     SFU -- Metrics --> BE
-    SFU -- gRPC (Audio) --> CC["Captioning Service (Python)"]
+    SFU -- gRPC (Audio) --> CC["Stream Processor (Python)"]
     CC -- gRPC (Text) --> SFU
+    CC -- Push (Transcript) --> Redis
+    Sum["Summary Service (Python)"] -- Pull (Transcript) --> Redis
+    FE -- HTTP/POST --> Sum
 ```
 
 ### 1. Frontend Service
@@ -69,6 +72,15 @@ graph TD
     - **Receives** raw audio chunks from the SFU via gRPC.
     - **Transcribes** audio using OpenAI's Whisper model (optimized).
     - **Streams** captions back to the SFU for broadcast.
+    - **Pushes** finalized transcripts to Redis for summarization.
+
+### 5. Summary Service (GenAI)
+- **Path:** `backend/python/summary-service`
+- **Stack:** Python, **FastAPI**, **Redis**, **OpenAI/LLM**.
+- **Role:** Post-meeting Intelligence.
+    - **Triggered** via API after a meeting ends.
+    - **Retrieves** full conversation transcripts from Redis.
+    - **Generates** summaries and action items using LLMs.
 
 ---
 

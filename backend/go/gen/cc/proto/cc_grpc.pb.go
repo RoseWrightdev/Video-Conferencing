@@ -115,3 +115,107 @@ var CaptioningService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "proto/cc.proto",
 }
+
+const (
+	SummaryService_Summarize_FullMethodName = "/cc.SummaryService/Summarize"
+)
+
+// SummaryServiceClient is the client API for SummaryService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type SummaryServiceClient interface {
+	// Generates a summary for a concluded meeting room.
+	Summarize(ctx context.Context, in *SummaryRequest, opts ...grpc.CallOption) (*SummaryResponse, error)
+}
+
+type summaryServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSummaryServiceClient(cc grpc.ClientConnInterface) SummaryServiceClient {
+	return &summaryServiceClient{cc}
+}
+
+func (c *summaryServiceClient) Summarize(ctx context.Context, in *SummaryRequest, opts ...grpc.CallOption) (*SummaryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SummaryResponse)
+	err := c.cc.Invoke(ctx, SummaryService_Summarize_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SummaryServiceServer is the server API for SummaryService service.
+// All implementations must embed UnimplementedSummaryServiceServer
+// for forward compatibility.
+type SummaryServiceServer interface {
+	// Generates a summary for a concluded meeting room.
+	Summarize(context.Context, *SummaryRequest) (*SummaryResponse, error)
+	mustEmbedUnimplementedSummaryServiceServer()
+}
+
+// UnimplementedSummaryServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSummaryServiceServer struct{}
+
+func (UnimplementedSummaryServiceServer) Summarize(context.Context, *SummaryRequest) (*SummaryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Summarize not implemented")
+}
+func (UnimplementedSummaryServiceServer) mustEmbedUnimplementedSummaryServiceServer() {}
+func (UnimplementedSummaryServiceServer) testEmbeddedByValue()                        {}
+
+// UnsafeSummaryServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SummaryServiceServer will
+// result in compilation errors.
+type UnsafeSummaryServiceServer interface {
+	mustEmbedUnimplementedSummaryServiceServer()
+}
+
+func RegisterSummaryServiceServer(s grpc.ServiceRegistrar, srv SummaryServiceServer) {
+	// If the following call panics, it indicates UnimplementedSummaryServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SummaryService_ServiceDesc, srv)
+}
+
+func _SummaryService_Summarize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SummaryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SummaryServiceServer).Summarize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SummaryService_Summarize_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SummaryServiceServer).Summarize(ctx, req.(*SummaryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SummaryService_ServiceDesc is the grpc.ServiceDesc for SummaryService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SummaryService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "cc.SummaryService",
+	HandlerType: (*SummaryServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Summarize",
+			Handler:    _SummaryService_Summarize_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/cc.proto",
+}

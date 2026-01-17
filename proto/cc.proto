@@ -21,3 +21,18 @@ message CaptionEvent {
   bool is_final = 3;
   double confidence = 4;
 }
+
+service SummaryService {
+  // Generates a summary for a concluded meeting room.
+  rpc Summarize(SummaryRequest) returns (SummaryResponse);
+}
+
+message SummaryRequest {
+  string room_id = 1;
+}
+
+message SummaryResponse {
+  string room_id = 1;
+  string summary = 2;
+  repeated string action_items = 3;
+}
