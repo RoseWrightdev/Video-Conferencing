@@ -11,4 +11,6 @@ dependencies = [
     "openai>=1.10.0",
     "grpcio>=1.76.0",
     "grpcio-tools>=1.76.0",
+    "llama-cpp-python>=0.2.23",
+    "huggingface-hub>=0.20.0",
 ]

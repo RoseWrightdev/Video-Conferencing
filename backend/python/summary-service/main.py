@@ -55,22 +55,108 @@ class SummaryService(cc_pb2_grpc.SummaryServiceServicer):
             action_items=action_items
         )
 
-def mock_llm_summarize(text: str):
-    """
-    Mock LLM function. In production, this would call OpenAI API.
-    """
-    word_count = len(text.split())
-    summary = f"Meeting Summary (Mock):\nDiscussions involved {word_count} words. The team discussed key project milestones."
-    action_items = [
-        "Review the transcript.",
-        "Follow up on action items."
-    ]
-    return summary, action_items
+# --- Model Setup ---
+from huggingface_hub import hf_hub_download
+from llama_cpp import Llama
 
-# --- Startup ---
+# Model details
+REPO_ID = "bartowski/Llama-3.2-3B-Instruct-GGUF"
+FILENAME = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+MODEL_PATH = f"./models/{FILENAME}"
+
+llm = None
+
 @app.on_event("startup")
 async def startup_event():
+    global llm
     logger.info(f"Summary Service HTTP (Health) started. Redis at {REDIS_HOST}:{REDIS_PORT}")
+    
+    # Download Model
+    if not os.path.exists("./models"):
+        os.makedirs("./models")
+    
+    if not os.path.exists(MODEL_PATH):
+        logger.info(f"Downloading model {FILENAME} from {REPO_ID}...")
+        try:
+             # Download directly to local path? hf_hub_download handles caching but we want strict path for llama.cpp
+             # We can use cache, hf_hub_download returns absolute path to cache.
+             # Ideally we copy or symlink, or just use the cache path.
+             # Simpler: Use cache path.
+             downloaded_path = hf_hub_download(repo_id=REPO_ID, filename=FILENAME)
+             logger.info(f"Model downloaded to {downloaded_path}")
+             # We will just load from cache path
+             global MODEL_PATH
+             MODEL_PATH = downloaded_path
+        except Exception as e:
+            logger.error(f"Failed to download model: {e}")
+            return
+    else:
+        # If it exists locally (user manually put it there)
+        pass
+
+    # Load Model (Metal support auto-detected usually if compiled right, otherwise CPU)
+    try:
+        logger.info("Loading Llama model...")
+        # n_ctx=2048 or higher for meeting transcripts. 4096 is safe for 3B.
+        llm = Llama(model_path=MODEL_PATH, n_ctx=8192, n_threads=6, verbose=True) 
+        logger.info("✅ Llama model loaded successfully")
+    except Exception as e:
+        logger.error(f"Failed to load Llama model: {e}")
+
+def mock_llm_summarize(text: str):
+    # Fallback if model not loaded
+    if not llm:
+        logger.warning("LLM not loaded, using mock fallback")
+        word_count = len(text.split())
+        return f"Mock Summary ({word_count} words). LLM unavailable.", ["Check logs"]
+
+    # Real Inference
+    system_prompt = (
+        "You are an expert meeting assistant. "
+        "Summarize the following meeting transcript efficiently. "
+        "Then list actionable items."
+    )
+    
+    user_message = f"Transcript:\n{text}\n\nPlease provide:\n1. A concise summary.\n2. A list of action items."
+    
+    try:
+        response = llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=1024
+        )
+        content = response['choices'][0]['message']['content']
+        
+        # Simple parsing (heuristic)
+        # We assume the model follows instructions roughly.
+        # Ideally we ask for JSON output for strict parsing, but clear text is fine for now.
+        summary = content
+        action_items = [] # Parsing specific items from text is hard without structure.
+        # Let's just return the whole text as summary for now to be safe, 
+        # or try to split if "Action Items:" exists.
+        
+        parts = content.split("Action Items:")
+        if len(parts) > 1:
+            summary = parts[0].strip()
+            # Split items by newline
+            raw_items = parts[1].strip().split('\n')
+            action_items = [item.strip('- *') for item in raw_items if item.strip()]
+        else:
+             # Try "Action items:" casing
+            parts = content.split("Action items:")
+            if len(parts) > 1:
+                summary = parts[0].strip()
+                raw_items = parts[1].strip().split('\n')
+                action_items = [item.strip('- *') for item in raw_items if item.strip()]
+        
+        return summary, action_items
+
+    except Exception as e:
+        logger.error(f"Inference error: {e}")
+        return "Error generating summary.", []
 
 @app.get("/health")
 async def health():
