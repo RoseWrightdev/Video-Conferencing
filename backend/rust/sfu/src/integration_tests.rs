@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+
     use crate::pb::cc::captioning_service_server::{CaptioningService, CaptioningServiceServer};
     use crate::pb::cc::{AudioChunk, CaptionEvent};
     use tokio_stream::wrappers::ReceiverStream;
@@ -70,6 +70,7 @@ mod tests {
             let chunk = AudioChunk {
                 session_id: "test-session".to_string(),
                 audio_data: vec![0u8; 100],
+                target_language: "".to_string(),
             };
             tx.send(chunk).await.unwrap();
         });

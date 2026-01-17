@@ -6,6 +6,11 @@ backend/go/session
 temp
 backend/rust/sfu/target
 
+# Python
+.venv
+__pycache__
+.pytest_cache
+
 # Large media files
 *.mp4
 *.mov
