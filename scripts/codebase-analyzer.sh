@@ -34,7 +34,10 @@ find . \( \
     -name ".turbo" -o \
     -name ".vercel" -o \
     -name ".cache" -o \
-    -name "out" \
+    -name "out" -o \
+    -name ".venv" -o \
+    -name "venv" -o \
+    -name "env" \
 \) -prune -o -type f \( \
     ! -name "*.png" -a \
     ! -name "*.jpg" -a \
@@ -163,7 +166,10 @@ for dir in */; do
             -name ".turbo" -o \
             -name ".vercel" -o \
             -name ".cache" -o \
-            -name "out" \
+            -name "out" -o \
+            -name ".venv" -o \
+            -name "venv" -o \
+            -name "env" \
         \) -prune -o -type f \( \
             ! -name "*.png" -a \
             ! -name "*.jpg" -a \
