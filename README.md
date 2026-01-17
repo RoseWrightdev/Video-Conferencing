@@ -39,8 +39,8 @@ graph TD
     SFU -- gRPC (Audio) --> CC["Stream Processor (Python)"]
     CC -- gRPC (Text) --> SFU
     CC -- Push (Transcript) --> Redis
-    Sum["Summary Service (Python)"] -- Pull (Transcript) --> Redis
-    FE -- HTTP/POST --> Sum
+    BE -- gRPC (Summarize) --> Sum["Summary Service (Python)"]
+    Sum -- Pull (Transcript) --> Redis
 ```
 
 ### 1. Frontend Service
@@ -78,7 +78,8 @@ graph TD
 - **Path:** `backend/python/summary-service`
 - **Stack:** Python, **FastAPI**, **Redis**, **OpenAI/LLM**.
 - **Role:** Post-meeting Intelligence.
-    - **Triggered** via API after a meeting ends.
+- **Role:** Post-meeting Intelligence.
+    - **Triggered** via **gRPC** by the Go Backend.
     - **Retrieves** full conversation transcripts from Redis.
     - **Generates** summaries and action items using LLMs.
 
