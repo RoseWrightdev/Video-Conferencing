@@ -32,8 +32,8 @@ func (h *Hub) extractToken(c *gin.Context) (*tokenExtractionResult, error) {
 	// Priority 1: Check Sec-WebSocket-Protocol header
 	headerVal := c.GetHeader("Sec-WebSocket-Protocol")
 	if headerVal != "" {
-		parts := strings.Split(headerVal, ",")
-		for _, p := range parts {
+		parts := strings.SplitSeq(headerVal, ",")
+		for p := range parts {
 			p = strings.TrimSpace(p)
 			if p == "access_token" {
 				result.HasAccessTokenProtocol = true
@@ -49,15 +49,6 @@ func (h *Hub) extractToken(c *gin.Context) (*tokenExtractionResult, error) {
 					logging.GetLogger().Debug("Token extracted from Sec-WebSocket-Protocol header")
 				}
 			}
-		}
-	}
-
-	// Priority 2: Fallback to URL Query (Legacy/Less Secure)
-	if result.Token == "" {
-		result.Token = c.Query("token")
-		result.FromHeader = false
-		if result.Token != "" {
-			logging.Warn(context.Background(), "Token extracted from query parameter (legacy/less secure)")
 		}
 	}
 

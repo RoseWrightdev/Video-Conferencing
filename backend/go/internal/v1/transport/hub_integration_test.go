@@ -52,7 +52,8 @@ func TestServeWs_InvalidOrigin(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request, _ = http.NewRequest("GET", "/ws/room1?token=valid", nil)
+	c.Request, _ = http.NewRequest("GET", "/ws/room1", nil)
+	c.Request.Header.Set("Sec-WebSocket-Protocol", "access_token, valid")
 	c.Request.Header.Set("Origin", "http://evil.com")
 	c.Params = gin.Params{{Key: "roomId", Value: "room1"}}
 

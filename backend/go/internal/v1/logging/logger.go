@@ -48,7 +48,10 @@ func Initialize(development bool) error {
 func GetLogger() *zap.Logger {
 	if logger == nil {
 		// Fallback specific for tests or before init
-		l, _ := zap.NewDevelopment()
+		l, err := zap.NewDevelopment()
+		if err != nil {
+			panic(err)
+		}
 		return l
 	}
 	return logger

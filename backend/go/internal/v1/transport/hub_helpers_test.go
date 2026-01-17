@@ -34,7 +34,7 @@ func TestExtractToken_FromHeader(t *testing.T) {
 	assert.True(t, result.HasAccessTokenProtocol)
 }
 
-func TestExtractToken_FromQuery(t *testing.T) {
+func TestExtractToken_FromQuery_Rejected(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
 	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
@@ -48,10 +48,9 @@ func TestExtractToken_FromQuery(t *testing.T) {
 
 	result, err := hub.extractToken(c)
 
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.False(t, result.FromHeader)
-	assert.Equal(t, "test-token-query", result.Token)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "token not provided")
 }
 
 func TestExtractToken_Missing(t *testing.T) {

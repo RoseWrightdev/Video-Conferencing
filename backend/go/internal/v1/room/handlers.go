@@ -235,7 +235,7 @@ func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterfa
 	case AdminActionTransferOwnership:
 		// Target must be a participant or host
 		if target != nil && (target.GetRole() == types.RoleTypeParticipant || target.GetRole() == types.RoleTypeHost) {
-			logging.Info(ctx, "Transferring room ownership", zap.String("room", string(r.GetID())), zap.String("oldOwner", string(r.GetOwnerID())), zap.String("newOwner", string(target.GetID())))
+			logging.Info(ctx, "Transferring room ownership", zap.String("room", string(r.ID)), zap.String("oldOwner", string(r.ownerID)), zap.String("newOwner", string(target.GetID())))
 			r.ownerID = target.GetID()
 
 			// Ensure new owner is a host
