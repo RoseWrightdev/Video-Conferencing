@@ -10,6 +10,7 @@ import (
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 // MockClient implements ClientInterface for testing
@@ -40,6 +41,14 @@ func (m *MockClient) SendProto(msg *pb.WebSocketMessage) {
 		default:
 		}
 	}
+}
+
+func (m *MockClient) SendRaw(data []byte) {
+	var msg pb.WebSocketMessage
+	if err := proto.Unmarshal(data, &msg); err != nil {
+		return
+	}
+	m.SendProto(&msg)
 }
 func (m *MockClient) GetIsAudioEnabled() bool { return m.IsAudioEnabled }
 func (m *MockClient) SetIsAudioEnabled(enabled bool) {

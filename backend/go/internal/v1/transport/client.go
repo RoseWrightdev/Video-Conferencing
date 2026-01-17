@@ -240,3 +240,28 @@ func (c *Client) SendProto(msg *pb.WebSocketMessage) {
 		}
 	}
 }
+
+// SendRaw satisfies types.ClientInterface and allows sending pre-serialized data
+func (c *Client) SendRaw(data []byte) {
+	// Check if client is closed before attempting to send
+	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		slog.Debug("Skipping send to closed client", "clientId", c.ID)
+		return
+	}
+	c.mu.RUnlock()
+
+	// Add panic recovery as a safety net
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Warn("Recovered from panic in SendRaw", "clientId", c.ID, "panic", r)
+		}
+	}()
+
+	select {
+	case c.send <- data:
+	default:
+		slog.Warn("Client send channel full or closed", "clientId", c.ID)
+	}
+}

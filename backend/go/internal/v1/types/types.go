@@ -108,6 +108,7 @@ type ClientInterface interface {
 	GetRole() RoleType
 	SetRole(RoleType)
 	SendProto(msg *pb.WebSocketMessage)
+	SendRaw(data []byte)
 	GetIsAudioEnabled() bool
 	SetIsAudioEnabled(bool)
 	GetIsVideoEnabled() bool

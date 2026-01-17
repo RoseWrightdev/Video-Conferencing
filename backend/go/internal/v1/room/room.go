@@ -9,6 +9,7 @@ import (
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/signaling"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 )
@@ -405,9 +406,33 @@ func (r *Room) broadcastLocked(msg *pb.WebSocketMessage) {
 
 // Broadcast sends a message to everyone.
 func (r *Room) Broadcast(msg *pb.WebSocketMessage) {
+	// Marshal ONCE
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		slog.Error("Failed to marshal broadcast message", "room", r.ID, "error", err)
+		return
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.broadcastLocked(msg)
+
+	// Use existing slice logic, but call SendRaw
+	var targets []types.ClientInterface
+	for _, client := range r.clients {
+		if client.GetRole() != types.RoleTypeWaiting {
+			targets = append(targets, client)
+		}
+	}
+
+	for _, client := range targets {
+		client.SendRaw(data)
+	}
+
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.publishToRedis(context.Background(), msg)
+	}()
 }
 
 func (r *Room) broadcastRoomStateLocked(ctx context.Context) {

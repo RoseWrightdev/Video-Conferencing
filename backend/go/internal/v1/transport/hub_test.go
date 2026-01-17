@@ -56,6 +56,7 @@ func (m *hubMockClient) SetIsScreenSharing(enabled bool)       { m.sharing = ena
 func (m *hubMockClient) GetIsHandRaised() bool                 { return m.raised }
 func (m *hubMockClient) SetIsHandRaised(enabled bool)          { m.raised = enabled }
 func (m *hubMockClient) Disconnect()                           { m.disconnect = true }
+func (m *hubMockClient) SendRaw(data []byte)                   {}
 
 func TestNewHub(t *testing.T) {
 	validator := &MockTokenValidator{}

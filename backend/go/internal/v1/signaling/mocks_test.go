@@ -9,6 +9,7 @@ import (
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 // MockRoom implements types.Roomer for testing signaling logic
@@ -54,6 +55,14 @@ func (m *MockClient) SendProto(msg *pb.WebSocketMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.SentMessages = append(m.SentMessages, msg)
+}
+
+func (m *MockClient) SendRaw(data []byte) {
+	var msg pb.WebSocketMessage
+	if err := proto.Unmarshal(data, &msg); err != nil {
+		return
+	}
+	m.SendProto(&msg)
 }
 func (m *MockClient) GetIsAudioEnabled() bool { return m.IsAudioEnabled }
 func (m *MockClient) SetIsAudioEnabled(enabled bool) {
