@@ -22,11 +22,12 @@ const (
 )
 
 type AudioChunk struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"` // Unique ID for the audio stream/user
-	AudioData     []byte                 `protobuf:"bytes,2,opt,name=audio_data,json=audioData,proto3" json:"audio_data,omitempty"` // Raw PCM audio (e.g. 16-bit 48kHz or 16kHz) since we are internal, we settle on a format.
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`                // Unique ID for the audio stream/user
+	AudioData      []byte                 `protobuf:"bytes,2,opt,name=audio_data,json=audioData,proto3" json:"audio_data,omitempty"`                // Raw PCM audio
+	TargetLanguage string                 `protobuf:"bytes,3,opt,name=target_language,json=targetLanguage,proto3" json:"target_language,omitempty"` // Optional: ISO code (e.g., "en", "es"). If empty, defaults to transcription.
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AudioChunk) Reset() {
@@ -71,6 +72,13 @@ func (x *AudioChunk) GetAudioData() []byte {
 		return x.AudioData
 	}
 	return nil
+}
+
+func (x *AudioChunk) GetTargetLanguage() string {
+	if x != nil {
+		return x.TargetLanguage
+	}
+	return ""
 }
 
 type CaptionEvent struct {
@@ -145,13 +153,14 @@ var File_proto_cc_proto protoreflect.FileDescriptor
 
 const file_proto_cc_proto_rawDesc = "" +
 	"\n" +
-	"\x0eproto/cc.proto\x12\x02cc\"J\n" +
+	"\x0eproto/cc.proto\x12\x02cc\"s\n" +
 	"\n" +
 	"AudioChunk\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
 	"\n" +
-	"audio_data\x18\x02 \x01(\fR\taudioData\"|\n" +
+	"audio_data\x18\x02 \x01(\fR\taudioData\x12'\n" +
+	"\x0ftarget_language\x18\x03 \x01(\tR\x0etargetLanguage\"|\n" +
 	"\fCaptionEvent\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +

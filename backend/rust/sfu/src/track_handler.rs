@@ -353,6 +353,7 @@ pub async fn handle_new_track(
                         let chunk = crate::pb::cc::AudioChunk {
                             session_id: format!("{}:{}", room_id, user_id),
                             audio_data: packet.payload.to_vec(),
+                            target_language: "".to_string(), // Default; TODO: Pass from signaling
                         };
                         let _ = cc_tx.try_send(chunk);
                     }

@@ -62,9 +62,10 @@ graph TD
     - **Terminates** DTLS/SRTP encryption.
     - **Optimized** for high throughput and low latency (no GC pauses).
 
-### 4. Captioning Service (AI/ML)
+### 4. Stream Processor (ML Service)
+- **Path:** `backend/python/stream-processor`
 - **Stack:** Python, **FastAPI**, **gRPC**, **Faster-Whisper**, **uv**.
-- **Role:** Real-time Speech-to-Text.
+- **Role:** Real-time Audio ML (Captioning, Translation, Sentiment).
     - **Receives** raw audio chunks from the SFU via gRPC.
     - **Transcribes** audio using OpenAI's Whisper model (optimized).
     - **Streams** captions back to the SFU for broadcast.
@@ -108,7 +109,7 @@ The full cloud-native setup for production environments.
 - Go 1.22+
 - Node.js 20+
 - Rust (latest stable)
-- Python 3.12+ & `uv` (for Captioning Service)
+- Python 3.12+ & `uv` (for Stream Processor)
 
 ### Quick Start
 1. **Copy Environment Variables:**

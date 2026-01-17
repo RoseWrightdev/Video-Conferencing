@@ -24,18 +24,18 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x08\x63\x63.proto\x12\x02\x63\x63\"4\n\nAudioChunk\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x12\n\naudio_data\x18\x02 \x01(\x0c\"V\n\x0c\x43\x61ptionEvent\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0c\n\x04text\x18\x02 \x01(\t\x12\x10\n\x08is_final\x18\x03 \x01(\x08\x12\x12\n\nconfidence\x18\x04 \x01(\x01\x32H\n\x11\x43\x61ptioningService\x12\x33\n\x0bStreamAudio\x12\x0e.cc.AudioChunk\x1a\x10.cc.CaptionEvent(\x01\x30\x01\x42>Z<github.com/RoseWrightdev/Video-Conferencing/backend/go/cc;ccb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x08\x63\x63.proto\x12\x02\x63\x63\"M\n\nAudioChunk\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x12\n\naudio_data\x18\x02 \x01(\x0c\x12\x17\n\x0ftarget_language\x18\x03 \x01(\t\"V\n\x0c\x43\x61ptionEvent\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0c\n\x04text\x18\x02 \x01(\t\x12\x10\n\x08is_final\x18\x03 \x01(\x08\x12\x12\n\nconfidence\x18\x04 \x01(\x01\x32H\n\x11\x43\x61ptioningService\x12\x33\n\x0bStreamAudio\x12\x0e.cc.AudioChunk\x1a\x10.cc.CaptionEvent(\x01\x30\x01\x42HZFgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/cc/proto;ccb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'cc_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'Z<github.com/RoseWrightdev/Video-Conferencing/backend/go/cc;cc'
+  _globals['DESCRIPTOR']._serialized_options = b'ZFgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/cc/proto;cc'
   _globals['_AUDIOCHUNK']._serialized_start=16
-  _globals['_AUDIOCHUNK']._serialized_end=68
-  _globals['_CAPTIONEVENT']._serialized_start=70
-  _globals['_CAPTIONEVENT']._serialized_end=156
-  _globals['_CAPTIONINGSERVICE']._serialized_start=158
-  _globals['_CAPTIONINGSERVICE']._serialized_end=230
+  _globals['_AUDIOCHUNK']._serialized_end=93
+  _globals['_CAPTIONEVENT']._serialized_start=95
+  _globals['_CAPTIONEVENT']._serialized_end=181
+  _globals['_CAPTIONINGSERVICE']._serialized_start=183
+  _globals['_CAPTIONINGSERVICE']._serialized_end=255
 # @@protoc_insertion_point(module_scope)

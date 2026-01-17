@@ -13,8 +13,10 @@ export const protobufPackage = "cc";
 export interface AudioChunk {
   /** Unique ID for the audio stream/user */
   sessionId: string;
-  /** Raw PCM audio (e.g. 16-bit 48kHz or 16kHz) since we are internal, we settle on a format. */
+  /** Raw PCM audio */
   audioData: Uint8Array;
+  /** Optional: ISO code (e.g., "en", "es"). If empty, defaults to transcription. */
+  targetLanguage: string;
 }
 
 export interface CaptionEvent {
@@ -25,7 +27,7 @@ export interface CaptionEvent {
 }
 
 function createBaseAudioChunk(): AudioChunk {
-  return { sessionId: "", audioData: new Uint8Array(0) };
+  return { sessionId: "", audioData: new Uint8Array(0), targetLanguage: "" };
 }
 
 export const AudioChunk: MessageFns<AudioChunk> = {
@@ -35,6 +37,9 @@ export const AudioChunk: MessageFns<AudioChunk> = {
     }
     if (message.audioData.length !== 0) {
       writer.uint32(18).bytes(message.audioData);
+    }
+    if (message.targetLanguage !== "") {
+      writer.uint32(26).string(message.targetLanguage);
     }
     return writer;
   },
@@ -62,6 +67,14 @@ export const AudioChunk: MessageFns<AudioChunk> = {
           message.audioData = reader.bytes();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.targetLanguage = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -78,6 +91,7 @@ export const AudioChunk: MessageFns<AudioChunk> = {
     const message = createBaseAudioChunk();
     message.sessionId = object.sessionId ?? "";
     message.audioData = object.audioData ?? new Uint8Array(0);
+    message.targetLanguage = object.targetLanguage ?? "";
     return message;
   },
 };

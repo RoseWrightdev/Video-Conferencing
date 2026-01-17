@@ -11,8 +11,8 @@ service CaptioningService {
 
 message AudioChunk {
   string session_id = 1;      // Unique ID for the audio stream/user
-  bytes audio_data = 2;       // Raw PCM audio (e.g. 16-bit 48kHz or 16kHz) since we are internal, we settle on a format.
-  // Ideally, we might want to send a header first with config, but for simplicity, we assume fixed format.
+  bytes audio_data = 2;       // Raw PCM audio
+  string target_language = 3; // Optional: ISO code (e.g., "en", "es"). If empty, defaults to transcription.
 }
 
 message CaptionEvent {

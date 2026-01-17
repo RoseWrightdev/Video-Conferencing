@@ -4,9 +4,12 @@ pub struct AudioChunk {
     /// Unique ID for the audio stream/user
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
-    /// Raw PCM audio (e.g. 16-bit 48kHz or 16kHz) since we are internal, we settle on a format.
+    /// Raw PCM audio
     #[prost(bytes = "vec", tag = "2")]
     pub audio_data: ::prost::alloc::vec::Vec<u8>,
+    /// Optional: ISO code (e.g., "en", "es"). If empty, defaults to transcription.
+    #[prost(string, tag = "3")]
+    pub target_language: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

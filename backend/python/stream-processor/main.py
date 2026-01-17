@@ -22,17 +22,24 @@ async def health_check():
 # --- gRPC Setup ---
 class CaptioningService(cc_pb2_grpc.CaptioningServiceServicer):
     def __init__(self):
-        self.transcriber = AudioTranscriber(model_size="tiny.en", device="cpu", compute_type="int8")
+        # Use 'tiny' (multilingual) instead of 'tiny.en' to support translation/non-English input
+        self.transcriber = AudioTranscriber(model_size="tiny", device="cpu", compute_type="int8")
         logger.info("CaptioningService initialized")
 
     async def StreamAudio(self, request_iterator, context):
         session_id = "unknown"
+        target_language = None
         try:
             async for chunk in request_iterator:
                 if not chunk.audio_data:
                     continue
                 session_id = chunk.session_id
-                results = await self.transcriber.transcribe_chunk(chunk.audio_data)
+                
+                # Update target language if provided
+                if chunk.target_language:
+                    target_language = chunk.target_language
+
+                results = await self.transcriber.transcribe_chunk(chunk.audio_data, target_language=target_language)
 
                 for res in results:
                     if res['text']:
