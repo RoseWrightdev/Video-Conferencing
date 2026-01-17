@@ -25,6 +25,8 @@ graph TD
         BE["Backend Service (Go)"]
         Redis[("Redis")]
         SFU["SFU Service (Rust)"]
+        CC["Stream Processor (Python)"]
+        Sum["Summary Service (Python)"]
     end
 
     User -- HTTPS --> LB
@@ -36,10 +38,10 @@ graph TD
     BE -- gRPC --> SFU
     BE -- Pub/Sub --> Redis
     SFU -- Metrics --> BE
-    SFU -- gRPC (Audio) --> CC["Stream Processor (Python)"]
+    SFU -- gRPC (Audio) --> CC
     CC -- gRPC (Text) --> SFU
     CC -- Push (Transcript) --> Redis
-    BE -- gRPC (Summarize) --> Sum["Summary Service (Python)"]
+    BE -- gRPC (Summarize) --> Sum
     Sum -- Pull (Transcript) --> Redis
 ```
 
