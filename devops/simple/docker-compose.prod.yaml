@@ -104,10 +104,48 @@ services:
       timeout: 3s
       retries: 5
 
+
+  # ------------------------------------------------------------------
+  # Stream Processor (Python) - Audio Transcriber
+  # ------------------------------------------------------------------
+  stream-processor:
+    build:
+      context: .
+      dockerfile: devops/docker/stream-processor.dockerfile
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
+    networks:
+      - video-net
+    depends_on:
+      - redis
+
+  # ------------------------------------------------------------------
+  # Summary Service (Python) - Meeting Summarizer
+  # ------------------------------------------------------------------
+  summary-service:
+    build:
+      context: .
+      dockerfile: devops/docker/summary-service.dockerfile
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - summary_models:/app/models
+    networks:
+      - video-net
+    depends_on:
+      - redis
+
 volumes:
   caddy_data:
   caddy_config:
   redis_data:
+  summary_models:
 
 networks:
   video-net:
