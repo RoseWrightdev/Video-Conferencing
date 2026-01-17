@@ -64,3 +64,40 @@ async def test_transcriber_logic():
     assert isinstance(results, list)
     if len(results) > 0:
         assert "text" in results[0]
+
+@pytest.mark.asyncio
+async def test_transcriber_translation_params():
+    from transcriber import AudioTranscriber
+    import numpy as np
+    from unittest.mock import MagicMock, patch
+
+    # Mock the WhisperModel class to avoid loading the actual model (slow/heavy)
+    with patch("transcriber.WhisperModel") as MockModel:
+        mock_instance = MockModel.return_value
+        # Mock transcribe method to return empty segments
+        mock_instance.transcribe.return_value = ([], {}) 
+        
+        transcriber = AudioTranscriber(model_size="tiny", device="cpu")
+        
+        # Create dummy audio
+        audio_data = np.zeros(16000, dtype=np.float32)
+        audio_bytes = (audio_data * 32768).astype(np.int16).tobytes()
+
+        # Test 1: English Target -> task="translate"
+        await transcriber.transcribe_chunk(audio_bytes, target_language="en")
+        
+        # Verify call args
+        call_args = mock_instance.transcribe.call_args
+        assert call_args, "transcribe should have been called"
+        kwargs = call_args[1]
+        assert kwargs.get('task') == "translate"
+        assert kwargs.get('language') is None # Should be auto-detect source
+
+        # Test 2: Spanish Target -> task="transcribe", language="es"
+        await transcriber.transcribe_chunk(audio_bytes, target_language="es")
+        
+            # Verify call args
+        call_args = mock_instance.transcribe.call_args
+        kwargs = call_args[1]
+        assert kwargs.get('task') == "transcribe"
+        assert kwargs.get('language') == "es"
