@@ -50,6 +50,7 @@ async fn test_signaling_flow_and_track_notification() {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
         room_manager: Arc::new(RoomManager::new()),
+        cc_client: None,
     };
 
     let room_id = "test-room".to_string();
@@ -103,6 +104,7 @@ async fn test_webrtc_api_configuration() {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
         room_manager: Arc::new(RoomManager::new()),
+        cc_client: None,
     };
 
     let api = MediaSetup::create_webrtc_api();
@@ -166,6 +168,7 @@ async fn test_subscribe_logic() {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
         room_manager: Arc::new(RoomManager::new()),
+        cc_client: None,
     };
 
     let room_id = "room1".to_string();

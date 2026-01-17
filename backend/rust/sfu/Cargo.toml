@@ -37,6 +37,8 @@ lazy_static = "1.4"
 warp = "0.3"
 tower = "0.5.3"
 tower-layer = "0.3.3"
+tonic-build = "0.9"
+prost-build = "0.14.3"
 
 [build-dependencies]
 tonic-build = "0.9"

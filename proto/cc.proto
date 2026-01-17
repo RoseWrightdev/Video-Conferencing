@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package cc;
+
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/cc;cc";
+
+service CaptioningService {
+  // Bidirectional streaming: SFU sends audio chunks, Service sends back captions.
+  rpc StreamAudio(stream AudioChunk) returns (stream CaptionEvent);
+}
+
+message AudioChunk {
+  string session_id = 1;      // Unique ID for the audio stream/user
+  bytes audio_data = 2;       // Raw PCM audio (e.g. 16-bit 48kHz or 16kHz) since we are internal, we settle on a format.
+  // Ideally, we might want to send a header first with config, but for simplicity, we assume fixed format.
+}
+
+message CaptionEvent {
+  string session_id = 1;
+  string text = 2;
+  bool is_final = 3;
+  double confidence = 4;
+}

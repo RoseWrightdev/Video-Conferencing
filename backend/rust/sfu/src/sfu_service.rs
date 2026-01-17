@@ -29,7 +29,14 @@ pub struct MySfu {
     // Map: (RoomID, UserID, StreamID, TrackID) -> Broadcaster
     pub tracks: TrackMap,
     // Room Manager for efficient lookup
+    // Room Manager for efficient lookup
     pub room_manager: Arc<RoomManager>,
+    // CC Client
+    pub cc_client: Option<
+        crate::pb::cc::captioning_service_client::CaptioningServiceClient<
+            tonic::transport::Channel,
+        >,
+    >,
 }
 
 impl MySfu {
@@ -95,6 +102,7 @@ impl MySfu {
             self.peers.clone(),
             self.tracks.clone(),
             self.room_manager.clone(),
+            self.cc_client.clone(),
         );
 
         // 6. Save to Map
@@ -426,6 +434,7 @@ mod tests {
             peers: Arc::new(DashMap::new()),
             tracks: Arc::new(DashMap::new()),
             room_manager: Arc::new(RoomManager::new()),
+            cc_client: None,
         }
     }
 

@@ -5,6 +5,9 @@ pub mod pb {
     pub mod sfu {
         include!("generated/sfu.rs");
     }
+    pub mod cc {
+        include!("generated/cc.rs");
+    }
 }
 
 pub mod broadcaster;
@@ -22,5 +25,8 @@ pub use media_setup::MediaSetup;
 pub use peer_manager::Peer;
 pub use types::{PeerMap, TrackMap};
 
+#[cfg(test)]
+mod integration_tests;
+#[cfg(test)]
 #[cfg(test)]
 mod tests;

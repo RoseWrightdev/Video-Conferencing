@@ -8,17 +8,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed={}/signaling.proto", proto_dir);
 
     // 3. Compile the protos
+    // SFU Server (receives connections)
     tonic_build::configure()
         .build_server(true)
-        .build_client(false) // We are the server
-        .out_dir("src/generated") // Explicitly set output directory
+        .build_client(false)
+        .out_dir("src/generated")
         .compile(
             &[
                 &format!("{}/sfu.proto", proto_dir),
                 &format!("{}/signaling.proto", proto_dir),
             ],
-            &[root_dir], // Include path must be root so "proto/signaling.proto" resolves
+            &[root_dir],
         )?;
+
+    // CC Client (talks to Python service)
+    tonic_build::configure()
+        .build_server(true)
+        .build_client(true)
+        .out_dir("src/generated")
+        .compile(&[&format!("{}/cc.proto", proto_dir)], &[root_dir])?;
 
     Ok(())
 }

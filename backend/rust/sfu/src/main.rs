@@ -43,10 +43,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let addr = format!("0.0.0.0:{}", cfg.grpc_port).parse()?;
+
+    // Initialize CC Client (Lazy)
+    let cc_client = match tonic::transport::Endpoint::new("http://localhost:50051") {
+        Ok(e) => {
+            let channel = e.connect_lazy();
+            Some(sfu::pb::cc::captioning_service_client::CaptioningServiceClient::new(channel))
+        }
+        Err(e) => {
+            tracing::warn!("Failed to create CC endpoint: {}", e);
+            None
+        }
+    };
+
     let sfu = MySfu {
         peers: Arc::new(DashMap::new()),
         tracks: Arc::new(DashMap::new()),
         room_manager: Arc::new(sfu::room_manager::RoomManager::new()),
+        cc_client,
     };
 
     info!("SFU Server listening on {}", addr);

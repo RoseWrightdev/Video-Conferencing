@@ -58,6 +58,11 @@ pub fn attach_track_handler(
     peers: crate::types::PeerMap,
     tracks: crate::types::TrackMap,
     room_manager: Arc<crate::room_manager::RoomManager>,
+    cc_client: Option<
+        crate::pb::cc::captioning_service_client::CaptioningServiceClient<
+            tonic::transport::Channel,
+        >,
+    >,
 ) {
     let peers_clone = peers.clone();
     let tracks_map = tracks.clone();
@@ -65,6 +70,7 @@ pub fn attach_track_handler(
     let room_id_clone = room_id.clone();
     let pc_for_ontrack = pc.clone();
     let room_manager_clone = room_manager.clone();
+    let cc_client_clone = cc_client.clone();
 
     pc.on_track(Box::new(
         move |track: Arc<TrackRemote>, _receiver, _transceiver| {
@@ -74,6 +80,7 @@ pub fn attach_track_handler(
             let tracks_map = tracks_map.clone();
             let pc_capture = pc_for_ontrack.clone();
             let room_manager = room_manager_clone.clone();
+            let cc_client = cc_client_clone.clone();
 
             Box::pin(async move {
                 handle_new_track(
@@ -84,6 +91,7 @@ pub fn attach_track_handler(
                     tracks_map,
                     pc_capture,
                     room_manager,
+                    cc_client,
                 )
                 .await;
             })
@@ -99,6 +107,11 @@ pub async fn handle_new_track(
     tracks_map: crate::types::TrackMap,
     pc_capture: Arc<RTCPeerConnection>,
     room_manager: Arc<crate::room_manager::RoomManager>,
+    cc_client: Option<
+        crate::pb::cc::captioning_service_client::CaptioningServiceClient<
+            tonic::transport::Channel,
+        >,
+    >,
 ) {
     let track_kind = track.kind();
     let track_ssrc = track.ssrc();
@@ -227,6 +240,35 @@ pub async fn handle_new_track(
     let track_id_log = track.id();
     let mime_type = track.codec_capability().mime_type.to_lowercase();
 
+    // Setup CC Forwarding if Audio
+    let (cc_tx, cc_rx) = tokio::sync::mpsc::channel::<crate::pb::cc::AudioChunk>(500);
+    let mut _join_handle_cc: Option<tokio::task::JoinHandle<()>> = None;
+    if track.kind() == "audio" {
+        if let Some(mut client) = cc_client {
+            let session_id = format!("{}:{}", room_id, user_id);
+            // Spawn gRPC client stream
+            let _join_handle_cc = Some(tokio::spawn(async move {
+                let outbound = tokio_stream::wrappers::ReceiverStream::new(cc_rx);
+                let request = tonic::Request::new(outbound);
+
+                info!("[CC] Starting stream for {}", session_id);
+                match client.stream_audio(request).await {
+                    Ok(response) => {
+                        let mut inbound = response.into_inner();
+                        while let Ok(Some(event)) = inbound.message().await {
+                            info!("CAPTION [{}]: {}", event.session_id, event.text);
+                            // Here we could broadcast the caption back to the room via signaling/data channel
+                        }
+                        info!("[CC] Stream finished for {}", session_id);
+                    }
+                    Err(e) => {
+                        error!("[CC] RPC Error for {}: {}", session_id, e);
+                    }
+                }
+            }));
+        }
+    }
+
     tokio::spawn(async move {
         let mut packet_count = 0;
         info!(track = %track_id_log, "[SFU] Starting read_rtp loop");
@@ -278,6 +320,28 @@ pub async fn handle_new_track(
                         );
                     }
 
+                    // Forward to CC
+                    if mime_type.starts_with("audio") {
+                        let chunk = crate::pb::cc::AudioChunk {
+                            session_id: format!("{}:{}", room_id, user_id),
+                            audio_data: packet.payload.to_vec(),
+                        };
+                        let _ = cc_tx.try_send(chunk);
+                    }
+                    // Reset tx reference? No, we need it every loop.
+                    // Wait, `cc_tx` is moved into this closure? Yes.
+                    // But `if track.kind() == "audio"` check wasn't done inside loop?
+                    // I did the check outside and created `cc_tx`.
+                    // But `cc_tx` is always created.
+                    // I should only send if it's audio.
+                    // Actually, I can just check if join_handle_cc is Some?
+                    // Or just relying on the receiver being dropped if not spawned?
+                    // If join_handle_cc is None, the receiver is dropped.
+                    // Sending to a closed channel returns error, which we ignore.
+                    // Efficient enough.
+
+                    // Use optimized broadcast method
+
                     // Use optimized broadcast method
                     broadcaster.broadcast(&mut packet).await;
                 }
@@ -327,6 +391,7 @@ mod tests {
             peers.clone(),
             tracks.clone(),
             room_manager.clone(),
+            None,
         );
 
         // 4. Add Track to Sender
@@ -485,6 +550,7 @@ mod tests {
             tracks.clone(),
             pc_capture.clone(),
             room_manager.clone(),
+            None,
         )
         .await;
 
