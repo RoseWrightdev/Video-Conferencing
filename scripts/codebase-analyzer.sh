@@ -37,7 +37,10 @@ find . \( \
     -name "out" -o \
     -name ".venv" -o \
     -name "venv" -o \
-    -name "env" \
+    -name "env" -o \
+    -name "*.txt" -o \
+    -name "*.lock" -o \
+    -name ".terraform" \
 \) -prune -o -type f \( \
     ! -name "*.png" -a \
     ! -name "*.jpg" -a \
@@ -69,7 +72,9 @@ find . \( \
     ! -name "*_pb.js" -a \
     ! -name "*_pb.d.ts" -a \
     ! -name "*_pb.ts" -a \
-    ! -name "*.json" \
+    ! -name "*.json" -a \
+    ! -name "tmp_build" -a \
+    ! -name "session" \
 \) -print | grep -v '/types/proto/' > /tmp/codebase_files.txt
 
 # Count total files
@@ -169,7 +174,9 @@ for dir in */; do
             -name "out" -o \
             -name ".venv" -o \
             -name "venv" -o \
-            -name "env" \
+            -name "env" -o \
+            -name "uv.lock" -o \
+            -name ".terraform" \
         \) -prune -o -type f \( \
             ! -name "*.png" -a \
             ! -name "*.jpg" -a \
@@ -201,11 +208,20 @@ for dir in */; do
             ! -name "*_pb.js" -a \
             ! -name "*_pb.d.ts" -a \
             ! -name "*_pb.ts" -a \
-            ! -name "*.json" \
+            ! -name "*.json" -a \
+            ! -name "tmp_build" -a \
+            ! -name "session" \
         \) -print | grep -v '/types/proto/' | wc -l)
         echo "$dir: $count files"
     fi
 done
+
+echo ""
+echo "Top 20 Files by line count:"
+echo "==========================="
+while read -r file; do
+    wc -l "$file" 2>/dev/null
+done < /tmp/codebase_files.txt | sort -nr | head -20
 
 # Cleanup
 rm -f /tmp/codebase_files.txt
