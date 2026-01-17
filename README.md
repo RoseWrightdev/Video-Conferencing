@@ -80,7 +80,6 @@ graph TD
 - **Path:** `backend/python/summary-service`
 - **Stack:** Python, **FastAPI**, **Redis**, **OpenAI/LLM**.
 - **Role:** Post-meeting Intelligence.
-- **Role:** Post-meeting Intelligence.
     - **Triggered** via **gRPC** by the Go Backend.
     - **Retrieves** full conversation transcripts from Redis.
     - **Generates** summaries and action items using LLMs.
