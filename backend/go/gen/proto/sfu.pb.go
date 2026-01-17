@@ -443,6 +443,7 @@ type SfuEvent struct {
 	//	*SfuEvent_RenegotiateSdpOffer
 	//	*SfuEvent_SdpAnswer
 	//	*SfuEvent_IceCandidate
+	//	*SfuEvent_Caption
 	Payload       isSfuEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -541,6 +542,15 @@ func (x *SfuEvent) GetIceCandidate() string {
 	return ""
 }
 
+func (x *SfuEvent) GetCaption() *CaptionEvent {
+	if x != nil {
+		if x, ok := x.Payload.(*SfuEvent_Caption); ok {
+			return x.Caption
+		}
+	}
+	return nil
+}
+
 type isSfuEvent_Payload interface {
 	isSfuEvent_Payload()
 }
@@ -577,6 +587,11 @@ type SfuEvent_IceCandidate struct {
 	IceCandidate string `protobuf:"bytes,6,opt,name=ice_candidate,json=iceCandidate,proto3,oneof"`
 }
 
+type SfuEvent_Caption struct {
+	// Caption event to be forwarded to clients.
+	Caption *CaptionEvent `protobuf:"bytes,7,opt,name=caption,proto3,oneof"`
+}
+
 func (*SfuEvent_TrackAddedUserId) isSfuEvent_Payload() {}
 
 func (*SfuEvent_TrackAddedStreamId) isSfuEvent_Payload() {}
@@ -588,6 +603,8 @@ func (*SfuEvent_RenegotiateSdpOffer) isSfuEvent_Payload() {}
 func (*SfuEvent_SdpAnswer) isSfuEvent_Payload() {}
 
 func (*SfuEvent_IceCandidate) isSfuEvent_Payload() {}
+
+func (*SfuEvent_Caption) isSfuEvent_Payload() {}
 
 var File_proto_sfu_proto protoreflect.FileDescriptor
 
@@ -616,7 +633,7 @@ const file_proto_sfu_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"A\n" +
 	"\rListenRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"\xc0\x02\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"\xf5\x02\n" +
 	"\bSfuEvent\x123\n" +
 	"\x13track_added_user_id\x18\x01 \x01(\tB\x02\x18\x01H\x00R\x10trackAddedUserId\x127\n" +
 	"\x15track_added_stream_id\x18\x02 \x01(\tB\x02\x18\x01H\x00R\x12trackAddedStreamId\x12=\n" +
@@ -625,7 +642,8 @@ const file_proto_sfu_proto_rawDesc = "" +
 	"\x15renegotiate_sdp_offer\x18\x04 \x01(\tH\x00R\x13renegotiateSdpOffer\x12\x1f\n" +
 	"\n" +
 	"sdp_answer\x18\x05 \x01(\tH\x00R\tsdpAnswer\x12%\n" +
-	"\rice_candidate\x18\x06 \x01(\tH\x00R\ficeCandidateB\t\n" +
+	"\rice_candidate\x18\x06 \x01(\tH\x00R\ficeCandidate\x123\n" +
+	"\acaption\x18\a \x01(\v2\x17.signaling.CaptionEventH\x00R\acaptionB\t\n" +
 	"\apayload2\x8a\x02\n" +
 	"\n" +
 	"SfuService\x12F\n" +
@@ -657,22 +675,24 @@ var file_proto_sfu_proto_goTypes = []any{
 	(*ListenRequest)(nil),         // 6: sfu.ListenRequest
 	(*SfuEvent)(nil),              // 7: sfu.SfuEvent
 	(*TrackAddedEvent)(nil),       // 8: signaling.TrackAddedEvent
+	(*CaptionEvent)(nil),          // 9: signaling.CaptionEvent
 }
 var file_proto_sfu_proto_depIdxs = []int32{
 	8, // 0: sfu.SfuEvent.track_event:type_name -> signaling.TrackAddedEvent
-	0, // 1: sfu.SfuService.CreateSession:input_type -> sfu.CreateSessionRequest
-	2, // 2: sfu.SfuService.HandleSignal:input_type -> sfu.SignalMessage
-	4, // 3: sfu.SfuService.DeleteSession:input_type -> sfu.DeleteSessionRequest
-	6, // 4: sfu.SfuService.ListenEvents:input_type -> sfu.ListenRequest
-	1, // 5: sfu.SfuService.CreateSession:output_type -> sfu.CreateSessionResponse
-	3, // 6: sfu.SfuService.HandleSignal:output_type -> sfu.SignalResponse
-	5, // 7: sfu.SfuService.DeleteSession:output_type -> sfu.DeleteSessionResponse
-	7, // 8: sfu.SfuService.ListenEvents:output_type -> sfu.SfuEvent
-	5, // [5:9] is the sub-list for method output_type
-	1, // [1:5] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	9, // 1: sfu.SfuEvent.caption:type_name -> signaling.CaptionEvent
+	0, // 2: sfu.SfuService.CreateSession:input_type -> sfu.CreateSessionRequest
+	2, // 3: sfu.SfuService.HandleSignal:input_type -> sfu.SignalMessage
+	4, // 4: sfu.SfuService.DeleteSession:input_type -> sfu.DeleteSessionRequest
+	6, // 5: sfu.SfuService.ListenEvents:input_type -> sfu.ListenRequest
+	1, // 6: sfu.SfuService.CreateSession:output_type -> sfu.CreateSessionResponse
+	3, // 7: sfu.SfuService.HandleSignal:output_type -> sfu.SignalResponse
+	5, // 8: sfu.SfuService.DeleteSession:output_type -> sfu.DeleteSessionResponse
+	7, // 9: sfu.SfuService.ListenEvents:output_type -> sfu.SfuEvent
+	6, // [6:10] is the sub-list for method output_type
+	2, // [2:6] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_proto_sfu_proto_init() }
@@ -693,6 +713,7 @@ func file_proto_sfu_proto_init() {
 		(*SfuEvent_RenegotiateSdpOffer)(nil),
 		(*SfuEvent_SdpAnswer)(nil),
 		(*SfuEvent_IceCandidate)(nil),
+		(*SfuEvent_Caption)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package cc;
 
-option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/cc;cc";
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/cc/proto;cc";
 
 service CaptioningService {
   // Bidirectional streaming: SFU sends audio chunks, Service sends back captions.

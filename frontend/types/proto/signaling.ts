@@ -141,8 +141,13 @@ export interface WebSocketMessage {
   /**
    * --- Stream Mapping ---
    * Notification that a remote track is available for subscription.
+   * Notification that a remote track is available for subscription.
    */
-  trackAdded?: TrackAddedEvent | undefined;
+  trackAdded?:
+    | TrackAddedEvent
+    | undefined;
+  /** Real-time caption event. */
+  caption?: CaptionEvent | undefined;
 }
 
 /** JoinRequest is sent by the client to authenticate and join a specific room. */
@@ -325,6 +330,14 @@ export interface TrackAddedEvent {
   trackKind: string;
 }
 
+/** CaptionEvent delivers real-time captions to clients. */
+export interface CaptionEvent {
+  sessionId: string;
+  text: string;
+  isFinal: boolean;
+  confidence: number;
+}
+
 function createBaseWebSocketMessage(): WebSocketMessage {
   return {
     join: undefined,
@@ -352,6 +365,7 @@ function createBaseWebSocketMessage(): WebSocketMessage {
     roomState: undefined,
     error: undefined,
     trackAdded: undefined,
+    caption: undefined,
   };
 }
 
@@ -431,6 +445,9 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
     }
     if (message.trackAdded !== undefined) {
       TrackAddedEvent.encode(message.trackAdded, writer.uint32(210).fork()).join();
+    }
+    if (message.caption !== undefined) {
+      CaptionEvent.encode(message.caption, writer.uint32(218).fork()).join();
     }
     return writer;
   },
@@ -642,6 +659,14 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
           message.trackAdded = TrackAddedEvent.decode(reader, reader.uint32());
           continue;
         }
+        case 27: {
+          if (tag !== 218) {
+            break;
+          }
+
+          message.caption = CaptionEvent.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -733,6 +758,9 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
       : undefined;
     message.trackAdded = (object.trackAdded !== undefined && object.trackAdded !== null)
       ? TrackAddedEvent.fromPartial(object.trackAdded)
+      : undefined;
+    message.caption = (object.caption !== undefined && object.caption !== null)
+      ? CaptionEvent.fromPartial(object.caption)
       : undefined;
     return message;
   },
@@ -2384,6 +2412,88 @@ export const TrackAddedEvent: MessageFns<TrackAddedEvent> = {
     message.userId = object.userId ?? "";
     message.streamId = object.streamId ?? "";
     message.trackKind = object.trackKind ?? "";
+    return message;
+  },
+};
+
+function createBaseCaptionEvent(): CaptionEvent {
+  return { sessionId: "", text: "", isFinal: false, confidence: 0 };
+}
+
+export const CaptionEvent: MessageFns<CaptionEvent> = {
+  encode(message: CaptionEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sessionId !== "") {
+      writer.uint32(10).string(message.sessionId);
+    }
+    if (message.text !== "") {
+      writer.uint32(18).string(message.text);
+    }
+    if (message.isFinal !== false) {
+      writer.uint32(24).bool(message.isFinal);
+    }
+    if (message.confidence !== 0) {
+      writer.uint32(33).double(message.confidence);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CaptionEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCaptionEvent();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.sessionId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.text = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.isFinal = reader.bool();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.confidence = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<CaptionEvent>, I>>(base?: I): CaptionEvent {
+    return CaptionEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CaptionEvent>, I>>(object: I): CaptionEvent {
+    const message = createBaseCaptionEvent();
+    message.sessionId = object.sessionId ?? "";
+    message.text = object.text ?? "";
+    message.isFinal = object.isFinal ?? false;
+    message.confidence = object.confidence ?? 0;
     return message;
   },
 };

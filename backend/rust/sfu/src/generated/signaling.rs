@@ -6,7 +6,7 @@
 pub struct WebSocketMessage {
     #[prost(
         oneof = "web_socket_message::Payload",
-        tags = "1, 2, 3, 4, 5, 6, 7, 20, 21, 8, 9, 22, 23, 24, 25, 10, 11, 12, 13, 14, 15, 16, 17, 18, 26"
+        tags = "1, 2, 3, 4, 5, 6, 7, 20, 21, 8, 9, 22, 23, 24, 25, 10, 11, 12, 13, 14, 15, 16, 17, 18, 26, 27"
     )]
     pub payload: ::core::option::Option<web_socket_message::Payload>,
 }
@@ -98,8 +98,12 @@ pub mod web_socket_message {
         Error(super::ErrorEvent),
         /// --- Stream Mapping ---
         /// Notification that a remote track is available for subscription.
+        /// Notification that a remote track is available for subscription.
         #[prost(message, tag = "26")]
         TrackAdded(super::TrackAddedEvent),
+        /// Real-time caption event.
+        #[prost(message, tag = "27")]
+        Caption(super::CaptionEvent),
     }
 }
 /// JoinRequest is sent by the client to authenticate and join a specific room.
@@ -382,4 +386,17 @@ pub struct TrackAddedEvent {
     /// "video" or "audio"
     #[prost(string, tag = "3")]
     pub track_kind: ::prost::alloc::string::String,
+}
+/// CaptionEvent delivers real-time captions to clients.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CaptionEvent {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub text: ::prost::alloc::string::String,
+    #[prost(bool, tag = "3")]
+    pub is_final: bool,
+    #[prost(double, tag = "4")]
+    pub confidence: f64,
 }

@@ -77,6 +77,15 @@ func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSo
 			},
 		}
 	}
+	
+	// Handle Caption from SFU
+	if caption := event.GetCaption(); caption != nil {
+		return &pb.WebSocketMessage{
+			Payload: &pb.WebSocketMessage_Caption{
+				Caption: caption,
+			},
+		}
+	}
 
 	return nil
 }

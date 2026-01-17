@@ -246,7 +246,11 @@ pub async fn handle_new_track(
     if track.kind() == "audio" {
         if let Some(mut client) = cc_client {
             let session_id = format!("{}:{}", room_id, user_id);
-            // Spawn gRPC client stream
+            // Clone for closure
+            let peers_cc = peers.clone();
+            let room_id_cc = room_id.clone();
+            let user_id_cc = user_id.clone();
+
             let _join_handle_cc = Some(tokio::spawn(async move {
                 let outbound = tokio_stream::wrappers::ReceiverStream::new(cc_rx);
                 let request = tonic::Request::new(outbound);
@@ -256,8 +260,32 @@ pub async fn handle_new_track(
                     Ok(response) => {
                         let mut inbound = response.into_inner();
                         while let Ok(Some(event)) = inbound.message().await {
-                            info!("CAPTION [{}]: {}", event.session_id, event.text);
-                            // Here we could broadcast the caption back to the room via signaling/data channel
+                            // Construct SfuEvent with Signaling Caption
+                            let sfu_event = crate::pb::sfu::SfuEvent {
+                                payload: Some(crate::pb::sfu::sfu_event::Payload::Caption(
+                                    crate::pb::signaling::CaptionEvent {
+                                        session_id: event.session_id,
+                                        text: event.text,
+                                        is_final: event.is_final,
+                                        confidence: event.confidence,
+                                    },
+                                )),
+                            };
+
+                            // Find peer and send (Use producer's channel to send to Go)
+                            let target_key = (room_id_cc.clone(), user_id_cc.clone());
+                            let event_tx_opt = if let Some(peer) = peers_cc.get(&target_key) {
+                                Some(peer.event_tx.clone())
+                            } else {
+                                None
+                            };
+
+                            if let Some(event_tx) = event_tx_opt {
+                                let mut tx_lock = event_tx.lock().await;
+                                if let Some(tx) = tx_lock.as_mut() {
+                                    let _ = tx.send(Ok(sfu_event)).await;
+                                }
+                            }
                         }
                         info!("[CC] Stream finished for {}", session_id);
                     }

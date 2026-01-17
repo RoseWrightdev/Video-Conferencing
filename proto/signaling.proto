@@ -77,7 +77,10 @@ message WebSocketMessage {
 
     // --- Stream Mapping ---
     // Notification that a remote track is available for subscription.
+    // Notification that a remote track is available for subscription.
     TrackAddedEvent track_added = 26;
+    // Real-time caption event.
+    CaptionEvent caption = 27;
   }
 }
 
@@ -276,4 +279,12 @@ message TrackAddedEvent {
   string user_id = 1; // The user who owns the track
   string stream_id = 2; // The WebRTC stream ID
   string track_kind = 3; // "video" or "audio"
+}
+
+// CaptionEvent delivers real-time captions to clients.
+message CaptionEvent {
+  string session_id = 1;
+  string text = 2;
+  bool is_final = 3;
+  double confidence = 4;
 }

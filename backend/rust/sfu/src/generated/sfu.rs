@@ -86,7 +86,7 @@ pub struct ListenRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SfuEvent {
-    #[prost(oneof = "sfu_event::Payload", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "sfu_event::Payload", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub payload: ::core::option::Option<sfu_event::Payload>,
 }
 /// Nested message and enum types in `SfuEvent`.
@@ -114,6 +114,9 @@ pub mod sfu_event {
         /// The Backend should forward this to the specific client.
         #[prost(string, tag = "6")]
         IceCandidate(::prost::alloc::string::String),
+        /// Caption event to be forwarded to clients.
+        #[prost(message, tag = "7")]
+        Caption(super::super::signaling::CaptionEvent),
     }
 }
 /// Generated server implementations.

@@ -53,6 +53,7 @@ type WebSocketMessage struct {
 	//	*WebSocketMessage_RoomState
 	//	*WebSocketMessage_Error
 	//	*WebSocketMessage_TrackAdded
+	//	*WebSocketMessage_Caption
 	Payload       isWebSocketMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -320,6 +321,15 @@ func (x *WebSocketMessage) GetTrackAdded() *TrackAddedEvent {
 	return nil
 }
 
+func (x *WebSocketMessage) GetCaption() *CaptionEvent {
+	if x != nil {
+		if x, ok := x.Payload.(*WebSocketMessage_Caption); ok {
+			return x.Caption
+		}
+	}
+	return nil
+}
+
 type isWebSocketMessage_Payload interface {
 	isWebSocketMessage_Payload()
 }
@@ -456,7 +466,13 @@ type WebSocketMessage_Error struct {
 type WebSocketMessage_TrackAdded struct {
 	// --- Stream Mapping ---
 	// Notification that a remote track is available for subscription.
+	// Notification that a remote track is available for subscription.
 	TrackAdded *TrackAddedEvent `protobuf:"bytes,26,opt,name=track_added,json=trackAdded,proto3,oneof"`
+}
+
+type WebSocketMessage_Caption struct {
+	// Real-time caption event.
+	Caption *CaptionEvent `protobuf:"bytes,27,opt,name=caption,proto3,oneof"`
 }
 
 func (*WebSocketMessage_Join) isWebSocketMessage_Payload() {}
@@ -508,6 +524,8 @@ func (*WebSocketMessage_RoomState) isWebSocketMessage_Payload() {}
 func (*WebSocketMessage_Error) isWebSocketMessage_Payload() {}
 
 func (*WebSocketMessage_TrackAdded) isWebSocketMessage_Payload() {}
+
+func (*WebSocketMessage_Caption) isWebSocketMessage_Payload() {}
 
 // JoinRequest is sent by the client to authenticate and join a specific room.
 type JoinRequest struct {
@@ -2055,11 +2073,80 @@ func (x *TrackAddedEvent) GetTrackKind() string {
 	return ""
 }
 
+// CaptionEvent delivers real-time captions to clients.
+type CaptionEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	IsFinal       bool                   `protobuf:"varint,3,opt,name=is_final,json=isFinal,proto3" json:"is_final,omitempty"`
+	Confidence    float64                `protobuf:"fixed64,4,opt,name=confidence,proto3" json:"confidence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptionEvent) Reset() {
+	*x = CaptionEvent{}
+	mi := &file_proto_signaling_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptionEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptionEvent) ProtoMessage() {}
+
+func (x *CaptionEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_signaling_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptionEvent.ProtoReflect.Descriptor instead.
+func (*CaptionEvent) Descriptor() ([]byte, []int) {
+	return file_proto_signaling_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CaptionEvent) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CaptionEvent) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *CaptionEvent) GetIsFinal() bool {
+	if x != nil {
+		return x.IsFinal
+	}
+	return false
+}
+
+func (x *CaptionEvent) GetConfidence() float64 {
+	if x != nil {
+		return x.Confidence
+	}
+	return 0
+}
+
 var File_proto_signaling_proto protoreflect.FileDescriptor
 
 const file_proto_signaling_proto_rawDesc = "" +
 	"\n" +
-	"\x15proto/signaling.proto\x12\tsignaling\"\xc7\r\n" +
+	"\x15proto/signaling.proto\x12\tsignaling\"\xfc\r\n" +
 	"\x10WebSocketMessage\x12,\n" +
 	"\x04join\x18\x01 \x01(\v2\x16.signaling.JoinRequestH\x00R\x04join\x12>\n" +
 	"\rjoin_response\x18\x02 \x01(\v2\x17.signaling.JoinResponseH\x00R\fjoinResponse\x12;\n" +
@@ -2093,7 +2180,8 @@ const file_proto_signaling_proto_rawDesc = "" +
 	"room_state\x18\x11 \x01(\v2\x19.signaling.RoomStateEventH\x00R\troomState\x12-\n" +
 	"\x05error\x18\x12 \x01(\v2\x15.signaling.ErrorEventH\x00R\x05error\x12=\n" +
 	"\vtrack_added\x18\x1a \x01(\v2\x1a.signaling.TrackAddedEventH\x00R\n" +
-	"trackAddedB\t\n" +
+	"trackAdded\x123\n" +
+	"\acaption\x18\x1b \x01(\v2\x17.signaling.CaptionEventH\x00R\acaptionB\t\n" +
 	"\apayload\"_\n" +
 	"\vJoinRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
@@ -2195,7 +2283,15 @@ const file_proto_signaling_proto_rawDesc = "" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1d\n" +
 	"\n" +
-	"track_kind\x18\x03 \x01(\tR\ttrackKindBIZGgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; protob\x06proto3"
+	"track_kind\x18\x03 \x01(\tR\ttrackKind\"|\n" +
+	"\fCaptionEvent\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12\x19\n" +
+	"\bis_final\x18\x03 \x01(\bR\aisFinal\x12\x1e\n" +
+	"\n" +
+	"confidence\x18\x04 \x01(\x01R\n" +
+	"confidenceBIZGgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; protob\x06proto3"
 
 var (
 	file_proto_signaling_proto_rawDescOnce sync.Once
@@ -2209,7 +2305,7 @@ func file_proto_signaling_proto_rawDescGZIP() []byte {
 	return file_proto_signaling_proto_rawDescData
 }
 
-var file_proto_signaling_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_proto_signaling_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_proto_signaling_proto_goTypes = []any{
 	(*WebSocketMessage)(nil),             // 0: signaling.WebSocketMessage
 	(*JoinRequest)(nil),                  // 1: signaling.JoinRequest
@@ -2238,6 +2334,7 @@ var file_proto_signaling_proto_goTypes = []any{
 	(*ParticipantInfo)(nil),              // 24: signaling.ParticipantInfo
 	(*ErrorEvent)(nil),                   // 25: signaling.ErrorEvent
 	(*TrackAddedEvent)(nil),              // 26: signaling.TrackAddedEvent
+	(*CaptionEvent)(nil),                 // 27: signaling.CaptionEvent
 }
 var file_proto_signaling_proto_depIdxs = []int32{
 	1,  // 0: signaling.WebSocketMessage.join:type_name -> signaling.JoinRequest
@@ -2265,15 +2362,16 @@ var file_proto_signaling_proto_depIdxs = []int32{
 	23, // 22: signaling.WebSocketMessage.room_state:type_name -> signaling.RoomStateEvent
 	25, // 23: signaling.WebSocketMessage.error:type_name -> signaling.ErrorEvent
 	26, // 24: signaling.WebSocketMessage.track_added:type_name -> signaling.TrackAddedEvent
-	23, // 25: signaling.JoinResponse.initial_state:type_name -> signaling.RoomStateEvent
-	13, // 26: signaling.RecentChatsEvent.chats:type_name -> signaling.ChatEvent
-	24, // 27: signaling.RoomStateEvent.participants:type_name -> signaling.ParticipantInfo
-	24, // 28: signaling.RoomStateEvent.waiting_users:type_name -> signaling.ParticipantInfo
-	29, // [29:29] is the sub-list for method output_type
-	29, // [29:29] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	27, // 25: signaling.WebSocketMessage.caption:type_name -> signaling.CaptionEvent
+	23, // 26: signaling.JoinResponse.initial_state:type_name -> signaling.RoomStateEvent
+	13, // 27: signaling.RecentChatsEvent.chats:type_name -> signaling.ChatEvent
+	24, // 28: signaling.RoomStateEvent.participants:type_name -> signaling.ParticipantInfo
+	24, // 29: signaling.RoomStateEvent.waiting_users:type_name -> signaling.ParticipantInfo
+	30, // [30:30] is the sub-list for method output_type
+	30, // [30:30] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_proto_signaling_proto_init() }
@@ -2307,6 +2405,7 @@ func file_proto_signaling_proto_init() {
 		(*WebSocketMessage_RoomState)(nil),
 		(*WebSocketMessage_Error)(nil),
 		(*WebSocketMessage_TrackAdded)(nil),
+		(*WebSocketMessage_Caption)(nil),
 	}
 	file_proto_signaling_proto_msgTypes[21].OneofWrappers = []any{
 		(*SignalRequest_SdpAnswer)(nil),
@@ -2325,7 +2424,7 @@ func file_proto_signaling_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_signaling_proto_rawDesc), len(file_proto_signaling_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

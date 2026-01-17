@@ -33,16 +33,21 @@ rm -rf "$TS_OUT_DIR/proto"
 mkdir -p "$GO_OUT_DIR/proto"
 mkdir -p "$TS_OUT_DIR/proto"
 
-# 2. Generate Go (Server)
+# 2. Generate Go (Server) - Main Protos (sfu, signaling)
 # Use $ROOT_DIR as proto_path so imports like "proto/signaling.proto" work.
-# Changes:
-# - proto_path="$ROOT_DIR"
-# - go_out="$GO_OUT_DIR" (parent of proto, so we get gen/proto/foo.pb.go)
-# - Input files: proto/*.proto (relative to CWD or absolute, but paths in .proto must match import paths relative to proto_path)
 protoc --proto_path="$ROOT_DIR" \
        --go_out="$GO_OUT_DIR" --go_opt=paths=source_relative \
        --go-grpc_out="$GO_OUT_DIR" --go-grpc_opt=paths=source_relative \
-       proto/*.proto
+       proto/sfu.proto proto/signaling.proto
+
+# 2b. Generate Go (Server) - CC Proto (Isolated package)
+# We output this to a 'cc' subdirectory to avoid package collision (package cc vs package proto)
+# With paths=source_relative, input "proto/cc.proto" -> output "$GO_OUT_DIR/cc/proto/cc.pb.go"
+mkdir -p "$GO_OUT_DIR/cc"
+protoc --proto_path="$ROOT_DIR" \
+       --go_out="$GO_OUT_DIR/cc" --go_opt=paths=source_relative \
+       --go-grpc_out="$GO_OUT_DIR/cc" --go-grpc_opt=paths=source_relative \
+       proto/cc.proto
 
 echo "Go generated."
 
