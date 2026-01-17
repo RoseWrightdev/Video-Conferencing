@@ -21,10 +21,10 @@ graph TD
     end
     
     subgraph "Private Network / Cluster"
-        FE["Frontend Service\n(Next.js)"]
-        BE["Backend Service\n(Go)"]
+        FE["Frontend Service (Next.js)"]
+        BE["Backend Service (Go)"]
         Redis[("Redis")]
-        SFU["SFU Service\n(Rust)"]
+        SFU["SFU Service (Rust)"]
     end
 
     User -- HTTPS --> LB
@@ -44,11 +44,13 @@ graph TD
 
 ### 2. Backend Service (The "Control Plane")
 - **Stack:** Go (Golang), Gin, Gorilla WebSocket.
-- **Role:** The "Brain" of the operation. It manages:
+- **Key Features:**
     - **Signaling:** Relaying SDP/ICE messages between clients and the SFU.
     - **Room State:** Managing participants, permissions, and chat.
     - **Orchestration:** Instructing the SFU (via **gRPC**) to allocate resources.
     - **Scaling:** Uses **Redis Pub/Sub** to synchronize state across multiple backend instances.
+    - **Reliability:** Implements **Circuit Breakers** (Gobreaker) and **Rate Limiting** (Ulule) for robust fault tolerance.
+    - **Observability:** **Structured Logging** (JSON) with correlation IDs for request tracing.
 
 ### 3. SFU Service (The "Data Plane")
 - **Stack:** Rust, Tokio, Tonic (gRPC), Webrtc.rs.
@@ -72,52 +74,47 @@ graph TD
 
 ---
 
-## 🛠 Tech Stack & Infrastructure
+## � Deployment & Infrastructure
 
-- **Protocol:** Protocol Buffers (gRPC) for internal service-to-service communication.
-- **Data Store:** Redis (for signaling bus and ephemeral state).
-- **Reverse Proxy:** Caddy (Automatic HTTPS, Load Balancing).
-- **Containerization:** Docker & Docker Compose.
-- **Observability:** Prometheus & Grafana (Packet loss, jitter, memory/CPU metrics).
+The project supports two deployment models depending on your needs.
+
+### 1. Simple Deployment (Resume / Demo)
+A simplified, single-node deployment using Docker Compose and Caddy. Perfect for a quick start or resume demonstration.
+- **Path:** [`devops/simple`](devops/simple/README.md)
+- **Features:** Auto-HTTPS, single command deploy, lightweight.
+
+### 2. Enterprise Deployment (Scalable)
+The full cloud-native setup for production environments.
+- **Path:** `devops/kubernetes` & `devops/terraform`
+- **Infrastructure:** AWS (EKS, ElastiCache, VPC) managed via **Terraform**.
+- **Orchestration:** **Kubernetes** with **ArgoCD** for GitOps/Continuous Delivery.
+- **Security:** **External Secrets Operator** for secret management.
 
 ---
 
-## 🚀 Environment Configuration
+## 🛠 Development Setup
 
-The application requires specific environment variables to be set.
+### Prerequisites
+- Docker & Docker Compose
+- Go 1.22+
+- Node.js 20+
+- Rust (latest stable)
 
-### Required Variables
-
-**Go Backend:**
-- `JWT_SECRET`: Secret for token signing (min 32 chars).
-- `PORT`: Server port (e.g., `8080`).
-- `RUST_SFU_ADDR`: Address of the Rust SFU (e.g., `localhost:50051`).
-- `REDIS_ADDR`: Address of Redis (e.g., `redis:6379`).
-
-**Rust SFU:**
-- `GRPC_PORT`: gRPC listening port (e.g., `50051`).
-
-**Frontend:**
-- `NEXT_PUBLIC_WS_URL`: WebSocket URL (e.g., `wss://api.example.com`).
-
-### Quick Setup
-
-1. Copy the example env file:
+### Quick Start
+1. **Copy Environment Variables:**
    ```bash
    cp devops/.env.example .env
    ```
-
-2. Generate a secure secret:
+2. **Generate Secrets:**
    ```bash
    echo "JWT_SECRET=$(openssl rand -base64 32)" >> .env
    ```
-
-3. Start the stack:
+3. **Start the Stack:**
    ```bash
    docker-compose up --build
    ```
-
-4. **Generate Protobufs** (if developing):
+4. **Generate Protobufs:**
+   If you modify `.proto` files, regenerate the code:
    ```bash
    ./scripts/generate_protos.sh
    ```
