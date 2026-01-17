@@ -1,7 +1,7 @@
 import pytest
 import grpc
-import cc_pb2
-import cc_pb2_grpc
+from proto import stream_processor_pb2 as cc_pb2
+from proto import stream_processor_pb2_grpc as cc_pb2_grpc
 from main import serve_grpc
 import asyncio
 import numpy as np

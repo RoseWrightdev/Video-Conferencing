@@ -101,21 +101,23 @@ class SummaryService(summary_service_pb2_grpc.SummaryServiceServicer):
             logger.error(f"Error fetching from Redis: {e}")
             context.abort(grpc.StatusCode.INTERNAL, f"Redis error: {e}")
 
-        # 2. Call LLM (Mock)
-        summary, action_items = mock_llm_summarize(transcript_text)
-        
-        return summary_service_pb2.SummaryResponse(
-            room_id=room_id,
-            summary=summary,
-            action_items=action_items
-        )
+        # 2. Call LLM
+        try:
+            summary, action_items = generate_summary(transcript_text)
+            
+            return summary_service_pb2.SummaryResponse(
+                room_id=room_id,
+                summary=summary,
+                action_items=action_items
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate summary: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, "Failed to generate summary. Please check service logs.")
 
-def mock_llm_summarize(text: str):
-    # Fallback if model not loaded
+def generate_summary(text: str):
     if not llm:
-        logger.warning("LLM not loaded, using mock fallback")
-        word_count = len(text.split())
-        return f"Mock Summary ({word_count} words). LLM unavailable.", ["Check logs"]
+        logger.error("LLM model not loaded. Cannot generate summary.")
+        raise RuntimeError("LLM model not initialized")
 
     # Real Inference
     system_prompt = (
@@ -163,7 +165,8 @@ def mock_llm_summarize(text: str):
 
     except Exception as e:
         logger.error(f"Inference error: {e}")
-        return "Error generating summary.", []
+        # Re-raise to let caller handle or return error state
+        raise
 
 @app.get("/health")
 async def health():

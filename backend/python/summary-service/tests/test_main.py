@@ -1,11 +1,11 @@
 import pytest
 from unittest.mock import MagicMock, patch
 import json
-import cc_pb2
+from proto import summary_service_pb2 as cc_pb2
 
 # Mock Llama before importing main
 with patch("main.Llama") as MockLlama:
-    from main import SummaryService, mock_llm_summarize, redis_client
+    from main import SummaryService, generate_summary, redis_client
 
 @pytest.mark.asyncio
 async def test_summarize_no_transcript():
