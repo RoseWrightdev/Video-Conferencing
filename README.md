@@ -36,6 +36,8 @@ graph TD
     BE -- gRPC --> SFU
     BE -- Pub/Sub --> Redis
     SFU -- Metrics --> BE
+    SFU -- gRPC (Audio) --> CC["Captioning Service (Python)"]
+    CC -- gRPC (Text) --> SFU
 ```
 
 ### 1. Frontend Service
@@ -59,6 +61,13 @@ graph TD
     - **Fan-outs** streams to subscribers with zero-copy forwarding.
     - **Terminates** DTLS/SRTP encryption.
     - **Optimized** for high throughput and low latency (no GC pauses).
+
+### 4. Captioning Service (AI/ML)
+- **Stack:** Python, **FastAPI**, **gRPC**, **Faster-Whisper**, **uv**.
+- **Role:** Real-time Speech-to-Text.
+    - **Receives** raw audio chunks from the SFU via gRPC.
+    - **Transcribes** audio using OpenAI's Whisper model (optimized).
+    - **Streams** captions back to the SFU for broadcast.
 
 ---
 
@@ -99,6 +108,7 @@ The full cloud-native setup for production environments.
 - Go 1.22+
 - Node.js 20+
 - Rust (latest stable)
+- Python 3.12+ & `uv` (for Captioning Service)
 
 ### Quick Start
 1. **Copy Environment Variables:**
