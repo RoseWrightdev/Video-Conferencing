@@ -1,29 +1,32 @@
 import { v4 as uuidv4 } from 'uuid';
 
-type LogLevel = 'info' | 'warn' | 'error';
+
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
   timestamp: string;
   level: LogLevel;
   message: string;
   correlation_id: string;
-  service: 'frontend';
+  service: string;
   [key: string]: any;
 }
 
 class Logger {
   private correlationId: string;
   private backendUrl: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+  private serviceName: string;
 
-  constructor() {
+  constructor(serviceName: string = 'frontend') {
+    this.serviceName = serviceName;
     // Generate or retrieve correlation ID (could be from session storage if we want persistence across reloads)
     if (typeof window !== 'undefined') {
       let cid = sessionStorage.getItem('correlation_id');
       if (!cid) {
         cid = uuidv4();
-        sessionStorage.setItem('correlation_id', cid);
+        sessionStorage.setItem('correlation_id', cid || '');
       }
-      this.correlationId = cid;
+      this.correlationId = cid || '';
     } else {
       this.correlationId = uuidv4();
     }
@@ -62,25 +65,48 @@ class Logger {
     return obj;
   }
 
-  private async log(level: LogLevel, message: string, context: Record<string, any> = {}) {
+  private async log(level: LogLevel, message: any, ...args: any[]) {
+    // Determine message string and context
+    let msgStr = '';
+    let context: Record<string, any> = {};
+
+    if (typeof message === 'string') {
+      msgStr = message;
+      // If the last argument is an object and not an error, treat it as context
+      if (args.length > 0) {
+        const lastArg = args[args.length - 1];
+        if (typeof lastArg === 'object' && lastArg !== null && !(lastArg instanceof Error)) {
+          context = lastArg;
+        }
+      }
+    } else if (message !== undefined && message !== null) {
+      msgStr = String(message);
+    }
+
     // Redact context
     const redactedContext = this.redact(context);
+
+    // Merge args into context if needed, or just pass them to console?
+    // For structured logging, we mainly care about the extracted context.
 
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
-      message,
+      message: msgStr,
       correlation_id: this.correlationId,
-      service: 'frontend',
+      service: this.serviceName,
       ...redactedContext,
     };
 
     // Console logging (always in dev, maybe restricted in prod)
-    const consoleMethod = level === 'info' ? console.log : level === 'warn' ? console.warn : console.error;
-    consoleMethod(`[${level.toUpperCase()}] ${message}`, redactedContext);
+    const consoleMethod = level === 'info' ? console.log :
+      level === 'warn' ? console.warn :
+        level === 'error' ? console.error :
+          console.debug;
+
+    consoleMethod(`[${level.toUpperCase()}] [${this.serviceName}] ${msgStr}`, ...args);
 
     // Send to backend in production (or if configured)
-    // For this MVP, we indiscriminately try to send errors and warnings to backend
     if (level === 'error' || level === 'warn') {
       this.sendToBackend(entry);
     }
@@ -107,17 +133,32 @@ class Logger {
     }
   }
 
-  public info(message: string, context?: Record<string, any>) {
-    this.log('info', message, context);
+  public debug(message?: any, ...args: any[]) {
+    this.log('debug', message, ...args);
   }
 
-  public warn(message: string, context?: Record<string, any>) {
-    this.log('warn', message, context);
+  public info(message?: any, ...args: any[]) {
+    this.log('info', message, ...args);
   }
 
-  public error(message: string, context?: Record<string, any>) {
-    this.log('error', message, context);
+  public warn(message?: any, ...args: any[]) {
+    this.log('warn', message, ...args);
+  }
+
+  public error(message?: any, ...args: any[]) {
+    this.log('error', message, ...args);
   }
 }
 
 export const logger = new Logger();
+
+export const createLogger = (name: string) => new Logger(name);
+
+// Backwards compatibility for code expecting separated loggers
+export const loggers = {
+  media: new Logger('media'),
+  room: new Logger('room'),
+  ui: new Logger('ui'),
+  auth: new Logger('auth'),
+  // Add other categories as discovered or needed
+};
