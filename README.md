@@ -1,106 +1,123 @@
-# Video Conferencing.
+# Video Conferencing (Distributed SFU)
 
-**Distributed, high-performance video conferencing.**
+**A high-performance, distributed video conferencing platform.**
 
-A "Split-Brain" SFU architecture decoupling signaling from media routing for massive scalability.
+This project implements a "Split-Brain" SFU architecture that decouples signaling (Go) from media routing (Rust), allowing for massive scalability and optimal performance.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-### Tech Stack.
+## 🏗 System Architecture
 
-* **Frontend:** Next.js 16, React 19, Zustand, Turbopack.
-* **Control Plane (Go):** Gin, Gorilla WebSocket, Redis Pub/Sub.
-* **Data Plane (Rust):** Tokio, WebRTC.rs, Tonic (gRPC).
-* **Protocol:** Protocol Buffers (gRPC/Protobuf) for all contracts.
-* **Infrastructure:** AWS ECS (Fargate & EC2), Terraform.
-* **Routing:** Kubernetes Gateway API.
-* **Observability:** Prometheus & Grafana.
+The platform consists of three primary services working in concert:
+
+```mermaid
+graph TD
+    User["User / Browser"]
+    
+    subgraph "Public Internet"
+        LB["Caddy / Load Balancer"]
+    end
+    
+    subgraph "Private Network / Cluster"
+        FE["Frontend Service\n(Next.js)"]
+        BE["Backend Service\n(Go)"]
+        Redis[("Redis")]
+        SFU["SFU Service\n(Rust)"]
+    end
+
+    User -- HTTPS --> LB
+    LB -- HTTP --> FE
+    LB -- WebSocket --> BE
+    User -- WebRTC (UDP/TCP) --> SFU
+    
+    FE -- HTTP/API --> BE
+    BE -- gRPC --> SFU
+    BE -- Pub/Sub --> Redis
+    SFU -- Metrics --> BE
+```
+
+### 1. Frontend Service
+- **Stack:** Next.js 16, React 19, Zustand, Tailwind CSS.
+- **Role:** Handles UI, local state, and WebRTC negotiation. Connects to the Backend via WebSocket for signaling and directly to the SFU via WebRTC for media transport.
+
+### 2. Backend Service (The "Control Plane")
+- **Stack:** Go (Golang), Gin, Gorilla WebSocket.
+- **Role:** The "Brain" of the operation. It manages:
+    - **Signaling:** Relaying SDP/ICE messages between clients and the SFU.
+    - **Room State:** Managing participants, permissions, and chat.
+    - **Orchestration:** Instructing the SFU (via **gRPC**) to allocate resources.
+    - **Scaling:** Uses **Redis Pub/Sub** to synchronize state across multiple backend instances.
+
+### 3. SFU Service (The "Data Plane")
+- **Stack:** Rust, Tokio, Tonic (gRPC), Webrtc.rs.
+- **Role:** The "Muscle". A Selective Forwarding Unit that:
+    - **Ingests** media streams via UDP/TCP.
+    - **Fan-outs** streams to subscribers with zero-copy forwarding.
+    - **Terminates** DTLS/SRTP encryption.
+    - **Optimized** for high throughput and low latency (no GC pauses).
 
 ---
 
-### Architecture.
+## 🔄 Key Workflows
 
-[Image of Hybrid Microservices Architecture Diagram NextJS Go Rust]
-
-**1. Connect (Control Plane)**
-Client connects via WebSocket to the **Go** signaling server. Go manages auth, chat, and room state. It is stateless and scalable.
-
-**2. Negotiate (Bridge)**
-Go calls **Rust** via gRPC to allocate resources. Rust reserves UDP ports and returns an SDP Offer.
-
-**3. Stream (Data Plane)**
-Client establishes a direct WebRTC connection with **Rust**. The Rust SFU ingests UDP packets and fan-outs to subscribers with zero-GC overhead.
+### Join Room Flow
+1. **Client** connects to **Backend** (WebSocket).
+2. **Backend** authenticates user and creates a **Room**.
+3. **Backend** calls **SFU** (gRPC) to create a session for the user.
+4. **Backend** signals **Client** to start WebRTC negotiation.
+5. **Client** & **SFU** exchange SDP Offer/Answer via Backend.
+6. **Client** & **SFU** establish direct P2P WebRTC connection.
 
 ---
 
-### DevOps & Monitoring.
+## 🛠 Tech Stack & Infrastructure
 
-**Routing: Gateway API**
-L4 (UDP) and L7 (HTTP) traffic managed via standardized Kubernetes Gateway API resources, decoupling routing from infrastructure.
-
-**Metrics: Prometheus & Grafana**
-Real-time observability into packet loss, jitter, Go goroutines, and Rust memory usage.
+- **Protocol:** Protocol Buffers (gRPC) for internal service-to-service communication.
+- **Data Store:** Redis (for signaling bus and ephemeral state).
+- **Reverse Proxy:** Caddy (Automatic HTTPS, Load Balancing).
+- **Containerization:** Docker & Docker Compose.
+- **Observability:** Prometheus & Grafana (Packet loss, jitter, memory/CPU metrics).
 
 ---
 
-### Environment Variables.
+## 🚀 Environment Configuration
 
-The application requires specific environment variables to be set before starting. **The application will fail to start with a clear error message if required variables are missing or invalid.**
+The application requires specific environment variables to be set.
 
-#### Required Variables
-
-**Go Backend (Session Server):**
-- `JWT_SECRET` - JWT secret for token signing (minimum 32 characters)
-  - Generate with: `openssl rand -base64 32`
-- `PORT` - Server port (valid port number 1-65535, typically `8080`)
-- `RUST_SFU_ADDR` - Rust SFU gRPC address (format: `host:port`, e.g., `localhost:50051`)
-- `REDIS_ADDR` - Redis address (format: `host:port`, required if `REDIS_ENABLED=true`)
-
-**Rust SFU (Media Server):**
-- `GRPC_PORT` - gRPC server port (valid port number 1-65535, typically `50051`)
-
-**Frontend (Next.js):**
-- `NEXT_PUBLIC_WS_URL` - WebSocket URL for backend connection (must start with `ws://` or `wss://`)
-
-#### Optional Variables (with defaults)
+### Required Variables
 
 **Go Backend:**
-- `GO_ENV` - Environment mode (defaults to `production`)
-- `LOG_LEVEL` - Logging level (defaults to `info`)
-- `REDIS_ENABLED` - Enable Redis pub/sub (defaults to `false`)
-- `DEVELOPMENT_MODE` - Development mode flag (defaults to `false`)
-- `SKIP_AUTH` - Skip authentication (defaults to `false`, **DO NOT USE IN PRODUCTION**)
+- `JWT_SECRET`: Secret for token signing (min 32 chars).
+- `PORT`: Server port (e.g., `8080`).
+- `RUST_SFU_ADDR`: Address of the Rust SFU (e.g., `localhost:50051`).
+- `REDIS_ADDR`: Address of Redis (e.g., `redis:6379`).
 
 **Rust SFU:**
-- `RUST_LOG` - Logging level (defaults to `info`)
+- `GRPC_PORT`: gRPC listening port (e.g., `50051`).
 
-#### Configuration
+**Frontend:**
+- `NEXT_PUBLIC_WS_URL`: WebSocket URL (e.g., `wss://api.example.com`).
 
-1. Copy the example environment file:
+### Quick Setup
+
+1. Copy the example env file:
    ```bash
    cp devops/.env.example .env
    ```
 
-2. Update the required variables in `.env`:
+2. Generate a secure secret:
    ```bash
-   # Generate a secure JWT secret
-   JWT_SECRET=$(openssl rand -base64 32)
-   
-   # Set other required variables
-   PORT=8080
-   RUST_SFU_ADDR=localhost:50051
-   GRPC_PORT=50051
-   NEXT_PUBLIC_WS_URL=ws://localhost:8080
+   echo "JWT_SECRET=$(openssl rand -base64 32)" >> .env
    ```
 
-3. The application will validate all environment variables at startup and exit with clear error messages if any are missing or invalid.
+3. Start the stack:
+   ```bash
+   docker-compose up --build
+   ```
 
----
-
-### Quick Start.
-
-**1. Generate Protobufs**
-```bash
-./scripts/generate_protos.sh
+4. **Generate Protobufs** (if developing):
+   ```bash
+   ./scripts/generate_protos.sh
+   ```
