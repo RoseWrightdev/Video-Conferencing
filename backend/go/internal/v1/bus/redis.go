@@ -203,7 +203,7 @@ func (s *Service) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGro
 		wg.Add(1)
 	}
 	go func() {
-		defer pubsub.Close()
+		defer func() { _ = pubsub.Close() }()
 		if wg != nil {
 			defer wg.Done()
 		}

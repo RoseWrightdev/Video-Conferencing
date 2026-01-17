@@ -232,7 +232,7 @@ func (r *Room) HandleClientConnect(client types.ClientInterface) {
 	defer r.mu.Unlock()
 
 	var existingClient types.ClientInterface
-	var preservedRole types.RoleType = types.RoleTypeUnknown
+	var preservedRole = types.RoleTypeUnknown
 
 	if c, exists := r.clients[client.GetID()]; exists {
 		existingClient = c

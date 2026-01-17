@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"container/list"
 	"context"
 	"sync"
 	"time"
@@ -27,12 +26,11 @@ type wsConnection interface {
 // Client represents a single user's connection to a video conference room.
 // It implements types.ClientInterface.
 type Client struct {
-	conn             wsConnection          // WebSocket connection for real-time communication
-	room             types.Roomer          // Room interface for business logic operations
-	ID               types.ClientIdType    // Unique identifier from JWT token
-	DisplayName      types.DisplayNameType // Human-readable name for UI display
-	Role             types.RoleType        // Current permission level in the room
-	drawOrderElement *list.Element         // Position reference in room draw order queues
+	conn        wsConnection          // WebSocket connection for real-time communication
+	room        types.Roomer          // Room interface for business logic operations
+	ID          types.ClientIdType    // Unique identifier from JWT token
+	DisplayName types.DisplayNameType // Human-readable name for UI display
+	Role        types.RoleType        // Current permission level in the room
 
 	// State Flags (Consolidated from Room maps)
 	IsAudioEnabled  bool
@@ -139,7 +137,9 @@ func (c *Client) Disconnect() {
 func (c *Client) readPump() {
 	defer func() {
 		c.room.HandleClientDisconnect(c)
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			logging.Warn(context.Background(), "Error closing connection in readPump", zap.Error(err), zap.String("clientId", string(c.ID)))
+		}
 		metrics.DecConnection()
 	}()
 
@@ -167,7 +167,11 @@ func (c *Client) readPump() {
 }
 
 func (c *Client) writePump() {
-	defer c.conn.Close()
+	defer func() {
+		if err := c.conn.Close(); err != nil {
+			logging.Warn(context.Background(), "Error closing connection in writePump", zap.Error(err), zap.String("clientId", string(c.ID)))
+		}
+	}()
 	writeWait := 10 * time.Second
 
 	for {

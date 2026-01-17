@@ -48,7 +48,7 @@ func main() {
 		panic("Failed to initialize logger: " + err.Error())
 	}
 	// Ensure buffered logs are flushed
-	defer logging.GetLogger().Sync()
+	defer func() { _ = logging.GetLogger().Sync() }()
 
 	ctx := context.Background()
 
@@ -147,7 +147,7 @@ func main() {
 		// Continue running, handler will just error out
 	} else {
 		logging.Info(ctx, "✅ Connected to Summary Service", zap.String("addr", summaryAddr))
-		defer summaryClient.Close()
+		defer func() { _ = summaryClient.Close() }()
 	}
 
 	// --- Create Hubs with Dependencies ---
@@ -268,7 +268,9 @@ func main() {
 		logging.Info(ctx, "API server starting", zap.String("port", cfg.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logging.Error(ctx, "Failed to run server", zap.Error(err))
-			syscall.Kill(os.Getpid(), syscall.SIGTERM)
+			if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+				logging.Error(ctx, "Failed to send SIGTERM", zap.Error(err))
+			}
 		}
 	}()
 

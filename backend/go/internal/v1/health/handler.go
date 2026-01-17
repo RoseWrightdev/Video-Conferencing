@@ -36,7 +36,7 @@ func (c *DefaultSFUChecker) Check(ctx context.Context, addr string) string {
 		logging.Error(ctx, "Failed to connect to Rust SFU for health check", zap.Error(err), zap.String("addr", addr))
 		return "unhealthy"
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Create health check client
 	healthClient := healthpb.NewHealthClient(conn)

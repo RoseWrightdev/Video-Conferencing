@@ -141,19 +141,19 @@ func TestChatContent1000Chars(t *testing.T) {
 
 func TestTypeAliases(t *testing.T) {
 	// Test that payload aliases are correctly defined
-	var addChat AddChatPayload = ChatInfo{
+	var addChat = ChatInfo{
 		ChatId:      "chat-1",
 		ChatContent: "Test",
 	}
 	assert.Equal(t, ChatId("chat-1"), addChat.ChatId)
 	assert.Equal(t, ChatContent("Test"), addChat.ChatContent)
 
-	var deleteChat DeleteChatPayload = ChatInfo{
+	var deleteChat = ChatInfo{
 		ChatId: "chat-2",
 	}
 	assert.Equal(t, ChatId("chat-2"), deleteChat.ChatId)
 
-	var getRecent GetRecentChatsPayload = ChatInfo{}
+	var getRecent = ChatInfo{}
 	assert.NotNil(t, getRecent)
 }
 
