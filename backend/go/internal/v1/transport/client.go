@@ -3,13 +3,14 @@ package transport
 import (
 	"container/list"
 	"context"
-	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 	"google.golang.org/protobuf/proto"
@@ -155,7 +156,7 @@ func (c *Client) readPump() {
 		// Decode Proto
 		var msg pb.WebSocketMessage
 		if err := proto.Unmarshal(data, &msg); err != nil {
-			slog.Warn("Failed to unmarshal proto", "ClientId", c.ID, "error", err)
+			logging.Warn(context.Background(), "Failed to unmarshal proto", zap.String("ClientId", string(c.ID)), zap.Error(err))
 			continue
 		}
 
@@ -178,7 +179,7 @@ func (c *Client) writePump() {
 			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
-				slog.Error("error writing priority message", "error", err)
+				logging.Error(context.Background(), "error writing priority message", zap.Error(err))
 				return
 			}
 		case message, ok := <-c.send:
@@ -188,7 +189,7 @@ func (c *Client) writePump() {
 			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
-				slog.Error("error writing message", "error", err)
+				logging.Error(context.Background(), "error writing message", zap.Error(err))
 				return
 			}
 		}
@@ -201,21 +202,21 @@ func (c *Client) SendProto(msg *pb.WebSocketMessage) {
 	c.mu.RLock()
 	if c.closed {
 		c.mu.RUnlock()
-		slog.Debug("Skipping send to closed client", "clientId", c.ID)
+		logging.GetLogger().Debug("Skipping send to closed client", zap.String("clientId", string(c.ID)))
 		return
 	}
 	c.mu.RUnlock()
 
 	data, err := proto.Marshal(msg)
 	if err != nil {
-		slog.Error("Failed to marshal proto response", "error", err)
+		logging.Error(context.Background(), "Failed to marshal proto response", zap.Error(err))
 		return
 	}
 
 	// Add panic recovery as a safety net
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Warn("Recovered from panic in SendProto", "clientId", c.ID, "panic", r)
+			logging.Warn(context.Background(), "Recovered from panic in SendProto", zap.String("clientId", string(c.ID)), zap.Any("panic", r))
 		}
 	}()
 
@@ -230,13 +231,13 @@ func (c *Client) SendProto(msg *pb.WebSocketMessage) {
 		select {
 		case c.prioritySend <- data:
 		default:
-			slog.Error("Client priority channel full - dropping critical message", "clientId", c.ID)
+			logging.Error(context.Background(), "Client priority channel full - dropping critical message", zap.String("clientId", string(c.ID)))
 		}
 	} else {
 		select {
 		case c.send <- data:
 		default:
-			slog.Warn("Client send channel full or closed", "clientId", c.ID)
+			logging.Warn(context.Background(), "Client send channel full or closed", zap.String("clientId", string(c.ID)))
 		}
 	}
 }
@@ -247,7 +248,7 @@ func (c *Client) SendRaw(data []byte) {
 	c.mu.RLock()
 	if c.closed {
 		c.mu.RUnlock()
-		slog.Debug("Skipping send to closed client", "clientId", c.ID)
+		logging.GetLogger().Debug("Skipping send to closed client", zap.String("clientId", string(c.ID)))
 		return
 	}
 	c.mu.RUnlock()
@@ -255,13 +256,13 @@ func (c *Client) SendRaw(data []byte) {
 	// Add panic recovery as a safety net
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Warn("Recovered from panic in SendRaw", "clientId", c.ID, "panic", r)
+			logging.Warn(context.Background(), "Recovered from panic in SendRaw", zap.String("clientId", string(c.ID)), zap.Any("panic", r))
 		}
 	}()
 
 	select {
 	case c.send <- data:
 	default:
-		slog.Warn("Client send channel full or closed", "clientId", c.ID)
+		logging.Warn(context.Background(), "Client send channel full or closed", zap.String("clientId", string(c.ID)))
 	}
 }

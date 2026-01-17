@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"go.uber.org/zap"
 )
 
 // CustomClaims represents custom JWT claims used for authentication.
@@ -144,7 +145,7 @@ func GetAllowedOriginsFromEnv(envVarName string, defaultEnvs []string) []string 
 	originsStr := os.Getenv(envVarName)
 	if originsStr == "" {
 		// Provide sensible defaults for local development if the env var isn't set.
-		slog.Warn(fmt.Sprintf("%s environment variable not set. Using default development origins:\n%s", envVarName, defaultEnvs))
+		logging.Warn(context.Background(), fmt.Sprintf("%s environment variable not set. Using default development origins:\n%s", envVarName, defaultEnvs))
 		return defaultEnvs
 	}
 	return strings.Split(originsStr, ",")
@@ -176,7 +177,7 @@ func (m *MockValidator) ValidateToken(tokenString string) (*CustomClaims, error)
 					email = e
 				}
 				// Debug: log what we found
-				slog.Info("MockValidator parsed JWT", "subject", subject, "name", name, "email", email)
+				logging.Info(context.Background(), "MockValidator parsed JWT", zap.String("subject", subject), zap.String("name", name), zap.String("email", email))
 			}
 		}
 	}

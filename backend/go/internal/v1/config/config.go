@@ -1,11 +1,14 @@
 package config
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
+	"go.uber.org/zap"
 )
 
 // Config holds validated environment configuration
@@ -78,7 +81,7 @@ func ValidateEnv() (*Config, error) {
 		if cfg.RedisAddr == "" {
 			// Default to localhost:6379 if not specified
 			cfg.RedisAddr = "localhost:6379"
-			slog.Warn("REDIS_ADDR not set, using default", "addr", cfg.RedisAddr)
+			logging.Warn(context.Background(), "REDIS_ADDR not set, using default", zap.String("addr", cfg.RedisAddr))
 		} else if !isValidHostPort(cfg.RedisAddr) {
 			errors = append(errors, fmt.Sprintf("REDIS_ADDR must be in format 'host:port' (got '%s')", cfg.RedisAddr))
 		}
@@ -146,17 +149,17 @@ func isValidHostPort(addr string) bool {
 
 // logValidatedConfig logs the validated configuration with secrets redacted
 func logValidatedConfig(cfg *Config) {
-	slog.Info("✅ Environment configuration validated successfully")
-	slog.Info("Configuration",
-		"jwt_secret", redactSecret(cfg.JWTSecret),
-		"port", cfg.Port,
-		"rust_sfu_addr", cfg.RustSFUAddr,
-		"redis_enabled", cfg.RedisEnabled,
-		"redis_addr", cfg.RedisAddr,
-		"go_env", cfg.GoEnv,
-		"log_level", cfg.LogLevel,
-		"development_mode", cfg.DevelopmentMode,
-		"rate_limit_api_global", cfg.RateLimitApiGlobal,
+	logging.Info(context.Background(), "✅ Environment configuration validated successfully")
+	logging.Info(context.Background(), "Configuration",
+		zap.String("jwt_secret", redactSecret(cfg.JWTSecret)),
+		zap.String("port", cfg.Port),
+		zap.String("rust_sfu_addr", cfg.RustSFUAddr),
+		zap.Bool("redis_enabled", cfg.RedisEnabled),
+		zap.String("redis_addr", cfg.RedisAddr),
+		zap.String("go_env", cfg.GoEnv),
+		zap.String("log_level", cfg.LogLevel),
+		zap.Bool("development_mode", cfg.DevelopmentMode),
+		zap.String("rate_limit_api_global", cfg.RateLimitApiGlobal),
 	)
 }
 

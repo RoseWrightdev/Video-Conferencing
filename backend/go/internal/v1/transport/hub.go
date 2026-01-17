@@ -2,17 +2,18 @@ package transport
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/ratelimit"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/room"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"go.uber.org/zap"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/pkg/sfu"
 
@@ -35,7 +36,7 @@ type Hub struct {
 // getSFUClientFromEnv is a helper to connect to SFU based on environment variables.
 func getSFUClientFromEnv() types.SFUProvider {
 	if os.Getenv("ENABLE_SFU") != "true" {
-		slog.Warn("⚠️  SFU Disabled (ENABLE_SFU != true). App running in Signaling-Only mode.")
+		logging.Warn(context.Background(), "⚠️  SFU Disabled (ENABLE_SFU != true). App running in Signaling-Only mode.")
 		return nil
 	}
 
@@ -44,13 +45,13 @@ func getSFUClientFromEnv() types.SFUProvider {
 		sfuAddr = "localhost:50051"
 	}
 
-	slog.Info("🔌 SFU Enabled. Connecting...", "addr", sfuAddr)
+	logging.Info(context.Background(), "🔌 SFU Enabled. Connecting...", zap.String("addr", sfuAddr))
 	sfuClient, err := sfu.NewSFUClient(sfuAddr)
 	if err != nil {
-		slog.Error("SFU Connection Failed", "error", err)
+		logging.Error(context.Background(), "SFU Connection Failed", zap.Error(err))
 		panic(err)
 	}
-	slog.Info("✅ SFU Connected")
+	logging.Info(context.Background(), "✅ SFU Connected")
 	return sfuClient
 }
 
@@ -153,7 +154,7 @@ func (h *Hub) removeRoom(roomID types.RoomIdType) {
 		// Double-check room still exists and is empty OR hostless before deleting
 		if r, ok := h.rooms[roomID]; ok && (r.IsRoomEmpty() || !r.HasHost()) {
 			if !r.IsRoomEmpty() {
-				slog.Info("Closing hostless room", "roomId", roomID)
+				logging.Info(context.Background(), "Closing hostless room", zap.String("roomId", string(roomID)))
 				r.CloseRoom("Host has not returned.")
 			}
 
@@ -164,12 +165,12 @@ func (h *Hub) removeRoom(roomID types.RoomIdType) {
 			metrics.ActiveRooms.Dec()
 			metrics.RoomParticipants.DeleteLabelValues(string(roomID))
 
-			slog.Info("Removed room from hub after grace period", "roomId", roomID, "wasEmpty", r.IsRoomEmpty())
+			logging.Info(context.Background(), "Removed room from hub after grace period", zap.String("roomId", string(roomID)), zap.Bool("wasEmpty", r.IsRoomEmpty()))
 		} else {
 			// Room is no longer empty, cancel cleanup
 			delete(h.pendingRoomCleanups, roomID)
 			if ok {
-				slog.Info("Cancelled room cleanup - room is active", "roomId", roomID)
+				logging.Info(context.Background(), "Cancelled room cleanup - room is active", zap.String("roomId", string(roomID)))
 			}
 		}
 	})
@@ -189,12 +190,12 @@ func (h *Hub) getOrCreateRoom(roomID types.RoomIdType) *room.Room {
 		if timer, hasPendingCleanup := h.pendingRoomCleanups[roomID]; hasPendingCleanup {
 			timer.Stop()
 			delete(h.pendingRoomCleanups, roomID)
-			slog.Info("Cancelled pending room cleanup due to reconnection", "roomId", roomID)
+			logging.Info(context.Background(), "Cancelled pending room cleanup due to reconnection", zap.String("roomId", string(roomID)))
 		}
 		return r
 	}
 
-	slog.Info("Creating new session room", "roomId", roomID)
+	logging.Info(context.Background(), "Creating new session room", zap.String("roomId", string(roomID)))
 	r := room.NewRoom(roomID, h.removeRoom, h.bus, h.sfu)
 	h.rooms[roomID] = r
 
@@ -205,14 +206,14 @@ func (h *Hub) getOrCreateRoom(roomID types.RoomIdType) *room.Room {
 
 // Shutdown gracefully closes all active rooms and connections
 func (h *Hub) Shutdown(ctx context.Context) error {
-	slog.Info("Shutting down Hub - closing all active rooms...")
+	logging.Info(ctx, "Shutting down Hub - closing all active rooms...")
 
 	h.mu.Lock()
 	// Cancel all pending cleanup timers
 	for roomID, timer := range h.pendingRoomCleanups {
 		timer.Stop()
 		delete(h.pendingRoomCleanups, roomID)
-		slog.Debug("Cancelled pending cleanup timer", "roomId", roomID)
+		logging.GetLogger().Debug("Cancelled pending cleanup timer", zap.String("roomId", string(roomID)))
 	}
 
 	// Get snapshot of all rooms
@@ -227,16 +228,16 @@ func (h *Hub) Shutdown(ctx context.Context) error {
 		r.CloseRoom("Server shutting down")
 	}
 
-	slog.Info("All rooms closed", "count", len(rooms))
+	logging.Info(ctx, "All rooms closed", zap.Int("count", len(rooms)))
 
 	// Close SFU connection if present
 	if h.sfu != nil {
 		if sfuClient, ok := h.sfu.(interface{ Close() error }); ok {
 			if err := sfuClient.Close(); err != nil {
-				slog.Error("Failed to close SFU connection", "error", err)
+				logging.Error(ctx, "Failed to close SFU connection", zap.Error(err))
 				return err
 			}
-			slog.Info("SFU connection closed")
+			logging.Info(ctx, "SFU connection closed")
 		}
 	}
 

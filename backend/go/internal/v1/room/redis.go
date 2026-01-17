@@ -2,9 +2,10 @@ package room
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
+	"go.uber.org/zap"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 	"google.golang.org/protobuf/proto"
@@ -12,7 +13,7 @@ import (
 
 func (r *Room) subscribeToRedis() {
 	if r.bus == nil {
-		slog.Debug("Redis disabled (single-instance mode)")
+		logging.GetLogger().Debug("Redis disabled (single-instance mode)")
 		return
 	}
 
@@ -20,7 +21,7 @@ func (r *Room) subscribeToRedis() {
 	r.bus.Subscribe(ctx, string(r.ID), &r.wg, func(payload bus.PubSubPayload) {
 		r.handleRedisMessage(payload)
 	})
-	slog.Info("Subscribed to Redis", "roomId", r.ID)
+	logging.Info(ctx, "Subscribed to Redis", zap.String("roomId", string(r.ID)))
 }
 
 func (r *Room) handleRedisMessage(payload bus.PubSubPayload) {
@@ -34,7 +35,7 @@ func (r *Room) handleRedisMessage(payload bus.PubSubPayload) {
 	// Decode Protobuf
 	var msg pb.WebSocketMessage
 	if err := proto.Unmarshal(payload.Payload, &msg); err != nil {
-		slog.Error("Redis proto unmarshal failed", "error", err)
+		logging.Error(r.ctx, "Redis proto unmarshal failed", zap.Error(err))
 		return
 	}
 
@@ -50,13 +51,13 @@ func (r *Room) publishToRedis(ctx context.Context, msg *pb.WebSocketMessage) {
 	// Marshal to Binary
 	data, err := proto.Marshal(msg)
 	if err != nil {
-		slog.Error("Redis proto marshal failed", "error", err)
+		logging.Error(ctx, "Redis proto marshal failed", zap.Error(err))
 		return
 	}
 
 	// Publish
 	err = r.bus.Publish(ctx, string(r.ID), "proto", data, "", nil)
 	if err != nil {
-		slog.Error("Redis publish failed", "error", err)
+		logging.Error(ctx, "Redis publish failed", zap.Error(err))
 	}
 }

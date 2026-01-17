@@ -1,10 +1,12 @@
 package signaling
 
 import (
-	"log/slog"
+	"context"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"go.uber.org/zap"
 )
 
 // Signaling helper functions - pure business logic, fully testable
@@ -28,7 +30,12 @@ func GetSignalType(signal *pb.SignalRequest) string {
 func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSocketMessage {
 	// Handle TrackAdded
 	if trackEvent := event.GetTrackEvent(); trackEvent != nil {
-		slog.Info("SFU Track Added event received", "targetClientId", client.GetID(), "sourceUserId", trackEvent.UserId, "streamId", trackEvent.StreamId, "kind", trackEvent.TrackKind)
+		logging.Info(context.Background(), "SFU Track Added event received",
+			zap.String("targetClientId", string(client.GetID())),
+			zap.String("sourceUserId", trackEvent.UserId),
+			zap.String("streamId", trackEvent.StreamId),
+			zap.String("kind", trackEvent.TrackKind),
+		)
 		return &pb.WebSocketMessage{
 			Payload: &pb.WebSocketMessage_TrackAdded{
 				TrackAdded: trackEvent,
@@ -38,7 +45,7 @@ func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSo
 
 	// Handle Renegotiation Offer from SFU
 	if sdp := event.GetRenegotiateSdpOffer(); sdp != "" {
-		slog.Info("SFU Renegotiation Offer", "clientId", client.GetID())
+		logging.Info(context.Background(), "SFU Renegotiation Offer", zap.String("clientId", string(client.GetID())))
 		return &pb.WebSocketMessage{
 			Payload: &pb.WebSocketMessage_SignalEvent{
 				SignalEvent: &pb.SignalEvent{
@@ -52,7 +59,7 @@ func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSo
 
 	// Handle Answer from SFU
 	if sdp := event.GetSdpAnswer(); sdp != "" {
-		slog.Info("SFU Answer received", "clientId", client.GetID())
+		logging.Info(context.Background(), "SFU Answer received", zap.String("clientId", string(client.GetID())))
 		return &pb.WebSocketMessage{
 			Payload: &pb.WebSocketMessage_SignalEvent{
 				SignalEvent: &pb.SignalEvent{
@@ -66,7 +73,8 @@ func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSo
 
 	// Handle ICE Candidate from SFU
 	if candidate := event.GetIceCandidate(); candidate != "" {
-		slog.Debug("SFU ICE Candidate received", "clientId", client.GetID())
+		// Debug level in zap is handled by checking level, or just use Debug/Info
+		logging.GetLogger().Debug("SFU ICE Candidate received", zap.String("clientId", string(client.GetID())))
 		return &pb.WebSocketMessage{
 			Payload: &pb.WebSocketMessage_SignalEvent{
 				SignalEvent: &pb.SignalEvent{
@@ -77,7 +85,7 @@ func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSo
 			},
 		}
 	}
-	
+
 	// Handle Caption from SFU
 	if caption := event.GetCaption(); caption != nil {
 		return &pb.WebSocketMessage{

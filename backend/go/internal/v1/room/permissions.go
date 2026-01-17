@@ -1,4 +1,4 @@
-// Package session - permissions.go
+// Package room - permissions.go
 //
 // This file implements the role-based permission system for video conference rooms.
 // The permission system defines hierarchical access levels and controls which

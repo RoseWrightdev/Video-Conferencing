@@ -2,10 +2,11 @@ package room
 
 import (
 	"context"
-	"log/slog"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"go.uber.org/zap"
 )
 
 func (r *Room) HandleToggleMedia(ctx context.Context, client types.ClientInterface, req *pb.ToggleMediaRequest) {
@@ -167,7 +168,7 @@ func (r *Room) HandleRequestScreenSharePermission(ctx context.Context, client ty
 func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterface, adminReq *pb.AdminActionRequest) {
 	// Permission check (business logic)
 	if err := validateAdminPermission(client.GetRole()); err != nil {
-		slog.Warn("Unauthorized admin action attempt", "clientId", client.GetID(), "error", err)
+		logging.Warn(ctx, "Unauthorized admin action attempt", zap.String("clientId", string(client.GetID())), zap.Error(err))
 		return
 	}
 
@@ -201,7 +202,7 @@ func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterfa
 			go func() {
 				defer r.wg.Done()
 				if err := r.CreateSFUSession(ctx, target); err != nil {
-					slog.Error("Failed to create SFU session", "room", r.ID, "userId", target.GetID(), "error", err)
+					logging.Error(ctx, "Failed to create SFU session", zap.String("room", string(r.GetID())), zap.String("userId", string(target.GetID())), zap.Error(err))
 				}
 			}()
 			r.wg.Add(1)
@@ -234,7 +235,7 @@ func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterfa
 	case AdminActionTransferOwnership:
 		// Target must be a participant or host
 		if target != nil && (target.GetRole() == types.RoleTypeParticipant || target.GetRole() == types.RoleTypeHost) {
-			slog.Info("Transferring room ownership", "room", r.ID, "oldOwner", r.ownerID, "newOwner", target.GetID())
+			logging.Info(ctx, "Transferring room ownership", zap.String("room", string(r.GetID())), zap.String("oldOwner", string(r.GetOwnerID())), zap.String("newOwner", string(target.GetID())))
 			r.ownerID = target.GetID()
 
 			// Ensure new owner is a host

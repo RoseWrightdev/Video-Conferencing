@@ -3,12 +3,13 @@ package room
 import (
 	"container/list"
 	"context"
-	"log/slog"
 	"sync"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/signaling"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
@@ -211,7 +212,7 @@ func (r *Room) CloseRoom(reason string) {
 }
 
 func (r *Room) closeRoomLocked(reason string) {
-	slog.Info("Closing room", "room", r.ID, "reason", reason)
+	logging.Info(r.ctx, "Closing room", zap.String("room", string(r.ID)), zap.String("reason", reason))
 	r.cancel()
 
 	var targets []types.ClientInterface
@@ -239,14 +240,14 @@ func (r *Room) HandleClientConnect(client types.ClientInterface) {
 	}
 
 	if existingClient != nil {
-		slog.Info("Duplicate connection detected, removing old client",
-			"room", r.ID,
-			"clientId", client.GetID(),
-			"oldRole", existingClient.GetRole(),
+		logging.Info(context.Background(), "Duplicate connection detected, removing old client",
+			zap.String("room", string(r.ID)),
+			zap.String("clientId", string(client.GetID())),
+			zap.String("oldRole", string(existingClient.GetRole())),
 		)
 		if r.sfu != nil {
 			if err := r.sfu.DeleteSession(context.Background(), string(client.GetID()), string(r.ID)); err != nil {
-				slog.Error("Failed to delete stale SFU session", "error", err)
+				logging.Error(context.Background(), "Failed to delete stale SFU session", zap.Error(err))
 			}
 		}
 
@@ -258,12 +259,12 @@ func (r *Room) HandleClientConnect(client types.ClientInterface) {
 	}
 
 	if r.ownerID == "" {
-		slog.Info("Room has no owner, assigning owner", "room", r.ID, "ownerId", client.GetID())
+		logging.Info(context.Background(), "Room has no owner, assigning owner", zap.String("room", string(r.ID)), zap.String("ownerId", string(client.GetID())))
 		r.ownerID = client.GetID()
 	}
 
 	if client.GetID() == r.ownerID {
-		slog.Info("Owner joined, ensuring Host role", "room", r.ID, "clientId", client.GetID())
+		logging.Info(context.Background(), "Owner joined, ensuring Host role", zap.String("room", string(r.ID)), zap.String("clientId", string(client.GetID())))
 		r.addHostLocked(context.Background(), client)
 		r.sendRoomStateToClient(client)
 		r.broadcastRoomStateLocked(context.Background())
@@ -271,7 +272,7 @@ func (r *Room) HandleClientConnect(client types.ClientInterface) {
 	}
 
 	if preservedRole != types.RoleTypeUnknown {
-		slog.Info("Restoring previous role", "room", r.ID, "clientId", client.GetID(), "role", preservedRole)
+		logging.Info(context.Background(), "Restoring previous role", zap.String("room", string(r.ID)), zap.String("clientId", string(client.GetID())), zap.String("role", string(preservedRole)))
 		switch preservedRole {
 		case types.RoleTypeHost:
 			r.addHostLocked(context.Background(), client)
@@ -296,7 +297,7 @@ func (r *Room) HandleClientDisconnect(client types.ClientInterface) {
 
 	ctx := context.Background()
 	r.disconnectClientLocked(ctx, client)
-	slog.Info("Client disconnected", "room", r.ID, "ClientId", client.GetID())
+	logging.Info(ctx, "Client disconnected", zap.String("room", string(r.ID)), zap.String("ClientId", string(client.GetID())))
 
 	totalParticipants := 0
 	for _, c := range r.clients {
@@ -324,16 +325,16 @@ func (r *Room) HandleClientDisconnect(client types.ClientInterface) {
 // Router delegates to handlers.go
 func (r *Room) Router(ctx context.Context, client types.ClientInterface, msg *pb.WebSocketMessage) {
 	if !validateMessagePayload(msg) {
-		slog.Warn("Received message with empty payload", "clientId", client.GetID())
+		logging.Warn(ctx, "Received message with empty payload", zap.String("clientId", string(client.GetID())))
 		return
 	}
 
 	switch payload := msg.Payload.(type) {
 	case *pb.WebSocketMessage_Join:
-		slog.Info("Handling Join Request", "clientId", client.GetID(), "role", client.GetRole())
+		logging.Info(ctx, "Handling Join Request", zap.String("clientId", string(client.GetID())), zap.String("role", string(client.GetRole())))
 
 		if !canClientJoinSFU(client) {
-			slog.Info("Sending JoinResponse to waiting user (no SFU session)", "clientId", client.GetID())
+			logging.Info(ctx, "Sending JoinResponse to waiting user (no SFU session)", zap.String("clientId", string(client.GetID())))
 			client.SendProto(&pb.WebSocketMessage{
 				Payload: &pb.WebSocketMessage_JoinResponse{
 					JoinResponse: &pb.JoinResponse{
@@ -348,7 +349,7 @@ func (r *Room) Router(ctx context.Context, client types.ClientInterface, msg *pb
 		}
 
 		if err := r.CreateSFUSession(ctx, client); err != nil {
-			slog.Error("Failed to create SFU session", "error", err)
+			logging.Error(ctx, "Failed to create SFU session", zap.Error(err))
 		}
 	case *pb.WebSocketMessage_Signal:
 		r.HandleSFUSignal(ctx, client, payload.Signal)
@@ -369,7 +370,7 @@ func (r *Room) Router(ctx context.Context, client types.ClientInterface, msg *pb
 	case *pb.WebSocketMessage_RequestScreenSharePermission:
 		r.HandleRequestScreenSharePermission(ctx, client)
 	default:
-		slog.Warn("Unknown message type received", "clientId", client.GetID())
+		logging.Warn(ctx, "Unknown message type received", zap.String("clientId", string(client.GetID())))
 	}
 }
 
@@ -409,7 +410,7 @@ func (r *Room) Broadcast(msg *pb.WebSocketMessage) {
 	// Marshal ONCE
 	data, err := proto.Marshal(msg)
 	if err != nil {
-		slog.Error("Failed to marshal broadcast message", "room", r.ID, "error", err)
+		logging.Error(r.ctx, "Failed to marshal broadcast message", zap.String("room", string(r.ID)), zap.Error(err))
 		return
 	}
 
@@ -445,7 +446,7 @@ func (r *Room) broadcastRoomStateLocked(ctx context.Context) {
 		}
 	}
 
-	slog.Info("Broadcasting RoomState", "room", r.ID, "recipients", len(recipients))
+	logging.Info(ctx, "Broadcasting RoomState", zap.String("room", string(r.ID)), zap.Int("recipients", len(recipients)))
 
 	msg := &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_RoomState{

@@ -3,12 +3,13 @@ package ratelimit
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -16,6 +17,7 @@ import (
 	mgin "github.com/ulule/limiter/v3/drivers/middleware/gin"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 	sredis "github.com/ulule/limiter/v3/drivers/store/redis"
+	"go.uber.org/zap"
 )
 
 // RateLimiter holds the rate limiter instances
@@ -74,11 +76,11 @@ func NewRateLimiter(cfg *config.Config, redisClient *redis.Client) (*RateLimiter
 			return nil, fmt.Errorf("failed to create redis store: %w", err)
 		}
 		store = s
-		slog.Info("✅ Rate limiter using Redis store")
+		logging.Info(context.Background(), "✅ Rate limiter using Redis store")
 	} else {
 		// Fallback to memory store if Redis is disabled (e.g. dev mode without redis)
 		store = memory.NewStore()
-		slog.Warn("⚠️  Rate limiter using Memory store (Redis disabled or unavailable)")
+		logging.Warn(context.Background(), "⚠️  Rate limiter using Memory store (Redis disabled or unavailable)")
 	}
 
 	return &RateLimiter{
@@ -176,7 +178,7 @@ func (rl *RateLimiter) GlobalMiddleware() gin.HandlerFunc {
 		if err != nil {
 			// If Redis fails, what do we do? Fail open or closed?
 			// Fail open is safer for availability.
-			slog.Error("Rate limiter store failed", "error", err)
+			logging.Error(ctx, "Rate limiter store failed", zap.Error(err))
 			c.Next()
 			return
 		}
@@ -188,7 +190,7 @@ func (rl *RateLimiter) GlobalMiddleware() gin.HandlerFunc {
 
 		if context.Reached {
 			metrics.RateLimitExceeded.WithLabelValues(c.FullPath(), limitType).Inc()
-			c.Header("Retry-After", strconv.FormatInt(context.Reset-context.Reset, 10)) // approximate
+			c.Header("Retry-After", strconv.FormatInt(context.Reset-time.Now().Unix(), 10)) // approximate
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "Too many requests",
 				"retry_after": context.Reset,
@@ -235,7 +237,7 @@ func (rl *RateLimiter) MiddlewareForEndpoint(endpointType string) gin.HandlerFun
 		ctx := c.Request.Context()
 		context, err := limiterInstance.Get(ctx, key)
 		if err != nil {
-			slog.Error("Rate limiter store failed", "error", err)
+			logging.Error(ctx, "Rate limiter store failed", zap.Error(err))
 			c.Next()
 			return
 		}
@@ -264,7 +266,7 @@ func (rl *RateLimiter) CheckWebSocket(c *gin.Context) bool {
 	ip := c.ClientIP()
 	ipContext, err := rl.wsIp.Get(ctx, ip)
 	if err != nil {
-		slog.Error("WS Rate limiter store failed (IP)", "error", err)
+		logging.Error(ctx, "WS Rate limiter store failed (IP)", zap.Error(err))
 		return true // Fail open
 	}
 
@@ -292,7 +294,7 @@ func (rl *RateLimiter) CheckWebSocket(c *gin.Context) bool {
 func (rl *RateLimiter) CheckWebSocketUser(ctx context.Context, userID string) error {
 	userContext, err := rl.wsUser.Get(ctx, userID)
 	if err != nil {
-		slog.Error("WS Rate limiter store failed (User)", "error", err)
+		logging.Error(ctx, "WS Rate limiter store failed (User)", zap.Error(err))
 		return nil // Fail open
 	}
 

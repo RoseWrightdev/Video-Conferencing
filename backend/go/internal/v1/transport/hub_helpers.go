@@ -1,8 +1,8 @@
 package transport
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -10,10 +10,12 @@ import (
 	"sync"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/room"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 // tokenExtractionResult holds the result of token extraction
@@ -44,7 +46,7 @@ func (h *Hub) extractToken(c *gin.Context) (*tokenExtractionResult, error) {
 				if err == nil {
 					result.Token = p
 					result.FromHeader = true
-					slog.Debug("Token extracted from Sec-WebSocket-Protocol header")
+					logging.GetLogger().Debug("Token extracted from Sec-WebSocket-Protocol header")
 				}
 			}
 		}
@@ -55,12 +57,12 @@ func (h *Hub) extractToken(c *gin.Context) (*tokenExtractionResult, error) {
 		result.Token = c.Query("token")
 		result.FromHeader = false
 		if result.Token != "" {
-			slog.Warn("Token extracted from query parameter (legacy/less secure)")
+			logging.Warn(context.Background(), "Token extracted from query parameter (legacy/less secure)")
 		}
 	}
 
 	if result.Token == "" {
-		slog.Warn("No token provided in request")
+		logging.Warn(context.Background(), "No token provided in request")
 		return nil, fmt.Errorf("token not provided")
 	}
 
@@ -71,13 +73,13 @@ func (h *Hub) extractToken(c *gin.Context) (*tokenExtractionResult, error) {
 func validateOrigin(r *http.Request, allowedOrigins []string) error {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		slog.Debug("No origin header - allowing non-browser client")
+		logging.GetLogger().Debug("No origin header - allowing non-browser client")
 		return nil // Allow non-browser clients (e.g., for testing)
 	}
 
 	originURL, err := url.Parse(origin)
 	if err != nil {
-		slog.Warn("Invalid origin URL", "origin", origin, "error", err)
+		logging.Warn(context.Background(), "Invalid origin URL", zap.String("origin", origin), zap.Error(err))
 		return fmt.Errorf("invalid origin URL: %w", err)
 	}
 
@@ -88,12 +90,12 @@ func validateOrigin(r *http.Request, allowedOrigins []string) error {
 		}
 		// Check if the scheme and host match
 		if originURL.Scheme == allowedURL.Scheme && originURL.Host == allowedURL.Host {
-			slog.Debug("Origin validated", "origin", origin)
+			logging.GetLogger().Debug("Origin validated", zap.String("origin", origin))
 			return nil
 		}
 	}
 
-	slog.Warn("Origin not in allowed list", "origin", origin, "allowedOrigins", allowedOrigins)
+	logging.Warn(context.Background(), "Origin not in allowed list", zap.String("origin", origin), zap.Strings("allowedOrigins", allowedOrigins))
 	return fmt.Errorf("origin not allowed: %s", origin)
 }
 
@@ -101,10 +103,10 @@ func validateOrigin(r *http.Request, allowedOrigins []string) error {
 func (h *Hub) authenticateUser(token string) (*auth.CustomClaims, error) {
 	claims, err := h.validator.ValidateToken(token)
 	if err != nil {
-		slog.Warn("Token validation failed", "error", err)
+		logging.Warn(context.Background(), "Token validation failed", zap.Error(err))
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
-	slog.Debug("User authenticated", "userId", claims.Subject, "name", claims.Name)
+	logging.GetLogger().Debug("User authenticated", zap.String("userId", claims.Subject), zap.String("name", claims.Name))
 	return claims, nil
 }
 
@@ -151,14 +153,14 @@ func (h *Hub) setupClientConnection(params *clientSetupParams) (*Client, *room.R
 	// In Dev Mode, override ID to be unique based on username if provided.
 	if params.DevMode && params.Username != "" {
 		client.ID = types.ClientIdType(params.Username)
-		slog.Info("Dev Mode: Overriding ClientID to username for uniqueness", "newID", client.ID)
+		logging.Info(context.Background(), "Dev Mode: Overriding ClientID to username for uniqueness", zap.String("newID", string(client.ID)))
 	}
 
-	slog.Info("Setting up client connection",
-		"usernameParam", params.Username,
-		"finalDisplayName", displayName,
-		"clientId", params.UserID,
-		"roomId", params.RoomID)
+	logging.Info(context.Background(), "Setting up client connection",
+		zap.String("usernameParam", params.Username),
+		zap.String("finalDisplayName", displayName),
+		zap.String("clientId", string(params.UserID)),
+		zap.String("roomId", string(params.RoomID)))
 
 	return client, r
 }
@@ -189,7 +191,7 @@ func (h *Hub) upgradeWebSocket(c *gin.Context, allowedOrigins []string, tokenRes
 	// Upgrade to WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, responseHeader)
 	if err != nil {
-		slog.Error("Failed to upgrade connection", "error", err)
+		logging.Error(c.Request.Context(), "Failed to upgrade connection", zap.Error(err))
 		return nil, err
 	}
 

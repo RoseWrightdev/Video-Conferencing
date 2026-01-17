@@ -3,7 +3,6 @@ package health
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -14,6 +13,8 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
+	"go.uber.org/zap"
 )
 
 // SFUChecker checks the health of the SFU
@@ -27,14 +28,12 @@ type DefaultSFUChecker struct{}
 // Check verifies gRPC connectivity to Rust SFU using health check protocol
 func (c *DefaultSFUChecker) Check(ctx context.Context, addr string) string {
 	// Create gRPC connection with timeout
-	conn, err := grpc.DialContext(
-		ctx,
+	conn, err := grpc.NewClient(
 		addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
-		slog.Error("Failed to connect to Rust SFU for health check", "error", err, "addr", addr)
+		logging.Error(ctx, "Failed to connect to Rust SFU for health check", zap.Error(err), zap.String("addr", addr))
 		return "unhealthy"
 	}
 	defer conn.Close()
@@ -47,13 +46,13 @@ func (c *DefaultSFUChecker) Check(ctx context.Context, addr string) string {
 		Service: "", // Empty string checks overall server health
 	})
 	if err != nil {
-		slog.Error("Rust SFU health check RPC failed", "error", err)
+		logging.Error(ctx, "Rust SFU health check RPC failed", zap.Error(err))
 		return "unhealthy"
 	}
 
 	// Verify the service is SERVING
 	if resp.Status != healthpb.HealthCheckResponse_SERVING {
-		slog.Warn("Rust SFU is not serving", "status", resp.Status.String())
+		logging.Warn(ctx, "Rust SFU is not serving", zap.String("status", resp.Status.String()))
 		return "unhealthy"
 	}
 
@@ -164,7 +163,7 @@ func (h *Handler) checkRedis(ctx context.Context) string {
 
 	// Try to ping Redis
 	if err := h.redisService.Ping(ctx); err != nil {
-		slog.Error("Redis health check failed", "error", err)
+		logging.Error(ctx, "Redis health check failed", zap.Error(err))
 		return "unhealthy"
 	}
 
@@ -183,7 +182,7 @@ func (h *Handler) checkRustSFU(ctx context.Context) string {
 
 // HealthCheckResponse is a generic health check response for backward compatibility
 type HealthCheckResponse struct {
-	Status string                 `json:"status"`
+	Status string         `json:"status"`
 	Data   map[string]any `json:"data,omitempty"`
 }
 

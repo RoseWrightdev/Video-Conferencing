@@ -5,15 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"go.uber.org/zap"
 )
 
 // --- Participant Management ---
 
 func (r *Room) addParticipantLocked(ctx context.Context, client types.ClientInterface) {
-	slog.Info("Adding Participant", "room", r.ID, "clientId", client.GetID())
+	logging.Info(ctx, "Adding Participant", zap.String("room", string(r.ID)), zap.String("clientId", string(client.GetID())))
 
 	client.SetRole(types.RoleTypeParticipant)
 	// We can't store drawOrderElement in the interface easily without adding it to the interface.
@@ -28,7 +29,7 @@ func (r *Room) addParticipantLocked(ctx context.Context, client types.ClientInte
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:participants", r.ID)
 		if err := r.bus.SetAdd(ctx, key, string(data)); err != nil {
-			slog.Error("Redis error", "err", err)
+			logging.Error(ctx, "Redis error", zap.Error(err))
 		}
 	}
 }
@@ -40,7 +41,7 @@ func (r *Room) addParticipant(ctx context.Context, client types.ClientInterface)
 }
 
 func (r *Room) deleteParticipantLocked(ctx context.Context, client types.ClientInterface) {
-	slog.Info("Deleting Participant", "room", r.ID, "clientId", client.GetID())
+	logging.Info(ctx, "Deleting Participant", zap.String("room", string(r.ID)), zap.String("clientId", string(client.GetID())))
 
 	// Linear search in draw order queue since we removed the element pointer from Client
 	for e := r.clientDrawOrderQueue.Front(); e != nil; e = e.Next() {
@@ -55,7 +56,7 @@ func (r *Room) deleteParticipantLocked(ctx context.Context, client types.ClientI
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:participants", r.ID)
 		if err := r.bus.SetRem(ctx, key, string(data)); err != nil {
-			slog.Error("Redis error: failed to remove participant", "room", r.ID, "key", key, "error", err)
+			logging.Error(ctx, "Redis error: failed to remove participant", zap.String("room", string(r.ID)), zap.String("key", key), zap.Error(err))
 		}
 	}
 }
@@ -67,7 +68,7 @@ func (r *Room) deleteParticipant(ctx context.Context, client types.ClientInterfa
 }
 
 func (r *Room) addHostLocked(ctx context.Context, client types.ClientInterface) {
-	slog.Info("Adding Host", "room", r.ID, "clientId", client.GetID())
+	logging.Info(ctx, "Adding Host", zap.String("room", string(r.ID)), zap.String("clientId", string(client.GetID())))
 
 	client.SetRole(types.RoleTypeHost)
 	r.clientDrawOrderQueue.PushBack(client)
@@ -78,7 +79,7 @@ func (r *Room) addHostLocked(ctx context.Context, client types.ClientInterface) 
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:hosts", r.ID)
 		if err := r.bus.SetAdd(ctx, key, string(data)); err != nil {
-			slog.Error("Redis error: failed to add host", "room", r.ID, "key", key, "error", err)
+			logging.Error(ctx, "Redis error: failed to add host", zap.String("room", string(r.ID)), zap.String("key", key), zap.Error(err))
 		}
 	}
 }
@@ -90,7 +91,7 @@ func (r *Room) addHost(ctx context.Context, client types.ClientInterface) {
 }
 
 func (r *Room) deleteHostLocked(ctx context.Context, client types.ClientInterface) {
-	slog.Info("Deleting Host", "room", r.ID, "clientId", client.GetID())
+	logging.Info(ctx, "Deleting Host", zap.String("room", string(r.ID)), zap.String("clientId", string(client.GetID())))
 
 	for e := r.clientDrawOrderQueue.Front(); e != nil; e = e.Next() {
 		if c, ok := e.Value.(types.ClientInterface); ok && c.GetID() == client.GetID() {
@@ -104,7 +105,7 @@ func (r *Room) deleteHostLocked(ctx context.Context, client types.ClientInterfac
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:hosts", r.ID)
 		if err := r.bus.SetRem(ctx, key, string(data)); err != nil {
-			slog.Error("Redis error: failed to remove host", "room", r.ID, "key", key, "error", err)
+			logging.Error(ctx, "Redis error: failed to remove host", zap.String("room", string(r.ID)), zap.String("key", key), zap.Error(err))
 		}
 	}
 }
@@ -118,7 +119,7 @@ func (r *Room) deleteHost(ctx context.Context, client types.ClientInterface) {
 // --- Waiting Room ---
 
 func (r *Room) addWaitingLocked(client types.ClientInterface) {
-	slog.Info("Adding Waiting User", "room", r.ID, "clientId", client.GetID())
+	logging.Info(context.Background(), "Adding Waiting User", zap.String("room", string(r.ID)), zap.String("clientId", string(client.GetID())))
 
 	client.SetRole(types.RoleTypeWaiting)
 	r.waitingDrawOrderStack.PushFront(client)
@@ -132,7 +133,7 @@ func (r *Room) addWaiting(client types.ClientInterface) {
 }
 
 func (r *Room) deleteWaitingLocked(client types.ClientInterface) {
-	slog.Info("Deleting Waiting User", "room", r.ID, "clientId", client.GetID())
+	logging.Info(context.Background(), "Deleting Waiting User", zap.String("room", string(r.ID)), zap.String("clientId", string(client.GetID())))
 
 	for e := r.waitingDrawOrderStack.Front(); e != nil; e = e.Next() {
 		if c, ok := e.Value.(types.ClientInterface); ok && c.GetID() == client.GetID() {
@@ -273,7 +274,7 @@ func (r *Room) disconnectClientLocked(ctx context.Context, client types.ClientIn
 	// Clean up SFU session if it exists
 	if r.sfu != nil {
 		if err := r.sfu.DeleteSession(ctx, string(client.GetID()), string(r.ID)); err != nil {
-			slog.Warn("Failed to delete SFU session on disconnect", "clientId", client.GetID(), "error", err)
+			logging.Warn(ctx, "Failed to delete SFU session on disconnect", zap.String("clientId", string(client.GetID())), zap.Error(err))
 		}
 	}
 

@@ -3,12 +3,13 @@ package signaling
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"sync"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"go.uber.org/zap"
 )
 
 // CreateSFUSession initializes the user in Rust and sends the SDP Offer back to the UI
@@ -52,7 +53,7 @@ func CreateSFUSession(ctx context.Context, r types.Roomer, client types.ClientIn
 	// 4. Start Listening for Asynchronous Events (Tracks, Renegotiation)
 	stream, err := sfu.ListenEvents(ctx, string(client.GetID()), string(r.GetID()))
 	if err != nil {
-		slog.Error("Failed to start listening for SFU events", "error", err, "clientId", client.GetID())
+		logging.Error(ctx, "Failed to start listening for SFU events", zap.Error(err), zap.String("clientId", string(client.GetID())))
 		// Non-fatal, but video might not work properly
 	} else if stream != nil {
 		if wg != nil {
@@ -65,7 +66,7 @@ func CreateSFUSession(ctx context.Context, r types.Roomer, client types.ClientIn
 			for {
 				event, err := stream.Recv()
 				if err != nil {
-					slog.Info("SFU Event Stream closed", "clientId", client.GetID(), "error", err)
+					logging.Info(context.Background(), "SFU Event Stream closed", zap.String("clientId", string(client.GetID())), zap.Error(err))
 					return
 				}
 
@@ -86,10 +87,10 @@ func HandleSFUSignal(ctx context.Context, r types.Roomer, client types.ClientInt
 	}
 
 	signalType := GetSignalType(signal)
-	slog.Debug("Forwarding signal to SFU", "clientId", client.GetID(), "signalType", signalType)
+	logging.GetLogger().Debug("Forwarding signal to SFU", zap.String("clientId", string(client.GetID())), zap.String("signalType", signalType))
 
 	_, err := sfu.HandleSignal(ctx, string(client.GetID()), string(r.GetID()), signal)
 	if err != nil {
-		slog.Error("SFU Signal Error", "error", err)
+		logging.Error(ctx, "SFU Signal Error", zap.Error(err))
 	}
 }

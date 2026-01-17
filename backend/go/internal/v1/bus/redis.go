@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
 	"github.com/redis/go-redis/v9"
 	"github.com/sony/gobreaker"
+	"go.uber.org/zap"
 )
 
 // PubSubPayload is the standardized container for moving messages between Pods.
@@ -76,7 +77,7 @@ func NewService(addr, password string) (*Service, error) {
 		},
 	}
 
-	slog.Info("Connected to Redis Pub/Sub", "addr", addr)
+	logging.Info(context.Background(), "Connected to Redis Pub/Sub", zap.String("addr", addr))
 	return &Service{
 		client: rdb,
 		cb:     gobreaker.NewCircuitBreaker(st),
@@ -120,10 +121,10 @@ func (s *Service) Publish(ctx context.Context, roomID string, event string, payl
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			slog.Warn("Redis Circuit Breaker Open: dropping publish", "roomID", roomID)
+			logging.Warn(context.Background(), "Redis Circuit Breaker Open: dropping publish", zap.String("roomID", roomID))
 			return nil // Graceful degradation: drop message, don't crash caller
 		}
-		slog.Error("Redis Publish Failed", "roomID", roomID, "error", err)
+		logging.Error(ctx, "Redis Publish Failed", zap.String("roomID", roomID), zap.Error(err))
 		return err
 	}
 
@@ -164,14 +165,19 @@ func (s *Service) PublishDirect(ctx context.Context, targetUserId string, event 
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			slog.Warn("Redis Circuit Breaker Open: dropping direct message", "targetUserId", targetUserId)
+			logging.Warn(context.Background(), "Redis Circuit Breaker Open: dropping direct message", zap.String("targetUserId", targetUserId))
 			return nil // Graceful degradation
 		}
-		slog.Error("Redis PublishDirect failed", "targetUserId", targetUserId, "senderID", senderID, "event", event, "error", err)
+		logging.Error(ctx, "Redis PublishDirect failed",
+			zap.String("targetUserId", targetUserId),
+			zap.String("senderID", senderID),
+			zap.String("event", event),
+			zap.Error(err),
+		)
 		return err
 	}
 
-	slog.Debug("Published direct message via Redis", "targetUserId", targetUserId, "senderID", senderID, "event", event)
+	logging.GetLogger().Debug("Published direct message via Redis", zap.String("targetUserId", targetUserId), zap.String("senderID", senderID), zap.String("event", event))
 	return nil
 }
 
@@ -202,7 +208,7 @@ func (s *Service) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGro
 			defer wg.Done()
 		}
 
-		slog.Info("Subscribed to Redis channel", "channel", channel)
+		logging.Info(ctx, "Subscribed to Redis channel", zap.String("channel", channel))
 
 		ch := pubsub.Channel()
 
@@ -213,13 +219,13 @@ func (s *Service) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGro
 				return // Stop listening if the room closes
 			case msg, ok := <-ch:
 				if !ok {
-					slog.Warn("Redis subscription channel closed", "channel", channel)
+					logging.Warn(ctx, "Redis subscription channel closed", zap.String("channel", channel))
 					return
 				}
 
 				var payload PubSubPayload
 				if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
-					slog.Error("Failed to unmarshal Redis message", "error", err, "raw", msg.Payload)
+					logging.Error(ctx, "Failed to unmarshal Redis message", zap.Error(err), zap.String("raw", msg.Payload))
 					continue
 				}
 
@@ -271,10 +277,10 @@ func (s *Service) SetAdd(ctx context.Context, key string, member string) error {
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			slog.Warn("Redis Circuit Breaker Open: skipping SetAdd", "key", key)
+			logging.Warn(context.Background(), "Redis Circuit Breaker Open: skipping SetAdd", zap.String("key", key))
 			return nil // Graceful degradation
 		}
-		slog.Error("Redis SetAdd failed", "key", key, "member", member, "error", err)
+		logging.Error(ctx, "Redis SetAdd failed", zap.String("key", key), zap.String("member", member), zap.Error(err))
 		return fmt.Errorf("failed to add to set: %w", err)
 	}
 	return nil
@@ -293,10 +299,10 @@ func (s *Service) SetRem(ctx context.Context, key string, member string) error {
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			slog.Warn("Redis Circuit Breaker Open: skipping SetRem", "key", key)
+			logging.Warn(context.Background(), "Redis Circuit Breaker Open: skipping SetRem", zap.String("key", key))
 			return nil // Graceful degradation
 		}
-		slog.Error("Redis SetRem failed", "key", key, "member", member, "error", err)
+		logging.Error(ctx, "Redis SetRem failed", zap.String("key", key), zap.String("member", member), zap.Error(err))
 		return fmt.Errorf("failed to remove from set: %w", err)
 	}
 	return nil
@@ -315,10 +321,10 @@ func (s *Service) SetMembers(ctx context.Context, key string) ([]string, error) 
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			slog.Warn("Redis Circuit Breaker Open: returning empty set members", "key", key)
+			logging.Warn(context.Background(), "Redis Circuit Breaker Open: returning empty set members", zap.String("key", key))
 			return nil, nil // Graceful degradation: return empty list so room can still function locally
 		}
-		slog.Error("Redis SetMembers failed", "key", key, "error", err)
+		logging.Error(ctx, "Redis SetMembers failed", zap.String("key", key), zap.Error(err))
 		return nil, fmt.Errorf("failed to get set members: %w", err)
 	}
 	return res.([]string), nil
