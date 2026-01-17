@@ -25,4 +25,9 @@
     "**/.git/subtree-cache/**": true,
     "**/coverage/**": true
   },
+  "protoc": {
+    "options": [
+      "--proto_path=${workspaceRoot}/proto"
+    ]
+  }
 }

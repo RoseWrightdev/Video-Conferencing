@@ -3,54 +3,80 @@ package signaling;
 
 option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; proto";
 
-// The Master Envelope
+// WebSocketMessage is the top-level envelope for all messages exchanged 
+// between the Client (Frontend) and the Signaling Server (Go Backend) over WebSocket.
+// It uses a `oneof` field to handle different types of events efficiently.
 message WebSocketMessage {
   oneof payload {
     // --- Connection & Auth ---
+    // Request to join a room. Sent by Client immediately after connection.
     JoinRequest join = 1;
+    // Response to a join request. Sent by Server.
     JoinResponse join_response = 2;
+    // Request to reconnect to an existing session (handling temporary disconnects).
     ReconnectRequest reconnect = 3;
 
     // --- Media Controls (Self) ---
+    // Request to toggle local audio/video mute state.
     ToggleMediaRequest toggle_media = 4;
+    // Broadcast event indicating a participant's media state has changed.
     MediaStateEvent media_state_changed = 5;
 
     // --- Screen Share ---
+    // Request to start/stop screen sharing.
     ScreenShareRequest screen_share = 6;
+    // Broadcast event indicating a participant is sharing their screen.
     ScreenShareEvent screen_share_changed = 7;
 
-    // Permission Flow
+    // Permission Flow (for moderated rooms or guests)
+    // Request permission to share screen.
     RequestScreenSharePermission request_screen_share_permission = 20;
+    // Response to a permission request.
     ScreenSharePermissionEvent screen_share_permission_event = 21;
 
     // --- Chat ---
+    // Send a chat message.
     ChatRequest chat = 8;
+    // Broadcast event for a new chat message.
     ChatEvent chat_event = 9;
 
     // Chat History & Deletion
+    // Request recent chat history (e.g., on join).
     GetRecentChatsRequest get_recent_chats = 22;
+    // Response containing list of recent chats.
     RecentChatsEvent recent_chats = 23;
+    // Request to delete a specific chat message (e.g., by admin or author).
     DeleteChatRequest delete_chat = 24;
+    // Broadcast event indicating a chat message was deleted.
     DeleteChatEvent delete_chat_event = 25;
 
     // --- Hand Raising ---
+    // Request to raise/lower hand.
     ToggleHandRequest toggle_hand = 10;
+    // Broadcast event indicating a participant's hand state changed.
     HandUpdateEvent hand_update = 11;
 
     // --- Waiting Room (Host Only) ---
+    // Event notifying host of a user in the waiting room.
     WaitingRoomEvent waiting_room_notification = 12;
+    // Host action to approve/reject a user.
     AdminActionRequest admin_action = 13;
+    // Event notifying a user of an admin decision (e.g., "You have been kicked").
     AdminActionEvent admin_event = 14;
 
     // --- WebRTC Signaling ---
+    // Encapsulates SDP and ICE messages to/from the SFU.
     SignalRequest signal = 15;
     SignalEvent signal_event = 16;
 
     // --- State Sync ---
+    // Full snapshot of the room state (participants, waiting users).
     RoomStateEvent room_state = 17;
+    // Error notification.
     ErrorEvent error = 18;
 
     // --- Stream Mapping ---
+    // Notification that a remote track is available for subscription.
     TrackAddedEvent track_added = 26;
   }
 }
@@ -58,19 +84,23 @@ message WebSocketMessage {
 // ---------------------------------------------------------
 // 1. Auth & Connection
 // ---------------------------------------------------------
+
+// JoinRequest is sent by the client to authenticate and join a specific room.
 message JoinRequest {
-  string token = 1;
-  string room_id = 2;
-  string display_name = 3;
+  string token = 1;       // JWT token for authentication (optional if room is public)
+  string room_id = 2;     // The ID of the room to join
+  string display_name = 3; // The name the user wishes to display
 }
 
+// JoinResponse acknowledges the JoinRequest.
 message JoinResponse {
   bool success = 1;
-  string user_id = 2;
-  RoomStateEvent initial_state = 3;
-  bool is_host = 4;
+  string user_id = 2; // The unique ID assigned to this session
+  RoomStateEvent initial_state = 3; // The current state of the room (participants, etc.)
+  bool is_host = 4; // Whether the user has host privileges
 }
 
+// ReconnectRequest attempts to resume a previous session.
 message ReconnectRequest {
   string token = 1;
   string previous_session_id = 2;
@@ -79,21 +109,26 @@ message ReconnectRequest {
 // ---------------------------------------------------------
 // 2. Media State (Mute/Video/Hand)
 // ---------------------------------------------------------
+
+// ToggleMediaRequest signals a user's intent to mute/unmute audio or video.
 message ToggleMediaRequest {
   string kind = 1; // "audio" or "video"
-  bool is_enabled = 2;
+  bool is_enabled = 2; // true = unmuted, false = muted
 }
 
+// MediaStateEvent broadcasts a change in a user's media state to the room.
 message MediaStateEvent {
   string user_id = 1;
   bool is_audio_enabled = 2;
   bool is_video_enabled = 3;
 }
 
+// ToggleHandRequest signals a user's intent to raise/lower their virtual hand.
 message ToggleHandRequest {
   bool is_raised = 1;
 }
 
+// HandUpdateEvent broadcasts a change in a user's hand state.
 message HandUpdateEvent {
   string user_id = 1;
   bool is_raised = 2;
@@ -102,10 +137,13 @@ message HandUpdateEvent {
 // ---------------------------------------------------------
 // 3. Screen Share
 // ---------------------------------------------------------
+
+// ScreenShareRequest signals intent to start/stop screen sharing.
 message ScreenShareRequest {
   bool is_sharing = 1;
 }
 
+// ScreenShareEvent broadcasts a change in screen sharing status.
 message ScreenShareEvent {
   string user_id = 1;
   bool is_sharing = 2;
@@ -113,6 +151,7 @@ message ScreenShareEvent {
 
 message RequestScreenSharePermission {}
 
+// ScreenSharePermissionEvent notifies a user if their request was granted/denied.
 message ScreenSharePermissionEvent {
   string user_id = 1;
   string display_name = 2;
@@ -122,17 +161,20 @@ message ScreenSharePermissionEvent {
 // ---------------------------------------------------------
 // 4. Chat
 // ---------------------------------------------------------
+
+// ChatRequest sends a text message to the room or a specific user.
 message ChatRequest {
   string content = 1;
-  string target_id = 2;
+  string target_id = 2; // Optional: If set, sends a private message
 }
 
+// ChatEvent delivers a chat message to clients.
 message ChatEvent {
   string id = 1;
   string sender_id = 2;
   string sender_name = 3;
   string content = 4;
-  int64 timestamp = 5;
+  int64 timestamp = 5; // Unix timestamp
   bool is_private = 6;
 }
 
@@ -153,18 +195,22 @@ message DeleteChatEvent {
 // ---------------------------------------------------------
 // 5. Admin / Waiting Room
 // ---------------------------------------------------------
+
+// WaitingRoomEvent notifies a Host that a user is waiting to join.
 message WaitingRoomEvent {
   string user_id = 1;
   string display_name = 2;
   string status = 3;
 }
 
+// AdminActionRequest is sent by a Host to manage users/room.
 message AdminActionRequest {
   string target_user_id = 1;
   // Actions: "approve", "reject", "kick", "mute", "unmute", "mute_all", "approve_screenshare", "reject_screenshare"
-  string action = 2;
+  string action = 2; 
 }
 
+// AdminActionEvent notifies a target user of an admin decision.
 message AdminActionEvent {
   string action = 1;
   string reason = 2;
@@ -173,6 +219,8 @@ message AdminActionEvent {
 // ---------------------------------------------------------
 // 6. WebRTC Tunnel (Forwarded to Rust)
 // ---------------------------------------------------------
+
+// SignalRequest encapsulates WebRTC signaling messages from Client -> Backend.
 message SignalRequest {
   oneof signal {
     string sdp_answer = 1;
@@ -182,6 +230,7 @@ message SignalRequest {
   }
 }
 
+// SignalEvent encapsulates WebRTC signaling messages from Backend -> Client.
 message SignalEvent {
   oneof signal {
     string sdp_offer = 1;
@@ -193,11 +242,14 @@ message SignalEvent {
 // ---------------------------------------------------------
 // 7. Global State
 // ---------------------------------------------------------
+
+// RoomStateEvent provides a full snapshot of the room's participants.
 message RoomStateEvent {
   repeated ParticipantInfo participants = 1;
   repeated ParticipantInfo waiting_users = 2;
 }
 
+// ParticipantInfo describes a single user in the room.
 message ParticipantInfo {
   string id = 1;
   string display_name = 2;
@@ -217,8 +269,11 @@ message ErrorEvent {
 // ---------------------------------------------------------
 // 8. Stream Mapping
 // ---------------------------------------------------------
+
+// TrackAddedEvent informs clients that a new media track is available.
+// Clients typically use this to decide whether to subscribe.
 message TrackAddedEvent {
-  string user_id = 1;
-  string stream_id = 2;
+  string user_id = 1; // The user who owns the track
+  string stream_id = 2; // The WebRTC stream ID
   string track_kind = 3; // "video" or "audio"
 }

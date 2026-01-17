@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v6.33.1
-// source: signaling.proto
+// source: proto/signaling.proto
 
 package proto
 
@@ -21,7 +21,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// The Master Envelope
+// WebSocketMessage is the top-level envelope for all messages exchanged
+// between the Client (Frontend) and the Signaling Server (Go Backend) over WebSocket.
+// It uses a `oneof` field to handle different types of events efficiently.
 type WebSocketMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
@@ -58,7 +60,7 @@ type WebSocketMessage struct {
 
 func (x *WebSocketMessage) Reset() {
 	*x = WebSocketMessage{}
-	mi := &file_signaling_proto_msgTypes[0]
+	mi := &file_proto_signaling_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -70,7 +72,7 @@ func (x *WebSocketMessage) String() string {
 func (*WebSocketMessage) ProtoMessage() {}
 
 func (x *WebSocketMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[0]
+	mi := &file_proto_signaling_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -83,7 +85,7 @@ func (x *WebSocketMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebSocketMessage.ProtoReflect.Descriptor instead.
 func (*WebSocketMessage) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{0}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *WebSocketMessage) GetPayload() isWebSocketMessage_Payload {
@@ -324,94 +326,115 @@ type isWebSocketMessage_Payload interface {
 
 type WebSocketMessage_Join struct {
 	// --- Connection & Auth ---
+	// Request to join a room. Sent by Client immediately after connection.
 	Join *JoinRequest `protobuf:"bytes,1,opt,name=join,proto3,oneof"`
 }
 
 type WebSocketMessage_JoinResponse struct {
+	// Response to a join request. Sent by Server.
 	JoinResponse *JoinResponse `protobuf:"bytes,2,opt,name=join_response,json=joinResponse,proto3,oneof"`
 }
 
 type WebSocketMessage_Reconnect struct {
+	// Request to reconnect to an existing session (handling temporary disconnects).
 	Reconnect *ReconnectRequest `protobuf:"bytes,3,opt,name=reconnect,proto3,oneof"`
 }
 
 type WebSocketMessage_ToggleMedia struct {
 	// --- Media Controls (Self) ---
+	// Request to toggle local audio/video mute state.
 	ToggleMedia *ToggleMediaRequest `protobuf:"bytes,4,opt,name=toggle_media,json=toggleMedia,proto3,oneof"`
 }
 
 type WebSocketMessage_MediaStateChanged struct {
+	// Broadcast event indicating a participant's media state has changed.
 	MediaStateChanged *MediaStateEvent `protobuf:"bytes,5,opt,name=media_state_changed,json=mediaStateChanged,proto3,oneof"`
 }
 
 type WebSocketMessage_ScreenShare struct {
 	// --- Screen Share ---
+	// Request to start/stop screen sharing.
 	ScreenShare *ScreenShareRequest `protobuf:"bytes,6,opt,name=screen_share,json=screenShare,proto3,oneof"`
 }
 
 type WebSocketMessage_ScreenShareChanged struct {
+	// Broadcast event indicating a participant is sharing their screen.
 	ScreenShareChanged *ScreenShareEvent `protobuf:"bytes,7,opt,name=screen_share_changed,json=screenShareChanged,proto3,oneof"`
 }
 
 type WebSocketMessage_RequestScreenSharePermission struct {
-	// Permission Flow
+	// Permission Flow (for moderated rooms or guests)
+	// Request permission to share screen.
 	RequestScreenSharePermission *RequestScreenSharePermission `protobuf:"bytes,20,opt,name=request_screen_share_permission,json=requestScreenSharePermission,proto3,oneof"`
 }
 
 type WebSocketMessage_ScreenSharePermissionEvent struct {
+	// Response to a permission request.
 	ScreenSharePermissionEvent *ScreenSharePermissionEvent `protobuf:"bytes,21,opt,name=screen_share_permission_event,json=screenSharePermissionEvent,proto3,oneof"`
 }
 
 type WebSocketMessage_Chat struct {
 	// --- Chat ---
+	// Send a chat message.
 	Chat *ChatRequest `protobuf:"bytes,8,opt,name=chat,proto3,oneof"`
 }
 
 type WebSocketMessage_ChatEvent struct {
+	// Broadcast event for a new chat message.
 	ChatEvent *ChatEvent `protobuf:"bytes,9,opt,name=chat_event,json=chatEvent,proto3,oneof"`
 }
 
 type WebSocketMessage_GetRecentChats struct {
 	// Chat History & Deletion
+	// Request recent chat history (e.g., on join).
 	GetRecentChats *GetRecentChatsRequest `protobuf:"bytes,22,opt,name=get_recent_chats,json=getRecentChats,proto3,oneof"`
 }
 
 type WebSocketMessage_RecentChats_ struct {
+	// Response containing list of recent chats.
 	RecentChats_ *RecentChatsEvent `protobuf:"bytes,23,opt,name=recent_chats,json=recentChats,proto3,oneof"`
 }
 
 type WebSocketMessage_DeleteChat struct {
+	// Request to delete a specific chat message (e.g., by admin or author).
 	DeleteChat *DeleteChatRequest `protobuf:"bytes,24,opt,name=delete_chat,json=deleteChat,proto3,oneof"`
 }
 
 type WebSocketMessage_DeleteChatEvent struct {
+	// Broadcast event indicating a chat message was deleted.
 	DeleteChatEvent *DeleteChatEvent `protobuf:"bytes,25,opt,name=delete_chat_event,json=deleteChatEvent,proto3,oneof"`
 }
 
 type WebSocketMessage_ToggleHand struct {
 	// --- Hand Raising ---
+	// Request to raise/lower hand.
 	ToggleHand *ToggleHandRequest `protobuf:"bytes,10,opt,name=toggle_hand,json=toggleHand,proto3,oneof"`
 }
 
 type WebSocketMessage_HandUpdate struct {
+	// Broadcast event indicating a participant's hand state changed.
 	HandUpdate *HandUpdateEvent `protobuf:"bytes,11,opt,name=hand_update,json=handUpdate,proto3,oneof"`
 }
 
 type WebSocketMessage_WaitingRoomNotification struct {
 	// --- Waiting Room (Host Only) ---
+	// Event notifying host of a user in the waiting room.
 	WaitingRoomNotification *WaitingRoomEvent `protobuf:"bytes,12,opt,name=waiting_room_notification,json=waitingRoomNotification,proto3,oneof"`
 }
 
 type WebSocketMessage_AdminAction struct {
+	// Host action to approve/reject a user.
 	AdminAction *AdminActionRequest `protobuf:"bytes,13,opt,name=admin_action,json=adminAction,proto3,oneof"`
 }
 
 type WebSocketMessage_AdminEvent struct {
+	// Event notifying a user of an admin decision (e.g., "You have been kicked").
 	AdminEvent *AdminActionEvent `protobuf:"bytes,14,opt,name=admin_event,json=adminEvent,proto3,oneof"`
 }
 
 type WebSocketMessage_Signal struct {
 	// --- WebRTC Signaling ---
+	// Encapsulates SDP and ICE messages to/from the SFU.
 	Signal *SignalRequest `protobuf:"bytes,15,opt,name=signal,proto3,oneof"`
 }
 
@@ -421,15 +444,18 @@ type WebSocketMessage_SignalEvent struct {
 
 type WebSocketMessage_RoomState struct {
 	// --- State Sync ---
+	// Full snapshot of the room state (participants, waiting users).
 	RoomState *RoomStateEvent `protobuf:"bytes,17,opt,name=room_state,json=roomState,proto3,oneof"`
 }
 
 type WebSocketMessage_Error struct {
+	// Error notification.
 	Error *ErrorEvent `protobuf:"bytes,18,opt,name=error,proto3,oneof"`
 }
 
 type WebSocketMessage_TrackAdded struct {
 	// --- Stream Mapping ---
+	// Notification that a remote track is available for subscription.
 	TrackAdded *TrackAddedEvent `protobuf:"bytes,26,opt,name=track_added,json=trackAdded,proto3,oneof"`
 }
 
@@ -483,21 +509,19 @@ func (*WebSocketMessage_Error) isWebSocketMessage_Payload() {}
 
 func (*WebSocketMessage_TrackAdded) isWebSocketMessage_Payload() {}
 
-// ---------------------------------------------------------
-// 1. Auth & Connection
-// ---------------------------------------------------------
+// JoinRequest is sent by the client to authenticate and join a specific room.
 type JoinRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	RoomId        string                 `protobuf:"bytes,2,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
-	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                // JWT token for authentication (optional if room is public)
+	RoomId        string                 `protobuf:"bytes,2,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`                // The ID of the room to join
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"` // The name the user wishes to display
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JoinRequest) Reset() {
 	*x = JoinRequest{}
-	mi := &file_signaling_proto_msgTypes[1]
+	mi := &file_proto_signaling_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -509,7 +533,7 @@ func (x *JoinRequest) String() string {
 func (*JoinRequest) ProtoMessage() {}
 
 func (x *JoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[1]
+	mi := &file_proto_signaling_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -522,7 +546,7 @@ func (x *JoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
 func (*JoinRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{1}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *JoinRequest) GetToken() string {
@@ -546,19 +570,20 @@ func (x *JoinRequest) GetDisplayName() string {
 	return ""
 }
 
+// JoinResponse acknowledges the JoinRequest.
 type JoinResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	InitialState  *RoomStateEvent        `protobuf:"bytes,3,opt,name=initial_state,json=initialState,proto3" json:"initial_state,omitempty"`
-	IsHost        bool                   `protobuf:"varint,4,opt,name=is_host,json=isHost,proto3" json:"is_host,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                   // The unique ID assigned to this session
+	InitialState  *RoomStateEvent        `protobuf:"bytes,3,opt,name=initial_state,json=initialState,proto3" json:"initial_state,omitempty"` // The current state of the room (participants, etc.)
+	IsHost        bool                   `protobuf:"varint,4,opt,name=is_host,json=isHost,proto3" json:"is_host,omitempty"`                  // Whether the user has host privileges
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JoinResponse) Reset() {
 	*x = JoinResponse{}
-	mi := &file_signaling_proto_msgTypes[2]
+	mi := &file_proto_signaling_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -570,7 +595,7 @@ func (x *JoinResponse) String() string {
 func (*JoinResponse) ProtoMessage() {}
 
 func (x *JoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[2]
+	mi := &file_proto_signaling_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -583,7 +608,7 @@ func (x *JoinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinResponse.ProtoReflect.Descriptor instead.
 func (*JoinResponse) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{2}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *JoinResponse) GetSuccess() bool {
@@ -614,6 +639,7 @@ func (x *JoinResponse) GetIsHost() bool {
 	return false
 }
 
+// ReconnectRequest attempts to resume a previous session.
 type ReconnectRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Token             string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -624,7 +650,7 @@ type ReconnectRequest struct {
 
 func (x *ReconnectRequest) Reset() {
 	*x = ReconnectRequest{}
-	mi := &file_signaling_proto_msgTypes[3]
+	mi := &file_proto_signaling_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -636,7 +662,7 @@ func (x *ReconnectRequest) String() string {
 func (*ReconnectRequest) ProtoMessage() {}
 
 func (x *ReconnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[3]
+	mi := &file_proto_signaling_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -649,7 +675,7 @@ func (x *ReconnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconnectRequest.ProtoReflect.Descriptor instead.
 func (*ReconnectRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{3}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ReconnectRequest) GetToken() string {
@@ -666,20 +692,18 @@ func (x *ReconnectRequest) GetPreviousSessionId() string {
 	return ""
 }
 
-// ---------------------------------------------------------
-// 2. Media State (Mute/Video/Hand)
-// ---------------------------------------------------------
+// ToggleMediaRequest signals a user's intent to mute/unmute audio or video.
 type ToggleMediaRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // "audio" or "video"
-	IsEnabled     bool                   `protobuf:"varint,2,opt,name=is_enabled,json=isEnabled,proto3" json:"is_enabled,omitempty"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`                             // "audio" or "video"
+	IsEnabled     bool                   `protobuf:"varint,2,opt,name=is_enabled,json=isEnabled,proto3" json:"is_enabled,omitempty"` // true = unmuted, false = muted
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ToggleMediaRequest) Reset() {
 	*x = ToggleMediaRequest{}
-	mi := &file_signaling_proto_msgTypes[4]
+	mi := &file_proto_signaling_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -691,7 +715,7 @@ func (x *ToggleMediaRequest) String() string {
 func (*ToggleMediaRequest) ProtoMessage() {}
 
 func (x *ToggleMediaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[4]
+	mi := &file_proto_signaling_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -704,7 +728,7 @@ func (x *ToggleMediaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToggleMediaRequest.ProtoReflect.Descriptor instead.
 func (*ToggleMediaRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{4}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ToggleMediaRequest) GetKind() string {
@@ -721,6 +745,7 @@ func (x *ToggleMediaRequest) GetIsEnabled() bool {
 	return false
 }
 
+// MediaStateEvent broadcasts a change in a user's media state to the room.
 type MediaStateEvent struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	UserId         string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -732,7 +757,7 @@ type MediaStateEvent struct {
 
 func (x *MediaStateEvent) Reset() {
 	*x = MediaStateEvent{}
-	mi := &file_signaling_proto_msgTypes[5]
+	mi := &file_proto_signaling_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -744,7 +769,7 @@ func (x *MediaStateEvent) String() string {
 func (*MediaStateEvent) ProtoMessage() {}
 
 func (x *MediaStateEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[5]
+	mi := &file_proto_signaling_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -757,7 +782,7 @@ func (x *MediaStateEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaStateEvent.ProtoReflect.Descriptor instead.
 func (*MediaStateEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{5}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *MediaStateEvent) GetUserId() string {
@@ -781,6 +806,7 @@ func (x *MediaStateEvent) GetIsVideoEnabled() bool {
 	return false
 }
 
+// ToggleHandRequest signals a user's intent to raise/lower their virtual hand.
 type ToggleHandRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IsRaised      bool                   `protobuf:"varint,1,opt,name=is_raised,json=isRaised,proto3" json:"is_raised,omitempty"`
@@ -790,7 +816,7 @@ type ToggleHandRequest struct {
 
 func (x *ToggleHandRequest) Reset() {
 	*x = ToggleHandRequest{}
-	mi := &file_signaling_proto_msgTypes[6]
+	mi := &file_proto_signaling_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -802,7 +828,7 @@ func (x *ToggleHandRequest) String() string {
 func (*ToggleHandRequest) ProtoMessage() {}
 
 func (x *ToggleHandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[6]
+	mi := &file_proto_signaling_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -815,7 +841,7 @@ func (x *ToggleHandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToggleHandRequest.ProtoReflect.Descriptor instead.
 func (*ToggleHandRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{6}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ToggleHandRequest) GetIsRaised() bool {
@@ -825,6 +851,7 @@ func (x *ToggleHandRequest) GetIsRaised() bool {
 	return false
 }
 
+// HandUpdateEvent broadcasts a change in a user's hand state.
 type HandUpdateEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -835,7 +862,7 @@ type HandUpdateEvent struct {
 
 func (x *HandUpdateEvent) Reset() {
 	*x = HandUpdateEvent{}
-	mi := &file_signaling_proto_msgTypes[7]
+	mi := &file_proto_signaling_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -847,7 +874,7 @@ func (x *HandUpdateEvent) String() string {
 func (*HandUpdateEvent) ProtoMessage() {}
 
 func (x *HandUpdateEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[7]
+	mi := &file_proto_signaling_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -860,7 +887,7 @@ func (x *HandUpdateEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandUpdateEvent.ProtoReflect.Descriptor instead.
 func (*HandUpdateEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{7}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *HandUpdateEvent) GetUserId() string {
@@ -877,9 +904,7 @@ func (x *HandUpdateEvent) GetIsRaised() bool {
 	return false
 }
 
-// ---------------------------------------------------------
-// 3. Screen Share
-// ---------------------------------------------------------
+// ScreenShareRequest signals intent to start/stop screen sharing.
 type ScreenShareRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IsSharing     bool                   `protobuf:"varint,1,opt,name=is_sharing,json=isSharing,proto3" json:"is_sharing,omitempty"`
@@ -889,7 +914,7 @@ type ScreenShareRequest struct {
 
 func (x *ScreenShareRequest) Reset() {
 	*x = ScreenShareRequest{}
-	mi := &file_signaling_proto_msgTypes[8]
+	mi := &file_proto_signaling_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -901,7 +926,7 @@ func (x *ScreenShareRequest) String() string {
 func (*ScreenShareRequest) ProtoMessage() {}
 
 func (x *ScreenShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[8]
+	mi := &file_proto_signaling_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -914,7 +939,7 @@ func (x *ScreenShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScreenShareRequest.ProtoReflect.Descriptor instead.
 func (*ScreenShareRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{8}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ScreenShareRequest) GetIsSharing() bool {
@@ -924,6 +949,7 @@ func (x *ScreenShareRequest) GetIsSharing() bool {
 	return false
 }
 
+// ScreenShareEvent broadcasts a change in screen sharing status.
 type ScreenShareEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -934,7 +960,7 @@ type ScreenShareEvent struct {
 
 func (x *ScreenShareEvent) Reset() {
 	*x = ScreenShareEvent{}
-	mi := &file_signaling_proto_msgTypes[9]
+	mi := &file_proto_signaling_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -946,7 +972,7 @@ func (x *ScreenShareEvent) String() string {
 func (*ScreenShareEvent) ProtoMessage() {}
 
 func (x *ScreenShareEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[9]
+	mi := &file_proto_signaling_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -959,7 +985,7 @@ func (x *ScreenShareEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScreenShareEvent.ProtoReflect.Descriptor instead.
 func (*ScreenShareEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{9}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ScreenShareEvent) GetUserId() string {
@@ -984,7 +1010,7 @@ type RequestScreenSharePermission struct {
 
 func (x *RequestScreenSharePermission) Reset() {
 	*x = RequestScreenSharePermission{}
-	mi := &file_signaling_proto_msgTypes[10]
+	mi := &file_proto_signaling_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -996,7 +1022,7 @@ func (x *RequestScreenSharePermission) String() string {
 func (*RequestScreenSharePermission) ProtoMessage() {}
 
 func (x *RequestScreenSharePermission) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[10]
+	mi := &file_proto_signaling_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1009,9 +1035,10 @@ func (x *RequestScreenSharePermission) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestScreenSharePermission.ProtoReflect.Descriptor instead.
 func (*RequestScreenSharePermission) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{10}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{10}
 }
 
+// ScreenSharePermissionEvent notifies a user if their request was granted/denied.
 type ScreenSharePermissionEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -1023,7 +1050,7 @@ type ScreenSharePermissionEvent struct {
 
 func (x *ScreenSharePermissionEvent) Reset() {
 	*x = ScreenSharePermissionEvent{}
-	mi := &file_signaling_proto_msgTypes[11]
+	mi := &file_proto_signaling_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1035,7 +1062,7 @@ func (x *ScreenSharePermissionEvent) String() string {
 func (*ScreenSharePermissionEvent) ProtoMessage() {}
 
 func (x *ScreenSharePermissionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[11]
+	mi := &file_proto_signaling_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1048,7 +1075,7 @@ func (x *ScreenSharePermissionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScreenSharePermissionEvent.ProtoReflect.Descriptor instead.
 func (*ScreenSharePermissionEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{11}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ScreenSharePermissionEvent) GetUserId() string {
@@ -1072,20 +1099,18 @@ func (x *ScreenSharePermissionEvent) GetIsGranted() bool {
 	return false
 }
 
-// ---------------------------------------------------------
-// 4. Chat
-// ---------------------------------------------------------
+// ChatRequest sends a text message to the room or a specific user.
 type ChatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
-	TargetId      string                 `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	TargetId      string                 `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"` // Optional: If set, sends a private message
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
 	*x = ChatRequest{}
-	mi := &file_signaling_proto_msgTypes[12]
+	mi := &file_proto_signaling_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1097,7 +1122,7 @@ func (x *ChatRequest) String() string {
 func (*ChatRequest) ProtoMessage() {}
 
 func (x *ChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[12]
+	mi := &file_proto_signaling_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1110,7 +1135,7 @@ func (x *ChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatRequest.ProtoReflect.Descriptor instead.
 func (*ChatRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{12}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ChatRequest) GetContent() string {
@@ -1127,13 +1152,14 @@ func (x *ChatRequest) GetTargetId() string {
 	return ""
 }
 
+// ChatEvent delivers a chat message to clients.
 type ChatEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	SenderId      string                 `protobuf:"bytes,2,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
 	SenderName    string                 `protobuf:"bytes,3,opt,name=sender_name,json=senderName,proto3" json:"sender_name,omitempty"`
 	Content       string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // Unix timestamp
 	IsPrivate     bool                   `protobuf:"varint,6,opt,name=is_private,json=isPrivate,proto3" json:"is_private,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1141,7 +1167,7 @@ type ChatEvent struct {
 
 func (x *ChatEvent) Reset() {
 	*x = ChatEvent{}
-	mi := &file_signaling_proto_msgTypes[13]
+	mi := &file_proto_signaling_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1153,7 +1179,7 @@ func (x *ChatEvent) String() string {
 func (*ChatEvent) ProtoMessage() {}
 
 func (x *ChatEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[13]
+	mi := &file_proto_signaling_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1166,7 +1192,7 @@ func (x *ChatEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatEvent.ProtoReflect.Descriptor instead.
 func (*ChatEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{13}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ChatEvent) GetId() string {
@@ -1219,7 +1245,7 @@ type GetRecentChatsRequest struct {
 
 func (x *GetRecentChatsRequest) Reset() {
 	*x = GetRecentChatsRequest{}
-	mi := &file_signaling_proto_msgTypes[14]
+	mi := &file_proto_signaling_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1231,7 +1257,7 @@ func (x *GetRecentChatsRequest) String() string {
 func (*GetRecentChatsRequest) ProtoMessage() {}
 
 func (x *GetRecentChatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[14]
+	mi := &file_proto_signaling_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1244,7 +1270,7 @@ func (x *GetRecentChatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRecentChatsRequest.ProtoReflect.Descriptor instead.
 func (*GetRecentChatsRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{14}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{14}
 }
 
 type RecentChatsEvent struct {
@@ -1256,7 +1282,7 @@ type RecentChatsEvent struct {
 
 func (x *RecentChatsEvent) Reset() {
 	*x = RecentChatsEvent{}
-	mi := &file_signaling_proto_msgTypes[15]
+	mi := &file_proto_signaling_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1268,7 +1294,7 @@ func (x *RecentChatsEvent) String() string {
 func (*RecentChatsEvent) ProtoMessage() {}
 
 func (x *RecentChatsEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[15]
+	mi := &file_proto_signaling_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1281,7 +1307,7 @@ func (x *RecentChatsEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecentChatsEvent.ProtoReflect.Descriptor instead.
 func (*RecentChatsEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{15}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RecentChatsEvent) GetChats() []*ChatEvent {
@@ -1300,7 +1326,7 @@ type DeleteChatRequest struct {
 
 func (x *DeleteChatRequest) Reset() {
 	*x = DeleteChatRequest{}
-	mi := &file_signaling_proto_msgTypes[16]
+	mi := &file_proto_signaling_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1312,7 +1338,7 @@ func (x *DeleteChatRequest) String() string {
 func (*DeleteChatRequest) ProtoMessage() {}
 
 func (x *DeleteChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[16]
+	mi := &file_proto_signaling_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1325,7 +1351,7 @@ func (x *DeleteChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteChatRequest.ProtoReflect.Descriptor instead.
 func (*DeleteChatRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{16}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DeleteChatRequest) GetChatId() string {
@@ -1344,7 +1370,7 @@ type DeleteChatEvent struct {
 
 func (x *DeleteChatEvent) Reset() {
 	*x = DeleteChatEvent{}
-	mi := &file_signaling_proto_msgTypes[17]
+	mi := &file_proto_signaling_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1356,7 +1382,7 @@ func (x *DeleteChatEvent) String() string {
 func (*DeleteChatEvent) ProtoMessage() {}
 
 func (x *DeleteChatEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[17]
+	mi := &file_proto_signaling_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1369,7 +1395,7 @@ func (x *DeleteChatEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteChatEvent.ProtoReflect.Descriptor instead.
 func (*DeleteChatEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{17}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteChatEvent) GetChatId() string {
@@ -1379,9 +1405,7 @@ func (x *DeleteChatEvent) GetChatId() string {
 	return ""
 }
 
-// ---------------------------------------------------------
-// 5. Admin / Waiting Room
-// ---------------------------------------------------------
+// WaitingRoomEvent notifies a Host that a user is waiting to join.
 type WaitingRoomEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -1393,7 +1417,7 @@ type WaitingRoomEvent struct {
 
 func (x *WaitingRoomEvent) Reset() {
 	*x = WaitingRoomEvent{}
-	mi := &file_signaling_proto_msgTypes[18]
+	mi := &file_proto_signaling_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1405,7 +1429,7 @@ func (x *WaitingRoomEvent) String() string {
 func (*WaitingRoomEvent) ProtoMessage() {}
 
 func (x *WaitingRoomEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[18]
+	mi := &file_proto_signaling_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1418,7 +1442,7 @@ func (x *WaitingRoomEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitingRoomEvent.ProtoReflect.Descriptor instead.
 func (*WaitingRoomEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{18}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *WaitingRoomEvent) GetUserId() string {
@@ -1442,6 +1466,7 @@ func (x *WaitingRoomEvent) GetStatus() string {
 	return ""
 }
 
+// AdminActionRequest is sent by a Host to manage users/room.
 type AdminActionRequest struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	TargetUserId string                 `protobuf:"bytes,1,opt,name=target_user_id,json=targetUserId,proto3" json:"target_user_id,omitempty"`
@@ -1453,7 +1478,7 @@ type AdminActionRequest struct {
 
 func (x *AdminActionRequest) Reset() {
 	*x = AdminActionRequest{}
-	mi := &file_signaling_proto_msgTypes[19]
+	mi := &file_proto_signaling_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1465,7 +1490,7 @@ func (x *AdminActionRequest) String() string {
 func (*AdminActionRequest) ProtoMessage() {}
 
 func (x *AdminActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[19]
+	mi := &file_proto_signaling_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1478,7 +1503,7 @@ func (x *AdminActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdminActionRequest.ProtoReflect.Descriptor instead.
 func (*AdminActionRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{19}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *AdminActionRequest) GetTargetUserId() string {
@@ -1495,6 +1520,7 @@ func (x *AdminActionRequest) GetAction() string {
 	return ""
 }
 
+// AdminActionEvent notifies a target user of an admin decision.
 type AdminActionEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Action        string                 `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
@@ -1505,7 +1531,7 @@ type AdminActionEvent struct {
 
 func (x *AdminActionEvent) Reset() {
 	*x = AdminActionEvent{}
-	mi := &file_signaling_proto_msgTypes[20]
+	mi := &file_proto_signaling_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1517,7 +1543,7 @@ func (x *AdminActionEvent) String() string {
 func (*AdminActionEvent) ProtoMessage() {}
 
 func (x *AdminActionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[20]
+	mi := &file_proto_signaling_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1530,7 +1556,7 @@ func (x *AdminActionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdminActionEvent.ProtoReflect.Descriptor instead.
 func (*AdminActionEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{20}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *AdminActionEvent) GetAction() string {
@@ -1547,9 +1573,7 @@ func (x *AdminActionEvent) GetReason() string {
 	return ""
 }
 
-// ---------------------------------------------------------
-// 6. WebRTC Tunnel (Forwarded to Rust)
-// ---------------------------------------------------------
+// SignalRequest encapsulates WebRTC signaling messages from Client -> Backend.
 type SignalRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Signal:
@@ -1565,7 +1589,7 @@ type SignalRequest struct {
 
 func (x *SignalRequest) Reset() {
 	*x = SignalRequest{}
-	mi := &file_signaling_proto_msgTypes[21]
+	mi := &file_proto_signaling_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1577,7 +1601,7 @@ func (x *SignalRequest) String() string {
 func (*SignalRequest) ProtoMessage() {}
 
 func (x *SignalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[21]
+	mi := &file_proto_signaling_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1590,7 +1614,7 @@ func (x *SignalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignalRequest.ProtoReflect.Descriptor instead.
 func (*SignalRequest) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{21}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SignalRequest) GetSignal() isSignalRequest_Signal {
@@ -1664,6 +1688,7 @@ func (*SignalRequest_Renegotiate) isSignalRequest_Signal() {}
 
 func (*SignalRequest_SdpOffer) isSignalRequest_Signal() {}
 
+// SignalEvent encapsulates WebRTC signaling messages from Backend -> Client.
 type SignalEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Signal:
@@ -1678,7 +1703,7 @@ type SignalEvent struct {
 
 func (x *SignalEvent) Reset() {
 	*x = SignalEvent{}
-	mi := &file_signaling_proto_msgTypes[22]
+	mi := &file_proto_signaling_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1690,7 +1715,7 @@ func (x *SignalEvent) String() string {
 func (*SignalEvent) ProtoMessage() {}
 
 func (x *SignalEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[22]
+	mi := &file_proto_signaling_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1703,7 +1728,7 @@ func (x *SignalEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignalEvent.ProtoReflect.Descriptor instead.
 func (*SignalEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{22}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SignalEvent) GetSignal() isSignalEvent_Signal {
@@ -1762,9 +1787,7 @@ func (*SignalEvent_IceCandidate) isSignalEvent_Signal() {}
 
 func (*SignalEvent_SdpAnswer) isSignalEvent_Signal() {}
 
-// ---------------------------------------------------------
-// 7. Global State
-// ---------------------------------------------------------
+// RoomStateEvent provides a full snapshot of the room's participants.
 type RoomStateEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Participants  []*ParticipantInfo     `protobuf:"bytes,1,rep,name=participants,proto3" json:"participants,omitempty"`
@@ -1775,7 +1798,7 @@ type RoomStateEvent struct {
 
 func (x *RoomStateEvent) Reset() {
 	*x = RoomStateEvent{}
-	mi := &file_signaling_proto_msgTypes[23]
+	mi := &file_proto_signaling_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1787,7 +1810,7 @@ func (x *RoomStateEvent) String() string {
 func (*RoomStateEvent) ProtoMessage() {}
 
 func (x *RoomStateEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[23]
+	mi := &file_proto_signaling_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1800,7 +1823,7 @@ func (x *RoomStateEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoomStateEvent.ProtoReflect.Descriptor instead.
 func (*RoomStateEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{23}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RoomStateEvent) GetParticipants() []*ParticipantInfo {
@@ -1817,6 +1840,7 @@ func (x *RoomStateEvent) GetWaitingUsers() []*ParticipantInfo {
 	return nil
 }
 
+// ParticipantInfo describes a single user in the room.
 type ParticipantInfo struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1832,7 +1856,7 @@ type ParticipantInfo struct {
 
 func (x *ParticipantInfo) Reset() {
 	*x = ParticipantInfo{}
-	mi := &file_signaling_proto_msgTypes[24]
+	mi := &file_proto_signaling_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1844,7 +1868,7 @@ func (x *ParticipantInfo) String() string {
 func (*ParticipantInfo) ProtoMessage() {}
 
 func (x *ParticipantInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[24]
+	mi := &file_proto_signaling_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1857,7 +1881,7 @@ func (x *ParticipantInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParticipantInfo.ProtoReflect.Descriptor instead.
 func (*ParticipantInfo) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{24}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ParticipantInfo) GetId() string {
@@ -1920,7 +1944,7 @@ type ErrorEvent struct {
 
 func (x *ErrorEvent) Reset() {
 	*x = ErrorEvent{}
-	mi := &file_signaling_proto_msgTypes[25]
+	mi := &file_proto_signaling_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1932,7 +1956,7 @@ func (x *ErrorEvent) String() string {
 func (*ErrorEvent) ProtoMessage() {}
 
 func (x *ErrorEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[25]
+	mi := &file_proto_signaling_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1945,7 +1969,7 @@ func (x *ErrorEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorEvent.ProtoReflect.Descriptor instead.
 func (*ErrorEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{25}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ErrorEvent) GetCode() string {
@@ -1969,13 +1993,12 @@ func (x *ErrorEvent) GetFatal() bool {
 	return false
 }
 
-// ---------------------------------------------------------
-// 8. Stream Mapping
-// ---------------------------------------------------------
+// TrackAddedEvent informs clients that a new media track is available.
+// Clients typically use this to decide whether to subscribe.
 type TrackAddedEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	StreamId      string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`          // The user who owns the track
+	StreamId      string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`    // The WebRTC stream ID
 	TrackKind     string                 `protobuf:"bytes,3,opt,name=track_kind,json=trackKind,proto3" json:"track_kind,omitempty"` // "video" or "audio"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1983,7 +2006,7 @@ type TrackAddedEvent struct {
 
 func (x *TrackAddedEvent) Reset() {
 	*x = TrackAddedEvent{}
-	mi := &file_signaling_proto_msgTypes[26]
+	mi := &file_proto_signaling_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1995,7 +2018,7 @@ func (x *TrackAddedEvent) String() string {
 func (*TrackAddedEvent) ProtoMessage() {}
 
 func (x *TrackAddedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_signaling_proto_msgTypes[26]
+	mi := &file_proto_signaling_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2008,7 +2031,7 @@ func (x *TrackAddedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrackAddedEvent.ProtoReflect.Descriptor instead.
 func (*TrackAddedEvent) Descriptor() ([]byte, []int) {
-	return file_signaling_proto_rawDescGZIP(), []int{26}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *TrackAddedEvent) GetUserId() string {
@@ -2032,11 +2055,11 @@ func (x *TrackAddedEvent) GetTrackKind() string {
 	return ""
 }
 
-var File_signaling_proto protoreflect.FileDescriptor
+var File_proto_signaling_proto protoreflect.FileDescriptor
 
-const file_signaling_proto_rawDesc = "" +
+const file_proto_signaling_proto_rawDesc = "" +
 	"\n" +
-	"\x0fsignaling.proto\x12\tsignaling\"\xc7\r\n" +
+	"\x15proto/signaling.proto\x12\tsignaling\"\xc7\r\n" +
 	"\x10WebSocketMessage\x12,\n" +
 	"\x04join\x18\x01 \x01(\v2\x16.signaling.JoinRequestH\x00R\x04join\x12>\n" +
 	"\rjoin_response\x18\x02 \x01(\v2\x17.signaling.JoinResponseH\x00R\fjoinResponse\x12;\n" +
@@ -2175,19 +2198,19 @@ const file_signaling_proto_rawDesc = "" +
 	"track_kind\x18\x03 \x01(\tR\ttrackKindBIZGgithub.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto; protob\x06proto3"
 
 var (
-	file_signaling_proto_rawDescOnce sync.Once
-	file_signaling_proto_rawDescData []byte
+	file_proto_signaling_proto_rawDescOnce sync.Once
+	file_proto_signaling_proto_rawDescData []byte
 )
 
-func file_signaling_proto_rawDescGZIP() []byte {
-	file_signaling_proto_rawDescOnce.Do(func() {
-		file_signaling_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_signaling_proto_rawDesc), len(file_signaling_proto_rawDesc)))
+func file_proto_signaling_proto_rawDescGZIP() []byte {
+	file_proto_signaling_proto_rawDescOnce.Do(func() {
+		file_proto_signaling_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_signaling_proto_rawDesc), len(file_proto_signaling_proto_rawDesc)))
 	})
-	return file_signaling_proto_rawDescData
+	return file_proto_signaling_proto_rawDescData
 }
 
-var file_signaling_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
-var file_signaling_proto_goTypes = []any{
+var file_proto_signaling_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_proto_signaling_proto_goTypes = []any{
 	(*WebSocketMessage)(nil),             // 0: signaling.WebSocketMessage
 	(*JoinRequest)(nil),                  // 1: signaling.JoinRequest
 	(*JoinResponse)(nil),                 // 2: signaling.JoinResponse
@@ -2216,7 +2239,7 @@ var file_signaling_proto_goTypes = []any{
 	(*ErrorEvent)(nil),                   // 25: signaling.ErrorEvent
 	(*TrackAddedEvent)(nil),              // 26: signaling.TrackAddedEvent
 }
-var file_signaling_proto_depIdxs = []int32{
+var file_proto_signaling_proto_depIdxs = []int32{
 	1,  // 0: signaling.WebSocketMessage.join:type_name -> signaling.JoinRequest
 	2,  // 1: signaling.WebSocketMessage.join_response:type_name -> signaling.JoinResponse
 	3,  // 2: signaling.WebSocketMessage.reconnect:type_name -> signaling.ReconnectRequest
@@ -2253,12 +2276,12 @@ var file_signaling_proto_depIdxs = []int32{
 	0,  // [0:29] is the sub-list for field type_name
 }
 
-func init() { file_signaling_proto_init() }
-func file_signaling_proto_init() {
-	if File_signaling_proto != nil {
+func init() { file_proto_signaling_proto_init() }
+func file_proto_signaling_proto_init() {
+	if File_proto_signaling_proto != nil {
 		return
 	}
-	file_signaling_proto_msgTypes[0].OneofWrappers = []any{
+	file_proto_signaling_proto_msgTypes[0].OneofWrappers = []any{
 		(*WebSocketMessage_Join)(nil),
 		(*WebSocketMessage_JoinResponse)(nil),
 		(*WebSocketMessage_Reconnect)(nil),
@@ -2285,13 +2308,13 @@ func file_signaling_proto_init() {
 		(*WebSocketMessage_Error)(nil),
 		(*WebSocketMessage_TrackAdded)(nil),
 	}
-	file_signaling_proto_msgTypes[21].OneofWrappers = []any{
+	file_proto_signaling_proto_msgTypes[21].OneofWrappers = []any{
 		(*SignalRequest_SdpAnswer)(nil),
 		(*SignalRequest_IceCandidate)(nil),
 		(*SignalRequest_Renegotiate)(nil),
 		(*SignalRequest_SdpOffer)(nil),
 	}
-	file_signaling_proto_msgTypes[22].OneofWrappers = []any{
+	file_proto_signaling_proto_msgTypes[22].OneofWrappers = []any{
 		(*SignalEvent_SdpOffer)(nil),
 		(*SignalEvent_IceCandidate)(nil),
 		(*SignalEvent_SdpAnswer)(nil),
@@ -2300,17 +2323,17 @@ func file_signaling_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_signaling_proto_rawDesc), len(file_signaling_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_signaling_proto_rawDesc), len(file_proto_signaling_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_signaling_proto_goTypes,
-		DependencyIndexes: file_signaling_proto_depIdxs,
-		MessageInfos:      file_signaling_proto_msgTypes,
+		GoTypes:           file_proto_signaling_proto_goTypes,
+		DependencyIndexes: file_proto_signaling_proto_depIdxs,
+		MessageInfos:      file_proto_signaling_proto_msgTypes,
 	}.Build()
-	File_signaling_proto = out.File
-	file_signaling_proto_goTypes = nil
-	file_signaling_proto_depIdxs = nil
+	File_proto_signaling_proto = out.File
+	file_proto_signaling_proto_goTypes = nil
+	file_proto_signaling_proto_depIdxs = nil
 }
