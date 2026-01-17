@@ -51,26 +51,31 @@ impl RemoteTrackSource for TrackRemote {
     }
 }
 
-pub fn attach_track_handler(
-    pc: &Arc<RTCPeerConnection>,
-    user_id: String,
-    room_id: String,
-    peers: crate::types::PeerMap,
-    tracks: crate::types::TrackMap,
-    room_manager: Arc<crate::room_manager::RoomManager>,
-    cc_client: Option<
+/// Context for track handling operations
+pub struct TrackHandlerContext {
+    pub peers: crate::types::PeerMap,
+    pub tracks: crate::types::TrackMap,
+    pub room_manager: Arc<crate::room_manager::RoomManager>,
+    pub cc_client: Option<
         crate::pb::cc::captioning_service_client::CaptioningServiceClient<
             tonic::transport::Channel,
         >,
     >,
+}
+
+pub fn attach_track_handler(
+    pc: &Arc<RTCPeerConnection>,
+    user_id: String,
+    room_id: String,
+    context: TrackHandlerContext,
 ) {
-    let peers_clone = peers.clone();
-    let tracks_map = tracks.clone();
+    let peers_clone = context.peers.clone();
+    let tracks_map = context.tracks.clone();
     let user_id_clone = user_id.clone();
     let room_id_clone = room_id.clone();
     let pc_for_ontrack = pc.clone();
-    let room_manager_clone = room_manager.clone();
-    let cc_client_clone = cc_client.clone();
+    let room_manager_clone = context.room_manager.clone();
+    let cc_client_clone = context.cc_client.clone();
 
     pc.on_track(Box::new(
         move |track: Arc<TrackRemote>, _receiver, _transceiver| {
@@ -87,11 +92,13 @@ pub fn attach_track_handler(
                     track,
                     user_id,
                     room_id,
-                    peers,
-                    tracks_map,
+                    TrackHandlerContext {
+                        peers,
+                        tracks: tracks_map,
+                        room_manager,
+                        cc_client,
+                    },
                     pc_capture,
-                    room_manager,
-                    cc_client,
                 )
                 .await;
             })
@@ -103,15 +110,8 @@ pub async fn handle_new_track(
     track: Arc<dyn RemoteTrackSource>,
     user_id: String,
     room_id: String,
-    peers: crate::types::PeerMap,
-    tracks_map: crate::types::TrackMap,
+    context: TrackHandlerContext,
     pc_capture: Arc<RTCPeerConnection>,
-    room_manager: Arc<crate::room_manager::RoomManager>,
-    cc_client: Option<
-        crate::pb::cc::captioning_service_client::CaptioningServiceClient<
-            tonic::transport::Channel,
-        >,
-    >,
 ) {
     let track_kind = track.kind();
     let track_ssrc = track.ssrc();
@@ -134,11 +134,11 @@ pub async fn handle_new_track(
         track.id(),
     );
     info!(?track_key, "[SFU] Created broadcaster for track");
-    tracks_map.insert(track_key, broadcaster.clone());
+    context.tracks.insert(track_key, broadcaster.clone());
 
     // 2. Notify Existing Peers & Add Writer to them
     // OPTIMIZED: Use RoomManager to find peers in the room (O(room_participants))
-    let users_in_room = room_manager.get_users(&room_id);
+    let users_in_room = context.room_manager.get_users(&room_id);
     info!(count = %users_in_room.len(), "[SFU] Notifying peers in room about new track");
 
     for other_user_id in users_in_room {
@@ -147,7 +147,7 @@ pub async fn handle_new_track(
         }
 
         let session_key = (room_id.clone(), other_user_id.clone());
-        if let Some(peer_entry) = peers.get(&session_key) {
+        if let Some(peer_entry) = context.peers.get(&session_key) {
             let other_peer = peer_entry.value();
             info!(target_user = %other_peer.user_id, "[SFU] Forwarding new track");
 
@@ -244,10 +244,10 @@ pub async fn handle_new_track(
     let (cc_tx, cc_rx) = tokio::sync::mpsc::channel::<crate::pb::cc::AudioChunk>(500);
     let mut _join_handle_cc: Option<tokio::task::JoinHandle<()>> = None;
     if track.kind() == "audio" {
-        if let Some(mut client) = cc_client {
+        if let Some(mut client) = context.cc_client {
             let session_id = format!("{}:{}", room_id, user_id);
             // Clone for closure
-            let peers_cc = peers.clone();
+            let peers_cc = context.peers.clone();
             let room_id_cc = room_id.clone();
             let user_id_cc = user_id.clone();
 
@@ -417,10 +417,12 @@ mod tests {
             &pc_receiver,
             user_id.clone(),
             room_id.clone(),
-            peers.clone(),
-            tracks.clone(),
-            room_manager.clone(),
-            None,
+            TrackHandlerContext {
+                peers: peers.clone(),
+                tracks: tracks.clone(),
+                room_manager: room_manager.clone(),
+                cc_client: None,
+            },
         );
 
         // 4. Add Track to Sender
@@ -575,11 +577,13 @@ mod tests {
             mock_track.clone(),
             user_id.clone(),
             room_id.clone(),
-            peers.clone(),
-            tracks.clone(),
+            TrackHandlerContext {
+                peers: peers.clone(),
+                tracks: tracks.clone(),
+                room_manager: room_manager.clone(),
+                cc_client: None,
+            },
             pc_capture.clone(),
-            room_manager.clone(),
-            None,
         )
         .await;
 

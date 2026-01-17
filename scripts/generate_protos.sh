@@ -40,16 +40,40 @@ protoc --proto_path="$ROOT_DIR" \
        --go-grpc_out="$GO_OUT_DIR" --go-grpc_opt=paths=source_relative \
        proto/sfu.proto proto/signaling.proto
 
-# 2b. Generate Go (Server) - CC Proto (Isolated package)
-# We output this to a 'cc' subdirectory to avoid package collision (package cc vs package proto)
-# With paths=source_relative, input "proto/cc.proto" -> output "$GO_OUT_DIR/cc/proto/cc.pb.go"
-mkdir -p "$GO_OUT_DIR/cc"
+# 2b. Generate Go (Server) - Stream Processor Proto
+mkdir -p "$GO_OUT_DIR/stream_processor"
 protoc --proto_path="$ROOT_DIR" \
-       --go_out="$GO_OUT_DIR/cc" --go_opt=paths=source_relative \
-       --go-grpc_out="$GO_OUT_DIR/cc" --go-grpc_opt=paths=source_relative \
-       proto/cc.proto
+       --go_out="$GO_OUT_DIR/stream_processor" --go_opt=paths=source_relative \
+       --go-grpc_out="$GO_OUT_DIR/stream_processor" --go-grpc_opt=paths=source_relative \
+       proto/stream-processor.proto
+
+# 2c. Generate Go (Server) - Summary Service Proto
+mkdir -p "$GO_OUT_DIR/summary_service"
+protoc --proto_path="$ROOT_DIR" \
+       --go_out="$GO_OUT_DIR/summary_service" --go_opt=paths=source_relative \
+       --go-grpc_out="$GO_OUT_DIR/summary_service" --go-grpc_opt=paths=source_relative \
+       proto/summary-service.proto
 
 echo "Go generated."
+
+# 2d. Generate Python (Stream Processor)
+cd "$ROOT_DIR/backend/python/stream-processor"
+mkdir -p proto
+touch proto/__init__.py
+.venv/bin/python -m grpc_tools.protoc -I"$ROOT_DIR" \
+       --python_out=. --grpc_python_out=. \
+       proto/stream-processor.proto
+
+# 2e. Generate Python (Summary Service)
+cd "$ROOT_DIR/backend/python/summary-service"
+mkdir -p proto
+touch proto/__init__.py
+.venv/bin/python -m grpc_tools.protoc -I"$ROOT_DIR" \
+       --python_out=. --grpc_python_out=. \
+       proto/summary-service.proto
+
+cd "$ROOT_DIR"
+echo "Python generated."
 
 # 3. Generate TypeScript (Client)
 protoc --proto_path="$ROOT_DIR" \

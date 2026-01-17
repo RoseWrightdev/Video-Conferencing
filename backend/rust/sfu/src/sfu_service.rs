@@ -99,10 +99,12 @@ impl MySfu {
             &peer_pc,
             user_id.clone(),
             room_id.clone(),
-            self.peers.clone(),
-            self.tracks.clone(),
-            self.room_manager.clone(),
-            self.cc_client.clone(),
+            track_handler::TrackHandlerContext {
+                peers: self.peers.clone(),
+                tracks: self.tracks.clone(),
+                room_manager: self.room_manager.clone(),
+                cc_client: self.cc_client.clone(),
+            },
         );
 
         // 6. Save to Map

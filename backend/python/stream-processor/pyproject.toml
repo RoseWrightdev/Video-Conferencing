@@ -16,3 +16,11 @@ dependencies = [
     "uvicorn>=0.40.0",
     "redis>=5.0.1",
 ]
+
+[tool.setuptools]
+py-modules = ["main", "transcriber", "cc_pb2", "cc_pb2_grpc"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

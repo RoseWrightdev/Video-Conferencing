@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package summary_service;
+
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/summary_service/proto;summary_service";
+
+// SummaryService generates meeting summaries and action items.
+// This service is called after a meeting concludes to provide
+// participants with a summary of what was discussed.
+service SummaryService {
+  // Generates a summary for a concluded meeting room.
+  rpc Summarize(SummaryRequest) returns (SummaryResponse);
+}
+
+// SummaryRequest contains the information needed to generate a summary.
+message SummaryRequest {
+  // The unique identifier of the room to summarize
+  string room_id = 1;
+}
+
+// SummaryResponse contains the generated summary and action items.
+message SummaryResponse {
+  // The room ID this summary is for
+  string room_id = 1;
+  
+  // The generated meeting summary text
+  string summary = 2;
+  
+  // List of extracted action items from the meeting
+  repeated string action_items = 3;
+}

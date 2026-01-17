@@ -186,7 +186,9 @@ mod tests {
 
             let result = validate_env();
             if should_succeed {
-                let config = result.expect(&format!("Expected port {} to be valid", port_str));
+                let config = result.unwrap_or_else(|e| {
+                    panic!("Expected port {} to be valid, got error: {}", port_str, e)
+                });
                 assert_eq!(config.grpc_port, expected_port);
             } else {
                 assert!(result.is_err(), "Expected port {} to be invalid", port_str);

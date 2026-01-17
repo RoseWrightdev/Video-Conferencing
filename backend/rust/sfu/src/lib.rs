@@ -28,5 +28,4 @@ pub use types::{PeerMap, TrackMap};
 #[cfg(test)]
 mod integration_tests;
 #[cfg(test)]
-#[cfg(test)]
 mod tests;

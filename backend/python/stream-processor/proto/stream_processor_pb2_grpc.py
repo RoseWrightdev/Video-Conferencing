@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import cc_pb2 as cc__pb2
+from proto import stream_processor_pb2 as proto_dot_stream__processor__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in cc_pb2_grpc.py depends on'
+        + ' but the generated code in proto/stream_processor_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -26,7 +26,10 @@ if _version_not_supported:
 
 
 class CaptioningServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """CaptioningService provides real-time audio transcription and captioning.
+    The SFU sends audio chunks via bidirectional streaming, and the service
+    returns caption events as they are generated.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -35,14 +38,17 @@ class CaptioningServiceStub(object):
             channel: A grpc.Channel.
         """
         self.StreamAudio = channel.stream_stream(
-                '/cc.CaptioningService/StreamAudio',
-                request_serializer=cc__pb2.AudioChunk.SerializeToString,
-                response_deserializer=cc__pb2.CaptionEvent.FromString,
+                '/stream_processor.CaptioningService/StreamAudio',
+                request_serializer=proto_dot_stream__processor__pb2.AudioChunk.SerializeToString,
+                response_deserializer=proto_dot_stream__processor__pb2.CaptionEvent.FromString,
                 _registered_method=True)
 
 
 class CaptioningServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """CaptioningService provides real-time audio transcription and captioning.
+    The SFU sends audio chunks via bidirectional streaming, and the service
+    returns caption events as they are generated.
+    """
 
     def StreamAudio(self, request_iterator, context):
         """Bidirectional streaming: SFU sends audio chunks, Service sends back captions.
@@ -56,19 +62,22 @@ def add_CaptioningServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'StreamAudio': grpc.stream_stream_rpc_method_handler(
                     servicer.StreamAudio,
-                    request_deserializer=cc__pb2.AudioChunk.FromString,
-                    response_serializer=cc__pb2.CaptionEvent.SerializeToString,
+                    request_deserializer=proto_dot_stream__processor__pb2.AudioChunk.FromString,
+                    response_serializer=proto_dot_stream__processor__pb2.CaptionEvent.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'cc.CaptioningService', rpc_method_handlers)
+            'stream_processor.CaptioningService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('cc.CaptioningService', rpc_method_handlers)
+    server.add_registered_method_handlers('stream_processor.CaptioningService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
 class CaptioningService(object):
-    """Missing associated documentation comment in .proto file."""
+    """CaptioningService provides real-time audio transcription and captioning.
+    The SFU sends audio chunks via bidirectional streaming, and the service
+    returns caption events as they are generated.
+    """
 
     @staticmethod
     def StreamAudio(request_iterator,
@@ -84,9 +93,9 @@ class CaptioningService(object):
         return grpc.experimental.stream_stream(
             request_iterator,
             target,
-            '/cc.CaptioningService/StreamAudio',
-            cc__pb2.AudioChunk.SerializeToString,
-            cc__pb2.CaptionEvent.FromString,
+            '/stream_processor.CaptioningService/StreamAudio',
+            proto_dot_stream__processor__pb2.AudioChunk.SerializeToString,
+            proto_dot_stream__processor__pb2.CaptionEvent.FromString,
             options,
             channel_credentials,
             insecure,

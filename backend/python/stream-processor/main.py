@@ -4,9 +4,13 @@ import grpc
 from concurrent import futures
 from fastapi import FastAPI
 import uvicorn
-import cc_pb2
-import cc_pb2_grpc
+from proto import stream_processor_pb2
+from proto import stream_processor_pb2_grpc
 from transcriber import AudioTranscriber
+import os
+import json
+import time
+import redis
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -20,16 +24,14 @@ async def health_check():
     return {"status": "ok", "service": "cc-service"}
 
 # --- gRPC Setup ---
-class CaptioningService(cc_pb2_grpc.CaptioningServiceServicer):
+class CaptioningService(stream_processor_pb2_grpc.CaptioningServiceServicer):
     def __init__(self):
         # Use 'tiny' (multilingual) instead of 'tiny.en' to support translation/non-English input
         self.transcriber = AudioTranscriber(model_size="tiny", device="cpu", compute_type="int8")
         
         # Initialize Redis
-        import redis
         try:
             # Assume Redis is at localhost:6379 or use env var
-            import os
             redis_host = os.getenv("REDIS_HOST", "localhost")
             redis_port = int(os.getenv("REDIS_PORT", 6379))
             self.redis_client = redis.Redis(host=redis_host, port=redis_port, db=0)
@@ -66,9 +68,8 @@ class CaptioningService(cc_pb2_grpc.CaptioningServiceServicer):
                         # Push to Redis for summarization
                         # Format: transcript:{room_id} -> JSON list of events
                         # We use RPUSH to append.
+                        # We use RPUSH to append.
                         try:
-                            import json
-                            import time
                             event_data = {
                                 "user_id": user_id,
                                 "text": res['text'],
@@ -81,7 +82,7 @@ class CaptioningService(cc_pb2_grpc.CaptioningServiceServicer):
                         except Exception as e:
                             logger.error(f"Redis error: {e}")
 
-                        yield cc_pb2.CaptionEvent(
+                        yield stream_processor_pb2.CaptionEvent(
                             session_id=session_id,
                             text=res['text'],
                             is_final=True,
@@ -92,7 +93,7 @@ class CaptioningService(cc_pb2_grpc.CaptioningServiceServicer):
 
 async def serve_grpc():
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10))
-    cc_pb2_grpc.add_CaptioningServiceServicer_to_server(CaptioningService(), server)
+    stream_processor_pb2_grpc.add_CaptioningServiceServicer_to_server(CaptioningService(), server)
     listen_addr = '[::]:50051'
     server.add_insecure_port(listen_addr)
     logger.info(f"Starting gRPC server on {listen_addr}")

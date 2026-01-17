@@ -4,11 +4,12 @@ import json
 import redis
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 import grpc
 from concurrent import futures
-import cc_pb2
-import cc_pb2_grpc
+from proto import summary_service_pb2
+from proto import summary_service_pb2_grpc
 
 # --- Configuration ---
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
@@ -17,43 +18,6 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("summary-service")
-
-# --- App Setup ---
-app = FastAPI(title="Meeting Summarization Service")
-redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
-
-# --- gRPC Service ---
-class SummaryService(cc_pb2_grpc.SummaryServiceServicer):
-    async def Summarize(self, request, context):
-        room_id = request.room_id
-        logger.info(f"Received gRPC summary request for room: {room_id}")
-        
-        # 1. Fetch transcript from Redis
-        try:
-            raw_events = redis_client.lrange(f"transcript:{room_id}", 0, -1)
-            if not raw_events:
-                 # Return empty or error. For gRPC, we can return empty or abort.
-                 # Let's return empty response with no summary.
-                 logger.warning(f"No transcript found for room {room_id}")
-                 return cc_pb2.SummaryResponse(room_id=room_id, summary="No transcript found.", action_items=[])
-            
-            transcript_text = ""
-            for event_str in raw_events:
-                event = json.loads(event_str)
-                transcript_text += f"{event.get('user_id', 'Unknown')}: {event.get('text', '')}\n"
-                
-        except Exception as e:
-            logger.error(f"Error fetching from Redis: {e}")
-            context.abort(grpc.StatusCode.INTERNAL, f"Redis error: {e}")
-
-        # 2. Call LLM (Mock)
-        summary, action_items = mock_llm_summarize(transcript_text)
-        
-        return cc_pb2.SummaryResponse(
-            room_id=room_id,
-            summary=summary,
-            action_items=action_items
-        )
 
 # --- Model Setup ---
 from huggingface_hub import hf_hub_download
@@ -66,9 +30,10 @@ MODEL_PATH = f"./models/{FILENAME}"
 
 llm = None
 
-@app.on_event("startup")
-async def startup_event():
-    global llm
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global llm, MODEL_PATH
     logger.info(f"Summary Service HTTP (Health) started. Redis at {REDIS_HOST}:{REDIS_PORT}")
     
     # Download Model
@@ -85,10 +50,10 @@ async def startup_event():
              downloaded_path = hf_hub_download(repo_id=REPO_ID, filename=FILENAME)
              logger.info(f"Model downloaded to {downloaded_path}")
              # We will just load from cache path
-             global MODEL_PATH
              MODEL_PATH = downloaded_path
         except Exception as e:
             logger.error(f"Failed to download model: {e}")
+            yield
             return
     else:
         # If it exists locally (user manually put it there)
@@ -102,6 +67,48 @@ async def startup_event():
         logger.info("✅ Llama model loaded successfully")
     except Exception as e:
         logger.error(f"Failed to load Llama model: {e}")
+    
+    yield
+    
+    # Shutdown (cleanup if needed)
+    logger.info("Shutting down Summary Service")
+
+# --- App Setup ---
+app = FastAPI(title="Meeting Summarization Service", lifespan=lifespan)
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
+
+# --- gRPC Service ---
+class SummaryService(summary_service_pb2_grpc.SummaryServiceServicer):
+    async def Summarize(self, request, context):
+        room_id = request.room_id
+        logger.info(f"Received gRPC summary request for room: {room_id}")
+        
+        # 1. Fetch transcript from Redis
+        try:
+            raw_events = redis_client.lrange(f"transcript:{room_id}", 0, -1)
+            if not raw_events:
+                 # Return empty or error. For gRPC, we can return empty or abort.
+                 # Let's return empty response with no summary.
+                 logger.warning(f"No transcript found for room {room_id}")
+                 return summary_service_pb2.SummaryResponse(room_id=room_id, summary="No transcript found.", action_items=[])
+            
+            transcript_text = ""
+            for event_str in raw_events:
+                event = json.loads(event_str)
+                transcript_text += f"{event.get('user_id', 'Unknown')}: {event.get('text', '')}\n"
+                
+        except Exception as e:
+            logger.error(f"Error fetching from Redis: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, f"Redis error: {e}")
+
+        # 2. Call LLM (Mock)
+        summary, action_items = mock_llm_summarize(transcript_text)
+        
+        return summary_service_pb2.SummaryResponse(
+            room_id=room_id,
+            summary=summary,
+            action_items=action_items
+        )
 
 def mock_llm_summarize(text: str):
     # Fallback if model not loaded
@@ -164,7 +171,7 @@ async def health():
 
 async def serve_grpc():
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10))
-    cc_pb2_grpc.add_SummaryServiceServicer_to_server(SummaryService(), server)
+    summary_service_pb2_grpc.add_SummaryServiceServicer_to_server(SummaryService(), server)
     listen_addr = '[::]:50052' # Port 50052 for Summary Service
     server.add_insecure_port(listen_addr)
     logger.info(f"Starting gRPC server on {listen_addr}")

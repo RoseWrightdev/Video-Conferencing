@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package stream_processor;
+
+option go_package = "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/stream_processor/proto;stream_processor";
+
+// CaptioningService provides real-time audio transcription and captioning.
+// The SFU sends audio chunks via bidirectional streaming, and the service
+// returns caption events as they are generated.
+service CaptioningService {
+  // Bidirectional streaming: SFU sends audio chunks, Service sends back captions.
+  rpc StreamAudio(stream AudioChunk) returns (stream CaptionEvent);
+}
+
+// AudioChunk represents a segment of audio data to be processed.
+message AudioChunk {
+  // Unique ID for the audio stream/user
+  string session_id = 1;
+  
+  // Raw PCM audio data
+  bytes audio_data = 2;
+  
+  // Optional: ISO language code (e.g., "en", "es"). 
+  // If empty, defaults to transcription.
+  string target_language = 3;
+}
+
+// CaptionEvent represents a caption or transcription result.
+message CaptionEvent {
+  // Session ID this caption belongs to
+  string session_id = 1;
+  
+  // The transcribed or translated text
+  string text = 2;
+  
+  // Whether this is a final result (true) or interim (false)
+  bool is_final = 3;
+  
+  // Confidence score of the transcription (0.0 to 1.0)
+  double confidence = 4;
+}

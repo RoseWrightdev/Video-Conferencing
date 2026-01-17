@@ -14,3 +14,12 @@ dependencies = [
     "llama-cpp-python>=0.2.23",
     "huggingface-hub>=0.20.0",
 ]
+
+[tool.setuptools]
+py-modules = ["main", "cc_pb2", "cc_pb2_grpc"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]
