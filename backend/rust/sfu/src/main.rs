@@ -22,7 +22,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Initialize tracing with validated RUST_LOG
-    // Initialize tracing with validated RUST_LOG
     logging::init(&cfg.rust_log);
 
     // Initialize Metrics
