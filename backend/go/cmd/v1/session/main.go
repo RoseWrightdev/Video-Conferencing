@@ -17,12 +17,12 @@ import (
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
-	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/cc"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/health"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/middleware"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/ratelimit"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/summary"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/transport"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 )
@@ -138,10 +138,10 @@ func main() {
 		summaryAddr = os.Getenv("SUMMARY_SERVICE_ADDR")
 	}
 
-	var summaryClient *cc.SummaryClient
+	var summaryClient *summary.SummaryClient
 	var errSummary error
 	// Attempt connection but don't block startup
-	summaryClient, errSummary = cc.NewSummaryClient(summaryAddr)
+	summaryClient, errSummary = summary.NewSummaryClient(summaryAddr)
 	if errSummary != nil {
 		logging.Error(ctx, "Failed to connect to Summary Service", zap.Error(errSummary))
 		// Continue running, handler will just error out

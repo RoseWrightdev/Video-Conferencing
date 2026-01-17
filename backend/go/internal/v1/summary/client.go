@@ -1,11 +1,11 @@
-package cc
+package summary
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/cc/proto"
+	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/summary_service/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
