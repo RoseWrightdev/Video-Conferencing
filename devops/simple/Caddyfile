@@ -1,0 +1,32 @@
+{
+    # Global options
+    email admin@rosewright.dev
+}
+
+meet.rosewright.dev {
+    reverse_proxy frontend:3000 {
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote}
+    }
+    
+    # Enable gzip/zstd compression
+    encode gzip zstd
+    
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
+
+api.meet.rosewright.dev {
+    reverse_proxy backend:8080 {
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote}
+    }
+
+    # Enable gzip/zstd compression
+    encode gzip zstd
+}
