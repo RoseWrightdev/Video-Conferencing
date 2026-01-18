@@ -10,7 +10,7 @@ import (
 )
 
 // HandleToggleMedia processes a request to toggle audio or video.
-func (r *Room) HandleToggleMedia(ctx context.Context, client types.ClientInterface, req *pb.ToggleMediaRequest) {
+func (r *Room) HandleToggleMedia(_ context.Context, client types.ClientInterface, req *pb.ToggleMediaRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -35,7 +35,7 @@ func (r *Room) HandleToggleMedia(ctx context.Context, client types.ClientInterfa
 }
 
 // HandleToggleHand processes a request to toggle a user's raised hand status.
-func (r *Room) HandleToggleHand(ctx context.Context, client types.ClientInterface, req *pb.ToggleHandRequest) {
+func (r *Room) HandleToggleHand(_ context.Context, client types.ClientInterface, req *pb.ToggleHandRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -54,7 +54,7 @@ func (r *Room) HandleToggleHand(ctx context.Context, client types.ClientInterfac
 }
 
 // HandleChat processes a new chat message.
-func (r *Room) HandleChat(ctx context.Context, client types.ClientInterface, chatReq *pb.ChatRequest) {
+func (r *Room) HandleChat(_ context.Context, client types.ClientInterface, chatReq *pb.ChatRequest) {
 	// 1. Create the Event (business logic)
 	event := buildChatEvent(client, chatReq)
 
@@ -72,7 +72,7 @@ func (r *Room) HandleChat(ctx context.Context, client types.ClientInterface, cha
 }
 
 // HandleScreenShare processes a request to start or stop screen sharing.
-func (r *Room) HandleScreenShare(ctx context.Context, client types.ClientInterface, req *pb.ScreenShareRequest) {
+func (r *Room) HandleScreenShare(_ context.Context, client types.ClientInterface, req *pb.ScreenShareRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -90,7 +90,7 @@ func (r *Room) HandleScreenShare(ctx context.Context, client types.ClientInterfa
 }
 
 // HandleGetRecentChats sends recent chat history to the requesting client.
-func (r *Room) HandleGetRecentChats(ctx context.Context, client types.ClientInterface) {
+func (r *Room) HandleGetRecentChats(_ context.Context, client types.ClientInterface) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -118,7 +118,7 @@ func (r *Room) HandleGetRecentChats(ctx context.Context, client types.ClientInte
 
 // HandleDeleteChat handles a request to delete a chat message.
 // 3. Delete Chat Handler
-func (r *Room) HandleDeleteChat(ctx context.Context, client types.ClientInterface, req *pb.DeleteChatRequest) {
+func (r *Room) HandleDeleteChat(_ context.Context, client types.ClientInterface, req *pb.DeleteChatRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -146,7 +146,7 @@ func (r *Room) HandleDeleteChat(ctx context.Context, client types.ClientInterfac
 
 // HandleRequestScreenSharePermission handles a request to ask for screen share permission.
 // 4. Request Screen Share Permission
-func (r *Room) HandleRequestScreenSharePermission(ctx context.Context, client types.ClientInterface) {
+func (r *Room) HandleRequestScreenSharePermission(_ context.Context, client types.ClientInterface) {
 	// Notify all Hosts that "User X wants to share"
 	msg := &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_ScreenSharePermissionEvent{

@@ -64,7 +64,7 @@ func NewService(addr, password string) (*Service, error) {
 		MaxRequests: 5,
 		Interval:    1 * time.Minute,
 		Timeout:     15 * time.Second,
-		OnStateChange: func(_ string, from gobreaker.State, to gobreaker.State) {
+		OnStateChange: func(_ string, _ gobreaker.State, to gobreaker.State) {
 			var stateVal float64
 			switch to {
 			case gobreaker.StateClosed:

@@ -133,21 +133,21 @@ func (m *MockSFUClient) CreateSession(_ context.Context, uid string, roomID stri
 	return &pb.CreateSessionResponse{SdpOffer: "mock-sdp-offer"}, nil
 }
 
-func (m *MockSFUClient) HandleSignal(_ context.Context, uid string, roomID string, signal *pb.SignalRequest) (*pb.SignalResponse, error) {
+func (m *MockSFUClient) HandleSignal(_ context.Context, _ string, _ string, _ *pb.SignalRequest) (*pb.SignalResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.handleSignalCalls++
 	return &pb.SignalResponse{Success: true}, nil
 }
 
-func (m *MockSFUClient) DeleteSession(ctx context.Context, uid string, roomID string) error {
+func (m *MockSFUClient) DeleteSession(_ context.Context, _ string, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.deleteSessionCalls++
 	return nil
 }
 
-func (m *MockSFUClient) ListenEvents(ctx context.Context, uid string, roomID string) (pb.SfuService_ListenEventsClient, error) {
+func (m *MockSFUClient) ListenEvents(_ context.Context, _ string, _ string) (pb.SfuService_ListenEventsClient, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.listenEventsCalls++

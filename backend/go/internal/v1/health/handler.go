@@ -181,8 +181,8 @@ func (h *Handler) checkRustSFU(ctx context.Context) string {
 	return h.sfuChecker.Check(ctx, h.sfuAddr)
 }
 
-// HealthCheckResponse is a generic health check response for backward compatibility
-type HealthCheckResponse struct {
+// CheckResponse is a generic health check response for backward compatibility
+type CheckResponse struct {
 	Status string         `json:"status"`
 	Data   map[string]any `json:"data,omitempty"`
 }

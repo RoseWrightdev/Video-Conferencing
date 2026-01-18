@@ -23,7 +23,7 @@ type BlockingBus struct {
 	*MockBusService
 }
 
-func (b *BlockingBus) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGroup, handler func(bus.PubSubPayload)) {
+func (b *BlockingBus) Subscribe(ctx context.Context, _ string, wg *sync.WaitGroup, _ func(bus.PubSubPayload)) {
 	// Simulate a long-lived background listener
 	if wg != nil {
 		wg.Add(1)

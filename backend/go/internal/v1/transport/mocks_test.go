@@ -17,7 +17,7 @@ type MockBusService struct {
 	mu             sync.Mutex
 }
 
-func (m *MockBusService) Publish(ctx context.Context, roomID string, event string, payload any, senderID string, roles []string) error {
+func (m *MockBusService) Publish(_ context.Context, _ string, _ string, _ any, _ string, _ []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.publishCalls++
@@ -27,11 +27,11 @@ func (m *MockBusService) Publish(ctx context.Context, roomID string, event strin
 	return nil
 }
 
-func (m *MockBusService) PublishDirect(ctx context.Context, targetUserID string, event string, payload any, senderID string) error {
+func (m *MockBusService) PublishDirect(_ context.Context, _ string, _ string, _ any, _ string) error {
 	return nil
 }
 
-func (m *MockBusService) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGroup, handler func(bus.PubSubPayload)) {
+func (m *MockBusService) Subscribe(_ context.Context, _ string, _ *sync.WaitGroup, _ func(bus.PubSubPayload)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subscribeCalls++
@@ -41,34 +41,34 @@ func (m *MockBusService) Close() error {
 	return nil
 }
 
-func (m *MockBusService) SetAdd(ctx context.Context, key string, value string) error {
+func (m *MockBusService) SetAdd(_ context.Context, _ string, _ string) error {
 	return nil
 }
 
-func (m *MockBusService) SetRem(ctx context.Context, key string, value string) error {
+func (m *MockBusService) SetRem(_ context.Context, _ string, _ string) error {
 	return nil
 }
 
-func (m *MockBusService) SetMembers(ctx context.Context, key string) ([]string, error) {
+func (m *MockBusService) SetMembers(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
 
 // MockSFUProvider implements types.SFUProvider
 type MockSFUProvider struct{}
 
-func (m *MockSFUProvider) CreateSession(ctx context.Context, uid string, roomID string) (*pb.CreateSessionResponse, error) {
+func (m *MockSFUProvider) CreateSession(_ context.Context, _ string, _ string) (*pb.CreateSessionResponse, error) {
 	return &pb.CreateSessionResponse{SdpOffer: "mock-offer"}, nil
 }
 
-func (m *MockSFUProvider) HandleSignal(ctx context.Context, uid string, roomID string, signal *pb.SignalRequest) (*pb.SignalResponse, error) {
+func (m *MockSFUProvider) HandleSignal(_ context.Context, _ string, _ string, _ *pb.SignalRequest) (*pb.SignalResponse, error) {
 	return &pb.SignalResponse{Success: true}, nil
 }
 
-func (m *MockSFUProvider) DeleteSession(ctx context.Context, uid string, roomID string) error {
+func (m *MockSFUProvider) DeleteSession(_ context.Context, _ string, _ string) error {
 	return nil
 }
 
-func (m *MockSFUProvider) ListenEvents(ctx context.Context, uid string, roomID string) (pb.SfuService_ListenEventsClient, error) {
+func (m *MockSFUProvider) ListenEvents(_ context.Context, _ string, _ string) (pb.SfuService_ListenEventsClient, error) {
 	return nil, nil
 }
 
@@ -100,6 +100,6 @@ func (m *MockConnection) Close() error {
 	return nil
 }
 
-func (m *MockConnection) SetWriteDeadline(t time.Time) error {
+func (m *MockConnection) SetWriteDeadline(_ time.Time) error {
 	return nil
 }

@@ -21,6 +21,7 @@ const (
 	CorrelationIDKey contextKey = "correlation_id"
 	// UserIDKey is the context key for the user ID.
 	UserIDKey contextKey = "user_id"
+	// RoomIDKey is the context key for the room ID.
 	RoomIDKey contextKey = "room_id"
 )
 

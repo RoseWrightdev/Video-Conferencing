@@ -24,11 +24,11 @@ type MockRoom struct {
 }
 
 func (m *MockRoom) GetID() types.RoomIDType { return "test-room" }
-func (m *MockRoom) BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent {
+func (m *MockRoom) BuildRoomStateProto(_ context.Context) *pb.RoomStateEvent {
 	return &pb.RoomStateEvent{}
 }
 
-func (m *MockRoom) Router(ctx context.Context, client types.ClientInterface, msg *pb.WebSocketMessage) {
+func (m *MockRoom) Router(_ context.Context, _ types.ClientInterface, msg *pb.WebSocketMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.routerCalls++
@@ -41,14 +41,14 @@ func (m *MockRoom) HandleClientDisconnect(_ types.ClientInterface) {
 	m.disconnectCalls++
 }
 
-func (m *MockRoom) CreateSFUSession(ctx context.Context, client types.ClientInterface) error {
+func (m *MockRoom) CreateSFUSession(_ context.Context, _ types.ClientInterface) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.createSFUCalls++
 	return nil
 }
 
-func (m *MockRoom) HandleSFUSignal(ctx context.Context, client types.ClientInterface, signal *pb.SignalRequest) {
+func (m *MockRoom) HandleSFUSignal(_ context.Context, _ types.ClientInterface, _ *pb.SignalRequest) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.handleSFUSignalCalls++
@@ -287,7 +287,7 @@ func TestClientReadPump_InvalidProto(t *testing.T) {
 func TestClientWritePump(t *testing.T) {
 	mockConn := &MockConnection{}
 	writeChan := make(chan []byte, 1)
-	mockConn.WriteMessageFunc = func(mt int, data []byte) error {
+	mockConn.WriteMessageFunc = func(_ int, data []byte) error {
 		writeChan <- data
 		return nil
 	}

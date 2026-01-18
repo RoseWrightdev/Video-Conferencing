@@ -136,14 +136,14 @@ func TestRouter_AllBranches(t *testing.T) {
 		{
 			name: "Nil Payload",
 			msg:  &pb.WebSocketMessage{Payload: nil},
-			verify: func(t *testing.T) {
+			verify: func(_ *testing.T) {
 				// Should have been handled by validateMessagePayload check
 			},
 		},
 		{
 			name: "Unknown Payload",
 			msg:  &pb.WebSocketMessage{Payload: &pb.WebSocketMessage_AdminEvent{}}, // Unexpected type in router
-			verify: func(t *testing.T) {
+			verify: func(_ *testing.T) {
 				// Should log warning and return
 			},
 		},

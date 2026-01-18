@@ -101,7 +101,7 @@ func TestHandleClientDisconnect(t *testing.T) {
 	mockBus := &MockBusService{}
 
 	roomCleanupCalled := false
-	onEmptyCallback := func(roomId types.RoomIDType) {
+	onEmptyCallback := func(_ types.RoomIDType) {
 		roomCleanupCalled = true
 	}
 

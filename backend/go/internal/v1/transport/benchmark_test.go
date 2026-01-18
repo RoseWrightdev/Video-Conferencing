@@ -47,7 +47,7 @@ func (m *MockClient) SetIsVideoEnabled(_ bool)              {}
 func (m *MockClient) GetIsScreenSharing() bool              { return false }
 func (m *MockClient) SetIsScreenSharing(_ bool)             {}
 func (m *MockClient) GetIsHandRaised() bool                 { return false }
-func (m *MockClient) SetIsHandRaised(b bool)                {}
+func (m *MockClient) SetIsHandRaised(_ bool)                {}
 func (m *MockClient) Disconnect()                           { m.Closed = true }
 func (m *MockClient) SendProto(msg *pb.WebSocketMessage) {
 	if m.Closed {
@@ -80,22 +80,22 @@ func (m *MockClient) SendRaw(_ []byte) {
 
 type MockValidator struct{}
 
-func (m *MockValidator) ValidateToken(token string) (*auth.CustomClaims, error) { return nil, nil }
+func (m *MockValidator) ValidateToken(_ string) (*auth.CustomClaims, error) { return nil, nil }
 
 type MockBus struct{}
 
-func (m *MockBus) Publish(ctx context.Context, roomID string, event string, payload any, senderID string, roles []string) error {
+func (m *MockBus) Publish(_ context.Context, _ string, _ string, _ any, _ string, _ []string) error {
 	return nil
 }
-func (m *MockBus) PublishDirect(ctx context.Context, targetUserID string, event string, payload any, senderID string) error {
+func (m *MockBus) PublishDirect(_ context.Context, _ string, _ string, _ any, _ string) error {
 	return nil
 }
-func (m *MockBus) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGroup, handler func(bus.PubSubPayload)) {
+func (m *MockBus) Subscribe(_ context.Context, _ string, _ *sync.WaitGroup, _ func(bus.PubSubPayload)) {
 }
-func (m *MockBus) Close() error                                                 { return nil }
-func (m *MockBus) SetAdd(ctx context.Context, key string, value string) error   { return nil }
-func (m *MockBus) SetRem(ctx context.Context, key string, value string) error   { return nil }
-func (m *MockBus) SetMembers(ctx context.Context, key string) ([]string, error) { return nil, nil }
+func (m *MockBus) Close() error                                             { return nil }
+func (m *MockBus) SetAdd(_ context.Context, _ string, _ string) error       { return nil }
+func (m *MockBus) SetRem(_ context.Context, _ string, _ string) error       { return nil }
+func (m *MockBus) SetMembers(_ context.Context, _ string) ([]string, error) { return nil, nil }
 
 // --- Benchmarks ---
 

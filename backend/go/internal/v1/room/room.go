@@ -45,7 +45,7 @@ func (r *Room) GetID() types.RoomIDType {
 }
 
 // CreateSFUSession initializes a new SFU session for a participant.
-func (r *Room) CreateSFUSession(ctx context.Context, client types.ClientInterface) error {
+func (r *Room) CreateSFUSession(_ context.Context, client types.ClientInterface) error {
 	// Use r.ctx to ensure the SFU event listener (spawned inside) is cancelled when Room shuts down
 	return signaling.CreateSFUSession(r.ctx, r, client, r.sfu, &r.wg)
 }
@@ -100,7 +100,7 @@ func NewRoom(id types.RoomIDType, onEmptyCallback func(types.RoomIDType), busSer
 }
 
 // BuildRoomStateProto constructs the current state of the room as a protobuf message.
-func (r *Room) BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent {
+func (r *Room) BuildRoomStateProto(_ context.Context) *pb.RoomStateEvent {
 	var pbParticipants []*pb.ParticipantInfo
 	var pbWaitingUsers []*pb.ParticipantInfo
 

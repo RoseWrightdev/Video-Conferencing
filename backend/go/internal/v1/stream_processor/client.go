@@ -1,5 +1,5 @@
-// Package stream_processor provides the client for the Python Stream Processor service.
-package stream_processor
+// Package streamprocessor provides the client for the Python Stream Processor service.
+package streamprocessor
 
 import (
 	"context"

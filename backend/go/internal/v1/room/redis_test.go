@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestSubscribeToRedis_NoBus(t *testing.T) {
+func TestSubscribeToRedis_NoBus(_ *testing.T) {
 	r := NewRoom("test-room", nil, nil, nil)
 
 	// Should not panic
@@ -63,7 +63,7 @@ func TestHandleRedisMessage(t *testing.T) {
 	}, time.Second*1, time.Millisecond*10)
 }
 
-func TestHandleRedisMessage_EmptyPayload(t *testing.T) {
+func TestHandleRedisMessage_EmptyPayload(_ *testing.T) {
 	mockBus := &MockBusService{}
 	r := NewRoom("test-room", nil, mockBus, nil)
 
@@ -77,7 +77,7 @@ func TestHandleRedisMessage_EmptyPayload(t *testing.T) {
 	r.handleRedisMessage(payload)
 }
 
-func TestHandleRedisMessage_InvalidProto(t *testing.T) {
+func TestHandleRedisMessage_InvalidProto(_ *testing.T) {
 	mockBus := &MockBusService{}
 	r := NewRoom("test-room", nil, mockBus, nil)
 
@@ -91,7 +91,7 @@ func TestHandleRedisMessage_InvalidProto(t *testing.T) {
 	r.handleRedisMessage(payload)
 }
 
-func TestPublishToRedis_NoBus(t *testing.T) {
+func TestPublishToRedis_NoBus(_ *testing.T) {
 	ctx := context.Background()
 	r := NewRoom("test-room", nil, nil, nil)
 
@@ -127,7 +127,7 @@ func TestPublishToRedis_WithBus(t *testing.T) {
 	assert.Greater(t, mockBus.publishCalls, 0)
 }
 
-func TestPublishToRedis_Error(t *testing.T) {
+func TestPublishToRedis_Error(_ *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{failPublish: true}
 	r := NewRoom("test-room", nil, mockBus, nil)
@@ -145,7 +145,7 @@ func TestPublishToRedis_Error(t *testing.T) {
 	r.publishToRedis(ctx, msg)
 }
 
-func TestBroadcast_FullChannel(t *testing.T) {
+func TestBroadcast_FullChannel(_ *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
 	r := NewRoom("test-room", nil, mockBus, nil)
@@ -188,7 +188,7 @@ func TestAddChat_NilHistory(t *testing.T) {
 	assert.Equal(t, 1, r.chatHistory.Len())
 }
 
-func TestDeleteChat_NilHistory(t *testing.T) {
+func TestDeleteChat_NilHistory(_ *testing.T) {
 	r := NewRoom("test-room", nil, nil, nil)
 	r.chatHistory = nil
 
@@ -236,7 +236,7 @@ func TestDeleteChat_NotFound(t *testing.T) {
 	assert.Equal(t, 1, r.chatHistory.Len())
 }
 
-func TestDisconnectClient_NoDrawOrderElement(t *testing.T) {
+func TestDisconnectClient_NoDrawOrderElement(_ *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
 	r := NewRoom("test-room", nil, mockBus, nil)
