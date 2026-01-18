@@ -1,3 +1,4 @@
+// Package main is the entry point for the session service.
 package main
 
 import (
@@ -62,7 +63,8 @@ func main() {
 	cfg, err := config.ValidateEnv()
 	if err != nil {
 		logging.Error(ctx, "Environment validation failed", zap.Error(err))
-		os.Exit(1)
+		_ = logging.GetLogger().Sync()
+		os.Exit(1) //nolint:gocritic
 	}
 
 	// Get Auth0 configuration from validated config
@@ -133,20 +135,15 @@ func main() {
 	// --- Summary Service (Python) Initialization ---
 	// Hardcoded port 50052 as defined in summary-service/main.py
 	// In k8s, this would be a service DNS name
-	summaryAddr := "localhost:50052"
-	if os.Getenv("SUMMARY_SERVICE_ADDR") != "" {
-		summaryAddr = os.Getenv("SUMMARY_SERVICE_ADDR")
-	}
-
-	var summaryClient *summary.SummaryClient
+	// 4. Summary Service Client (gRPC)
+	var summaryClient *summary.Client
 	var errSummary error
-	// Attempt connection but don't block startup
-	summaryClient, errSummary = summary.NewSummaryClient(summaryAddr)
+	summaryClient, errSummary = summary.NewClient(cfg.SummaryServiceAddr)
 	if errSummary != nil {
 		logging.Error(ctx, "Failed to connect to Summary Service", zap.Error(errSummary))
 		// Continue running, handler will just error out
 	} else {
-		logging.Info(ctx, "✅ Connected to Summary Service", zap.String("addr", summaryAddr))
+		logging.Info(ctx, "✅ Connected to Summary Service", zap.String("addr", cfg.SummaryServiceAddr))
 		defer func() { _ = summaryClient.Close() }()
 	}
 
@@ -234,12 +231,11 @@ func main() {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Summary service unavailable"})
 				return
 			}
-			roomId := c.Param("roomId")
-
+			roomID := c.Param("roomId")
 			// Call the RPC
-			resp, err := summaryClient.Summarize(c.Request.Context(), roomId)
+			resp, err := summaryClient.Summarize(c.Request.Context(), roomID)
 			if err != nil {
-				logging.Error(ctx, "Summary request failed", zap.String("roomId", roomId), zap.Error(err))
+				logging.Error(ctx, "Summary request failed", zap.String("roomId", roomID), zap.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate summary", "details": err.Error()})
 				return
 			}
@@ -258,8 +254,9 @@ func main() {
 
 	// Start the server.
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: router,
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	// --- Graceful Shutdown ---

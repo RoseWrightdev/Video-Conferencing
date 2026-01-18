@@ -16,7 +16,7 @@ func TestNewRoom(t *testing.T) {
 	mockBus := &MockBusService{}
 	room := NewRoom("test-room", nil, mockBus, nil)
 
-	assert.Equal(t, types.RoomIdType("test-room"), room.ID)
+	assert.Equal(t, types.RoomIDType("test-room"), room.ID)
 	assert.NotNil(t, room.clients)
 	assert.NotNil(t, room.chatHistory)
 	assert.Equal(t, 100, room.maxChatHistoryLength)
@@ -101,7 +101,7 @@ func TestHandleClientDisconnect(t *testing.T) {
 	mockBus := &MockBusService{}
 
 	roomCleanupCalled := false
-	onEmptyCallback := func(roomId types.RoomIdType) {
+	onEmptyCallback := func(roomId types.RoomIDType) {
 		roomCleanupCalled = true
 	}
 

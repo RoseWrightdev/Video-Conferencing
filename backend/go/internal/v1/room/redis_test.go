@@ -178,7 +178,7 @@ func TestAddChat_NilHistory(t *testing.T) {
 	r.chatHistory = nil
 
 	chat := types.ChatInfo{
-		ChatId:      "chat1",
+		ChatID:      "chat1",
 		ChatContent: "Hello",
 	}
 
@@ -193,7 +193,7 @@ func TestDeleteChat_NilHistory(t *testing.T) {
 	r.chatHistory = nil
 
 	// Should not panic
-	r.deleteChat(types.DeleteChatPayload{ChatId: "nonexistent"})
+	r.deleteChat(types.DeleteChatPayload{ChatID: "nonexistent"})
 }
 
 func TestGetRecentChats_EmptyHistory(t *testing.T) {
@@ -209,7 +209,7 @@ func TestAddChat_NonChatInfoValue(t *testing.T) {
 
 	// Add a chat normally
 	r.addChat(types.ChatInfo{
-		ChatId:      "chat1",
+		ChatID:      "chat1",
 		ChatContent: "Hello",
 	})
 
@@ -225,12 +225,12 @@ func TestDeleteChat_NotFound(t *testing.T) {
 	r := NewRoom("test-room", nil, nil, nil)
 
 	r.addChat(types.ChatInfo{
-		ChatId:      "chat1",
+		ChatID:      "chat1",
 		ChatContent: "Hello",
 	})
 
 	// Try to delete non-existent chat
-	r.deleteChat(types.DeleteChatPayload{ChatId: "nonexistent"})
+	r.deleteChat(types.DeleteChatPayload{ChatID: "nonexistent"})
 
 	// Original chat should still be there
 	assert.Equal(t, 1, r.chatHistory.Len())

@@ -46,9 +46,9 @@ func TestChatInfoFromEvent(t *testing.T) {
 
 	info := chatInfoFromEvent(event)
 
-	assert.Equal(t, types.ClientIdType("user1"), info.ClientId)
+	assert.Equal(t, types.ClientIDType("user1"), info.ClientID)
 	assert.Equal(t, types.DisplayNameType("Alice"), info.DisplayName)
-	assert.Equal(t, types.ChatId("msg1"), info.ChatId)
+	assert.Equal(t, types.ChatID("msg1"), info.ChatID)
 	assert.Equal(t, types.Timestamp(123456789), info.Timestamp)
 	assert.Equal(t, types.ChatContent("Hello"), info.ChatContent)
 }

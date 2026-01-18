@@ -27,7 +27,7 @@ func (m *MockBusService) Publish(ctx context.Context, roomID string, event strin
 	return nil
 }
 
-func (m *MockBusService) PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error {
+func (m *MockBusService) PublishDirect(ctx context.Context, targetUserID string, event string, payload any, senderID string) error {
 	return nil
 }
 

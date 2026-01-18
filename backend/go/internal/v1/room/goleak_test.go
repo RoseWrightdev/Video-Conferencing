@@ -57,7 +57,7 @@ type BlockingSFU struct {
 	*MockSFUProvider
 }
 
-func (m *BlockingSFU) ListenEvents(ctx context.Context, uid string, roomID string) (pb.SfuService_ListenEventsClient, error) {
+func (m *BlockingSFU) ListenEvents(ctx context.Context, _ string, _ string) (pb.SfuService_ListenEventsClient, error) {
 	return &MockListenEventsClient{
 		RecvFunc: func() (*pb.SfuEvent, error) {
 			// Block forever to simulate an open stream

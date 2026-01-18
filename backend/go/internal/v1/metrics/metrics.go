@@ -1,3 +1,4 @@
+// Package metrics provides Prometheus instrumentation for the application.
 package metrics
 
 import (
@@ -122,10 +123,12 @@ var (
 	}, []string{"operation"})
 )
 
+// IncConnection increments the active connection counter.
 func IncConnection() {
 	ActiveWebSocketConnections.Inc()
 }
 
+// DecConnection decrements the active connection counter.
 func DecConnection() {
 	ActiveWebSocketConnections.Dec()
 }

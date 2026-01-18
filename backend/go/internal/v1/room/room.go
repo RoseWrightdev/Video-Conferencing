@@ -15,21 +15,22 @@ import (
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 )
 
+// Room represents a video conferencing room.
 type Room struct {
-	ID                   types.RoomIdType
+	ID                   types.RoomIDType
 	mu                   sync.RWMutex
 	chatHistory          *list.List
 	maxChatHistoryLength int
 
-	ownerID types.ClientIdType
+	ownerID types.ClientIDType
 
-	clients map[types.ClientIdType]types.ClientInterface
+	clients map[types.ClientIDType]types.ClientInterface
 
 	waitingDrawOrderStack *list.List
 	clientDrawOrderQueue  *list.List
 	handDrawOrderQueue    *list.List
 
-	onEmpty func(types.RoomIdType)
+	onEmpty func(types.RoomIDType)
 	bus     types.BusService
 	sfu     types.SFUProvider
 
@@ -38,19 +39,23 @@ type Room struct {
 	cancel context.CancelFunc
 }
 
-func (r *Room) GetID() types.RoomIdType {
+// GetID returns the room ID.
+func (r *Room) GetID() types.RoomIDType {
 	return r.ID
 }
 
+// CreateSFUSession initializes a new SFU session for a participant.
 func (r *Room) CreateSFUSession(ctx context.Context, client types.ClientInterface) error {
 	// Use r.ctx to ensure the SFU event listener (spawned inside) is cancelled when Room shuts down
 	return signaling.CreateSFUSession(r.ctx, r, client, r.sfu, &r.wg)
 }
 
+// HandleSFUSignal forwards a WebRTC signal to the SFU client.
 func (r *Room) HandleSFUSignal(ctx context.Context, client types.ClientInterface, signal *pb.SignalRequest) {
 	signaling.HandleSFUSignal(ctx, r, client, r.sfu, signal)
 }
 
+// Shutdown gracefully closes the room and disconnects all clients.
 func (r *Room) Shutdown(ctx context.Context) error {
 	r.cancel()
 
@@ -68,13 +73,14 @@ func (r *Room) Shutdown(ctx context.Context) error {
 	}
 }
 
-func NewRoom(id types.RoomIdType, onEmptyCallback func(types.RoomIdType), busService types.BusService, sfuClient types.SFUProvider) *Room {
+// NewRoom creates a new Room instance with the given ID and dependencies.
+func NewRoom(id types.RoomIDType, onEmptyCallback func(types.RoomIDType), busService types.BusService, sfuClient types.SFUProvider) *Room {
 	room := &Room{
 		ID:                   id,
 		chatHistory:          list.New(),
 		maxChatHistoryLength: 100,
 
-		clients: make(map[types.ClientIdType]types.ClientInterface),
+		clients: make(map[types.ClientIDType]types.ClientInterface),
 
 		waitingDrawOrderStack: list.New(),
 		clientDrawOrderQueue:  list.New(),
@@ -93,6 +99,7 @@ func NewRoom(id types.RoomIdType, onEmptyCallback func(types.RoomIdType), busSer
 	return room
 }
 
+// BuildRoomStateProto constructs the current state of the room as a protobuf message.
 func (r *Room) BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent {
 	var pbParticipants []*pb.ParticipantInfo
 	var pbWaitingUsers []*pb.ParticipantInfo
@@ -125,47 +132,55 @@ func (r *Room) BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent {
 	}
 }
 
-func (r *Room) GetOwnerID() types.ClientIdType {
+// GetOwnerID returns the ID of the room owner.
+func (r *Room) GetOwnerID() types.ClientIDType {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.ownerID
 }
 
-func (r *Room) IsParticipant(id types.ClientIdType) bool {
+// IsParticipant checks if the given user ID is a participant in the room.
+func (r *Room) IsParticipant(id types.ClientIDType) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	_, exists := r.clients[id]
 	return exists
 }
 
+// AddHost adds a client as a host to the room.
 func (r *Room) AddHost(ctx context.Context, client types.ClientInterface) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.addHostLocked(ctx, client)
 }
 
+// AddParticipant adds a client as a participant to the room.
 func (r *Room) AddParticipant(ctx context.Context, client types.ClientInterface) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.addParticipantLocked(ctx, client)
 }
 
+// AddWaiting adds a client to the waiting room.
 func (r *Room) AddWaiting(client types.ClientInterface) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.addWaitingLocked(client)
 }
 
+// DisconnectClient removes a client from the room and handles cleanup.
 func (r *Room) DisconnectClient(ctx context.Context, client types.ClientInterface) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.disconnectClientLocked(ctx, client)
 }
 
+// AddChat adds a chat message to the room's history.
 func (r *Room) AddChat(chat types.ChatInfo) {
 	r.addChat(chat)
 }
 
+// GetRecentChats retrieves the recent chat history of the room.
 func (r *Room) GetRecentChats() []types.ChatInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -199,12 +214,14 @@ func (r *Room) hasHostLocked() bool {
 	return false
 }
 
+// HasHost checks if there is at least one host in the room.
 func (r *Room) HasHost() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.hasHostLocked()
 }
 
+// CloseRoom closes the room and disconnects all clients with a reason.
 func (r *Room) CloseRoom(reason string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -227,6 +244,7 @@ func (r *Room) closeRoomLocked(reason string) {
 	}
 }
 
+// HandleClientConnect handles a new client connection logic.
 func (r *Room) HandleClientConnect(client types.ClientInterface) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -291,6 +309,7 @@ func (r *Room) HandleClientConnect(client types.ClientInterface) {
 	r.broadcastRoomStateLocked(context.Background())
 }
 
+// HandleClientDisconnect handles logic when a client disconnects.
 func (r *Room) HandleClientDisconnect(client types.ClientInterface) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -459,6 +478,7 @@ func (r *Room) broadcastRoomStateLocked(ctx context.Context) {
 	}
 }
 
+// BroadcastRoomState sends the full room state to all clients.
 func (r *Room) BroadcastRoomState(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

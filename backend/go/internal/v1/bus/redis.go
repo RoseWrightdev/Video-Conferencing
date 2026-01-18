@@ -1,3 +1,4 @@
+// Package bus provides the distributed message bus implementation using Redis.
 package bus
 
 import (
@@ -63,7 +64,7 @@ func NewService(addr, password string) (*Service, error) {
 		MaxRequests: 5,
 		Interval:    1 * time.Minute,
 		Timeout:     15 * time.Second,
-		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+		OnStateChange: func(_ string, from gobreaker.State, to gobreaker.State) {
 			var stateVal float64
 			switch to {
 			case gobreaker.StateClosed:
@@ -132,7 +133,7 @@ func (s *Service) Publish(ctx context.Context, roomID string, event string, payl
 }
 
 // PublishDirect sends a message directly to a specific user via Redis.
-func (s *Service) PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error {
+func (s *Service) PublishDirect(ctx context.Context, targetUserID string, event string, payload any, senderID string) error {
 	if s == nil || s.client == nil {
 		return nil // Single-instance mode, no Redis available
 	}
@@ -157,7 +158,7 @@ func (s *Service) PublishDirect(ctx context.Context, targetUserId string, event 
 		}
 
 		// Publish to the user-specific channel
-		channel := fmt.Sprintf("video:user:%s", targetUserId)
+		channel := fmt.Sprintf("video:user:%s", targetUserID)
 
 		return nil, s.client.Publish(ctx, channel, data).Err()
 	})
@@ -165,11 +166,11 @@ func (s *Service) PublishDirect(ctx context.Context, targetUserId string, event 
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			logging.Warn(context.Background(), "Redis Circuit Breaker Open: dropping direct message", zap.String("targetUserId", targetUserId))
+			logging.Warn(context.Background(), "Redis Circuit Breaker Open: dropping direct message", zap.String("targetUserId", targetUserID))
 			return nil // Graceful degradation
 		}
 		logging.Error(ctx, "Redis PublishDirect failed",
-			zap.String("targetUserId", targetUserId),
+			zap.String("targetUserId", targetUserID),
 			zap.String("senderID", senderID),
 			zap.String("event", event),
 			zap.Error(err),
@@ -177,7 +178,7 @@ func (s *Service) PublishDirect(ctx context.Context, targetUserId string, event 
 		return err
 	}
 
-	logging.GetLogger().Debug("Published direct message via Redis", zap.String("targetUserId", targetUserId), zap.String("senderID", senderID), zap.String("event", event))
+	logging.GetLogger().Debug("Published direct message via Redis", zap.String("targetUserId", targetUserID), zap.String("senderID", senderID), zap.String("event", event))
 	return nil
 }
 

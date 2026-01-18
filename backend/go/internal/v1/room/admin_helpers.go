@@ -18,11 +18,11 @@ func validateAdminPermission(clientRole types.RoleType) error {
 }
 
 // findTargetClient looks up a client by ID in the clients map.
-func findTargetClient(clients map[types.ClientIdType]types.ClientInterface, targetId types.ClientIdType) (types.ClientInterface, error) {
-	if client, ok := clients[targetId]; ok {
+func findTargetClient(clients map[types.ClientIDType]types.ClientInterface, targetID types.ClientIDType) (types.ClientInterface, error) {
+	if client, ok := clients[targetID]; ok {
 		return client, nil
 	}
-	return nil, fmt.Errorf("client not found: %s", targetId)
+	return nil, fmt.Errorf("client %s not found", targetID)
 }
 
 // shouldKickClient determines if a client can be kicked.
@@ -65,25 +65,24 @@ func buildRoomClosedMessage() *pb.WebSocketMessage {
 }
 
 // buildApprovalMessage creates the approval notification message for a waiting user.
-func buildApprovalMessage(userId string) *pb.WebSocketMessage {
+func buildApprovalMessage(userID string) *pb.WebSocketMessage {
 	return &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_JoinResponse{
 			JoinResponse: &pb.JoinResponse{
 				Success: true,
-				UserId:  userId,
-				IsHost:  false,
+				UserId:  userID,
 			},
 		},
 	}
 }
 
 // buildTransferOwnershipMessage creates the ownership transfer notification message.
-func buildTransferOwnershipMessage(newOwnerId string) *pb.WebSocketMessage {
+func buildTransferOwnershipMessage(newOwnerID string) *pb.WebSocketMessage {
 	return &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_AdminEvent{
 			AdminEvent: &pb.AdminActionEvent{
 				Action: "ownership_transferred",
-				Reason: newOwnerId,
+				Reason: newOwnerID,
 			},
 		},
 	}
@@ -93,10 +92,17 @@ func buildTransferOwnershipMessage(newOwnerId string) *pb.WebSocketMessage {
 type adminActionType string
 
 const (
-	AdminActionKick              adminActionType = "kick"
-	AdminActionApprove           adminActionType = "approve"
-	AdminActionMute              adminActionType = "mute"
-	AdminActionUnmute            adminActionType = "unmute"
+	// AdminActionKick represents the action to kick a user from the room.
+	AdminActionKick adminActionType = "kick"
+	// AdminActionMute represents the action to mute a user.
+	AdminActionMute adminActionType = "mute"
+	// AdminActionUnmute represents the action to unmute a user.
+	AdminActionUnmute adminActionType = "unmute"
+	// AdminActionApprove represents the action to approve a waiting user.
+	AdminActionApprove adminActionType = "approve"
+	// AdminActionReject represents the action to reject a waiting user.
+	AdminActionReject adminActionType = "reject"
+	// AdminActionTransferOwnership represents the action to transfer room ownership.
 	AdminActionTransferOwnership adminActionType = "transfer_ownership"
 )
 

@@ -1,3 +1,5 @@
+// Package transport contains transport layer tests and benchmarks.
+// Package transport contains transport layer tests and benchmarks.
 package transport
 
 import (
@@ -18,7 +20,7 @@ import (
 // --- Mocks ---
 
 type MockClient struct {
-	ID          types.ClientIdType
+	ID          types.ClientIDType
 	DisplayName types.DisplayNameType
 	Role        types.RoleType
 	SendCh      chan *pb.WebSocketMessage
@@ -27,23 +29,23 @@ type MockClient struct {
 
 func NewMockClient(id string) *MockClient {
 	return &MockClient{
-		ID:          types.ClientIdType(id),
+		ID:          types.ClientIDType(id),
 		DisplayName: types.DisplayNameType(id),
 		Role:        types.RoleTypeParticipant,
 		SendCh:      make(chan *pb.WebSocketMessage, 100), // Buffer to prevent blocking during bench
 	}
 }
 
-func (m *MockClient) GetID() types.ClientIdType             { return m.ID }
+func (m *MockClient) GetID() types.ClientIDType             { return m.ID }
 func (m *MockClient) GetDisplayName() types.DisplayNameType { return m.DisplayName }
 func (m *MockClient) GetRole() types.RoleType               { return m.Role }
 func (m *MockClient) SetRole(r types.RoleType)              { m.Role = r }
 func (m *MockClient) GetIsAudioEnabled() bool               { return true }
-func (m *MockClient) SetIsAudioEnabled(b bool)              {}
+func (m *MockClient) SetIsAudioEnabled(_ bool)              {}
 func (m *MockClient) GetIsVideoEnabled() bool               { return true }
-func (m *MockClient) SetIsVideoEnabled(b bool)              {}
+func (m *MockClient) SetIsVideoEnabled(_ bool)              {}
 func (m *MockClient) GetIsScreenSharing() bool              { return false }
-func (m *MockClient) SetIsScreenSharing(b bool)             {}
+func (m *MockClient) SetIsScreenSharing(_ bool)             {}
 func (m *MockClient) GetIsHandRaised() bool                 { return false }
 func (m *MockClient) SetIsHandRaised(b bool)                {}
 func (m *MockClient) Disconnect()                           { m.Closed = true }
@@ -65,7 +67,7 @@ func (m *MockClient) SendProto(msg *pb.WebSocketMessage) {
 }
 
 // SendRaw just pushes bytes (simulating network write)
-func (m *MockClient) SendRaw(data []byte) {
+func (m *MockClient) SendRaw(_ []byte) {
 	if m.Closed {
 		return
 	}
@@ -85,7 +87,7 @@ type MockBus struct{}
 func (m *MockBus) Publish(ctx context.Context, roomID string, event string, payload any, senderID string, roles []string) error {
 	return nil
 }
-func (m *MockBus) PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error {
+func (m *MockBus) PublishDirect(ctx context.Context, targetUserID string, event string, payload any, senderID string) error {
 	return nil
 }
 func (m *MockBus) Subscribe(ctx context.Context, roomID string, wg *sync.WaitGroup, handler func(bus.PubSubPayload)) {
@@ -109,7 +111,7 @@ func BenchmarkHub_GetOrCreateRoom(b *testing.B) {
 		for pb.Next() {
 			i++
 			// Access same room to stress mutex, or different to stress map
-			hub.getOrCreateRoom(types.RoomIdType("bench_room"))
+			hub.getOrCreateRoom(types.RoomIDType("bench_room"))
 		}
 	})
 }
@@ -117,7 +119,7 @@ func BenchmarkHub_GetOrCreateRoom(b *testing.B) {
 // 2. Room Connection Benchmark
 // Measures how fast we can add users to a room (Lock contention on Room)
 func BenchmarkRoom_HandleClientConnect(b *testing.B) {
-	r := room.NewRoom(types.RoomIdType("bench_room"), nil, nil, nil)
+	r := room.NewRoom(types.RoomIDType("bench_room"), nil, nil, nil)
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -137,7 +139,7 @@ func BenchmarkRoom_Broadcast(b *testing.B) {
 
 	for _, count := range counts {
 		b.Run(fmt.Sprintf("clients=%d", count), func(b *testing.B) {
-			r := room.NewRoom(types.RoomIdType("bench_room"), nil, nil, nil)
+			r := room.NewRoom(types.RoomIDType("bench_room"), nil, nil, nil)
 
 			// Pre-fill room
 			for i := 0; i < count; i++ {

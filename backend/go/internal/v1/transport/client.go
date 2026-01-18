@@ -28,7 +28,7 @@ type wsConnection interface {
 type Client struct {
 	conn        wsConnection          // WebSocket connection for real-time communication
 	room        types.Roomer          // Room interface for business logic operations
-	ID          types.ClientIdType    // Unique identifier from JWT token
+	ID          types.ClientIDType    // Unique identifier from JWT token
 	DisplayName types.DisplayNameType // Human-readable name for UI display
 	Role        types.RoleType        // Current permission level in the room
 
@@ -49,14 +49,17 @@ type Client struct {
 
 // --- types.ClientInterface setters and getters ---
 
-func (c *Client) GetID() types.ClientIdType {
+// GetID returns the client ID.
+func (c *Client) GetID() types.ClientIDType {
 	return c.ID
 }
 
+// GetDisplayName returns the client's display name.
 func (c *Client) GetDisplayName() types.DisplayNameType {
 	return c.DisplayName
 }
 
+// GetRole returns the client's role safely.
 // Thread-safe reader
 func (c *Client) GetRole() types.RoleType {
 	c.mu.RLock()
@@ -64,6 +67,7 @@ func (c *Client) GetRole() types.RoleType {
 	return c.Role
 }
 
+// SetRole sets the client's role safely.
 // Thread-safe writer
 func (c *Client) SetRole(role types.RoleType) {
 	c.mu.Lock()
@@ -71,54 +75,63 @@ func (c *Client) SetRole(role types.RoleType) {
 	c.Role = role
 }
 
+// GetIsAudioEnabled returns if audio is enabled.
 func (c *Client) GetIsAudioEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.IsAudioEnabled
 }
 
+// SetIsAudioEnabled updates the audio enabled state.
 func (c *Client) SetIsAudioEnabled(enabled bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.IsAudioEnabled = enabled
 }
 
+// GetIsVideoEnabled returns if video is enabled.
 func (c *Client) GetIsVideoEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.IsVideoEnabled
 }
 
+// SetIsVideoEnabled updates the video enabled state.
 func (c *Client) SetIsVideoEnabled(enabled bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.IsVideoEnabled = enabled
 }
 
+// GetIsScreenSharing returns if screen sharing is active.
 func (c *Client) GetIsScreenSharing() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.IsScreenSharing
 }
 
+// SetIsScreenSharing updates the screen sharing state.
 func (c *Client) SetIsScreenSharing(enabled bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.IsScreenSharing = enabled
 }
 
+// GetIsHandRaised returns if the hand is raised.
 func (c *Client) GetIsHandRaised() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.IsHandRaised
 }
 
+// SetIsHandRaised updates the hand raised state.
 func (c *Client) SetIsHandRaised(enabled bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.IsHandRaised = enabled
 }
 
+// Disconnect closes the client connection.
 func (c *Client) Disconnect() {
 	c.mu.Lock()
 	if c.closed {

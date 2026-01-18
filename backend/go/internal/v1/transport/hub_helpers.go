@@ -103,8 +103,8 @@ func (h *Hub) authenticateUser(token string) (*auth.CustomClaims, error) {
 
 // clientSetupParams holds parameters for setting up a client connection
 type clientSetupParams struct {
-	RoomID   types.RoomIdType
-	UserID   types.ClientIdType
+	RoomID   types.RoomIDType
+	UserID   types.ClientIDType
 	Username string // From query param
 	Claims   *auth.CustomClaims
 	DevMode  bool
@@ -143,7 +143,7 @@ func (h *Hub) setupClientConnection(params *clientSetupParams) (*Client, *room.R
 
 	// In Dev Mode, override ID to be unique based on username if provided.
 	if params.DevMode && params.Username != "" {
-		client.ID = types.ClientIdType(params.Username)
+		client.ID = types.ClientIDType(params.Username)
 		logging.Info(context.Background(), "Dev Mode: Overriding ClientID to username for uniqueness", zap.String("newID", string(client.ID)))
 	}
 

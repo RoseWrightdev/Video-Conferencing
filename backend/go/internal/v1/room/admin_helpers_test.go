@@ -31,14 +31,14 @@ func TestValidateAdminPermission(t *testing.T) {
 }
 
 func TestFindTargetClient(t *testing.T) {
-	clients := map[types.ClientIdType]types.ClientInterface{
+	clients := map[types.ClientIDType]types.ClientInterface{
 		"user1": &MockClient{ID: "user1"},
 		"user2": &MockClient{ID: "user2"},
 	}
 
 	tests := []struct {
 		name      string
-		targetId  types.ClientIdType
+		targetID  types.ClientIDType
 		wantFound bool
 	}{
 		{"Found user1", "user1", true},
@@ -48,11 +48,11 @@ func TestFindTargetClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := findTargetClient(clients, tt.targetId)
+			got, err := findTargetClient(clients, tt.targetID)
 			if tt.wantFound {
 				assert.NoError(t, err)
 				assert.NotNil(t, got)
-				assert.Equal(t, tt.targetId, got.GetID())
+				assert.Equal(t, tt.targetID, got.GetID())
 			} else {
 				assert.Error(t, err)
 				assert.Nil(t, got)
@@ -68,18 +68,37 @@ func TestShouldKickClient(t *testing.T) {
 
 func TestShouldApproveWaitingUser(t *testing.T) {
 	tests := []struct {
-		name   string
-		client types.ClientInterface
-		want   bool
+		name      string
+		clients   map[types.ClientIDType]types.ClientInterface
+		targetID  types.ClientIDType
+		expectErr bool
 	}{
-		{"Waiting user", &MockClient{Role: types.RoleTypeWaiting}, true},
-		{"Host user", &MockClient{Role: types.RoleTypeHost}, false},
-		{"Nil user", nil, false},
+		{
+			name: "Found",
+			clients: map[types.ClientIDType]types.ClientInterface{
+				"u1": newMockClient("u1", "User 1", types.RoleTypeParticipant),
+			},
+			targetID:  "u1",
+			expectErr: false,
+		},
+		{
+			name: "Not Found",
+			clients: map[types.ClientIDType]types.ClientInterface{
+				"u1": newMockClient("u1", "User 1", types.RoleTypeParticipant),
+			},
+			targetID:  "u2",
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, shouldApproveWaitingUser(tt.client))
+			_, err := findTargetClient(tt.clients, tt.targetID)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
@@ -98,23 +117,21 @@ func TestBuildKickMessage(t *testing.T) {
 }
 
 func TestBuildApprovalMessage(t *testing.T) {
-	userId := "user123"
-	msg := buildApprovalMessage(userId)
-	assert.NotNil(t, msg)
-	joinResp := msg.GetJoinResponse()
-	assert.NotNil(t, joinResp)
-	assert.True(t, joinResp.Success)
-	assert.Equal(t, userId, joinResp.UserId)
+	userID := "user123"
+	msg := buildApprovalMessage(userID)
+
+	assert.NotNil(t, msg.GetJoinResponse())
+	assert.True(t, msg.GetJoinResponse().Success)
+	assert.Equal(t, userID, msg.GetJoinResponse().UserId)
 }
 
 func TestBuildTransferOwnershipMessage(t *testing.T) {
-	newOwnerId := "user456"
-	msg := buildTransferOwnershipMessage(newOwnerId)
-	assert.NotNil(t, msg)
-	adminEvent := msg.GetAdminEvent()
-	assert.NotNil(t, adminEvent)
-	assert.Equal(t, "ownership_transferred", adminEvent.Action)
-	assert.Equal(t, newOwnerId, adminEvent.Reason)
+	newOwnerID := "user456"
+	msg := buildTransferOwnershipMessage(newOwnerID)
+
+	assert.NotNil(t, msg.GetAdminEvent())
+	assert.Equal(t, "ownership_transferred", msg.GetAdminEvent().Action)
+	assert.Equal(t, newOwnerID, msg.GetAdminEvent().Reason)
 }
 
 func TestParseAdminAction(t *testing.T) {

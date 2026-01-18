@@ -29,10 +29,10 @@ func shouldStoreChatInHistory(event *pb.ChatEvent) bool {
 func chatInfoFromEvent(event *pb.ChatEvent) types.ChatInfo {
 	return types.ChatInfo{
 		ClientInfo: types.ClientInfo{
-			ClientId:    types.ClientIdType(event.SenderId),
+			ClientID:    types.ClientIDType(event.SenderId),
 			DisplayName: types.DisplayNameType(event.SenderName),
 		},
-		ChatId:      types.ChatId(event.Id),
+		ChatID:      types.ChatID(event.Id),
 		Timestamp:   types.Timestamp(event.Timestamp),
 		ChatContent: types.ChatContent(event.Content),
 	}

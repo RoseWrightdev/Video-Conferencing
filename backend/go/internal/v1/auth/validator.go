@@ -1,3 +1,4 @@
+// Package auth handles authentication and token validation.
 package auth
 
 import (
@@ -140,6 +141,7 @@ func (v *Validator) ValidateToken(tokenString string) (*CustomClaims, error) {
 	return claims, nil
 }
 
+// GetAllowedOriginsFromEnv parses the allowed origins from environment variable.
 func GetAllowedOriginsFromEnv(envVarName string, defaultEnvs []string) []string {
 	// Example: ALLOWED_ORIGINS="http://localhost:3000,https://your-app.com"
 	originsStr := os.Getenv(envVarName)
@@ -154,6 +156,7 @@ func GetAllowedOriginsFromEnv(envVarName string, defaultEnvs []string) []string 
 // MockValidator is a development-only token validator that accepts any token
 type MockValidator struct{}
 
+// ValidateToken is a mock implementation.
 func (m *MockValidator) ValidateToken(tokenString string) (*CustomClaims, error) {
 	// For development, parse the JWT token to extract the real 'sub' claim
 	// This ensures the clientId matches between frontend and backend

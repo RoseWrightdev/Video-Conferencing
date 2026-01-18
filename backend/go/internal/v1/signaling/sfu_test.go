@@ -217,7 +217,7 @@ func TestHandleSFUSignal_SdpOffer(t *testing.T) {
 	assert.Equal(t, 1, mockSFU.GetHandleSignalCalls())
 }
 
-func TestHandleSFUSignal_NoSFU(t *testing.T) {
+func TestHandleSFUSignal_NoSFU(_ *testing.T) {
 	ctx := context.Background()
 
 	room := &MockRoom{ID: "test-room"}

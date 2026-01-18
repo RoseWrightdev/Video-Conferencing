@@ -81,5 +81,5 @@ func TestHandleConnection(t *testing.T) {
 	// Should not panic, should setup client and room
 	hub.HandleConnection(c, conn, claims)
 
-	assert.Contains(t, hub.rooms, types.RoomIdType("room1"))
+	assert.Contains(t, hub.rooms, types.RoomIDType("room1"))
 }

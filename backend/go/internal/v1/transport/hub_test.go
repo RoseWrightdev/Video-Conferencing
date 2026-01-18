@@ -17,7 +17,7 @@ type MockTokenValidator struct {
 	shouldFail bool
 }
 
-func (m *MockTokenValidator) ValidateToken(tokenString string) (*auth.CustomClaims, error) {
+func (m *MockTokenValidator) ValidateToken(_ string) (*auth.CustomClaims, error) {
 	if m.shouldFail {
 		return nil, assert.AnError
 	}
@@ -32,7 +32,7 @@ func (m *MockTokenValidator) ValidateToken(tokenString string) (*auth.CustomClai
 
 // Simple mock client for hub tests
 type hubMockClient struct {
-	id          types.ClientIdType
+	id          types.ClientIDType
 	displayName types.DisplayNameType
 	role        types.RoleType
 	audio       bool
@@ -42,11 +42,11 @@ type hubMockClient struct {
 	disconnect  bool
 }
 
-func (m *hubMockClient) GetID() types.ClientIdType             { return m.id }
+func (m *hubMockClient) GetID() types.ClientIDType             { return m.id }
 func (m *hubMockClient) GetDisplayName() types.DisplayNameType { return m.displayName }
 func (m *hubMockClient) GetRole() types.RoleType               { return m.role }
 func (m *hubMockClient) SetRole(r types.RoleType)              { m.role = r }
-func (m *hubMockClient) SendProto(msg *pb.WebSocketMessage)    {}
+func (m *hubMockClient) SendProto(_ *pb.WebSocketMessage)      {}
 func (m *hubMockClient) GetIsAudioEnabled() bool               { return m.audio }
 func (m *hubMockClient) SetIsAudioEnabled(enabled bool)        { m.audio = enabled }
 func (m *hubMockClient) GetIsVideoEnabled() bool               { return m.video }
@@ -56,7 +56,7 @@ func (m *hubMockClient) SetIsScreenSharing(enabled bool)       { m.sharing = ena
 func (m *hubMockClient) GetIsHandRaised() bool                 { return m.raised }
 func (m *hubMockClient) SetIsHandRaised(enabled bool)          { m.raised = enabled }
 func (m *hubMockClient) Disconnect()                           { m.disconnect = true }
-func (m *hubMockClient) SendRaw(data []byte)                   {}
+func (m *hubMockClient) SendRaw(_ []byte)                      {}
 
 func TestNewHub(t *testing.T) {
 	validator := &MockTokenValidator{}
@@ -77,7 +77,7 @@ func TestGetOrCreateRoom_NewRoom(t *testing.T) {
 	mockBus := &MockBusService{}
 	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
-	roomID := types.RoomIdType("new-room")
+	roomID := types.RoomIDType("new-room")
 	r := hub.getOrCreateRoom(roomID)
 
 	assert.NotNil(t, r)
@@ -91,7 +91,7 @@ func TestGetOrCreateRoom_ExistingRoom(t *testing.T) {
 	mockBus := &MockBusService{}
 	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
-	roomID := types.RoomIdType("existing-room")
+	roomID := types.RoomIDType("existing-room")
 
 	// Create room first time
 	room1 := hub.getOrCreateRoom(roomID)
@@ -109,7 +109,7 @@ func TestRemoveRoom(t *testing.T) {
 	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 	hub.cleanupGracePeriod = 100 * time.Millisecond
 
-	roomID := types.RoomIdType("test-room")
+	roomID := types.RoomIDType("test-room")
 	_ = hub.getOrCreateRoom(roomID)
 
 	// Room should exist
@@ -135,7 +135,7 @@ func TestRemoveRoom_CancelOnReconnect(t *testing.T) {
 	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 	hub.cleanupGracePeriod = 200 * time.Millisecond
 
-	roomID := types.RoomIdType("test-room")
+	roomID := types.RoomIDType("test-room")
 	r := hub.getOrCreateRoom(roomID)
 
 	// Trigger removal
@@ -164,7 +164,7 @@ func TestRemoveRoom_NonEmptyRoom(t *testing.T) {
 	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 	hub.cleanupGracePeriod = 100 * time.Millisecond
 
-	roomID := types.RoomIdType("test-room")
+	roomID := types.RoomIDType("test-room")
 	r := hub.getOrCreateRoom(roomID)
 
 	// Add a participant
@@ -188,11 +188,11 @@ func TestConcurrentRoomCreation(t *testing.T) {
 	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 
 	// Create multiple rooms concurrently
-	roomIDs := []types.RoomIdType{"room1", "room2", "room3", "room4", "room5"}
+	roomIDs := []types.RoomIDType{"room1", "room2", "room3", "room4", "room5"}
 
 	done := make(chan bool, len(roomIDs))
 	for _, id := range roomIDs {
-		go func(rID types.RoomIdType) {
+		go func(rID types.RoomIDType) {
 			r := hub.getOrCreateRoom(rID)
 			assert.NotNil(t, r)
 			done <- true
@@ -224,7 +224,7 @@ func TestMultipleCleanupTimers(t *testing.T) {
 	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
 	hub.cleanupGracePeriod = 200 * time.Millisecond
 
-	roomID := types.RoomIdType("test-room")
+	roomID := types.RoomIDType("test-room")
 	hub.getOrCreateRoom(roomID)
 
 	// Trigger removal multiple times

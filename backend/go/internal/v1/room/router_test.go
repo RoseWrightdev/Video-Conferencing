@@ -112,7 +112,11 @@ func TestRouter_AllBranches(t *testing.T) {
 		{
 			name: "DeleteChat",
 			msg: &pb.WebSocketMessage{
-				Payload: &pb.WebSocketMessage_DeleteChat{DeleteChat: &pb.DeleteChatRequest{ChatId: "123"}},
+				Payload: &pb.WebSocketMessage_DeleteChat{
+					DeleteChat: &pb.DeleteChatRequest{
+						ChatId: "chat-1",
+					},
+				},
 			},
 			verify: func(t *testing.T) {
 				// Just verify it doesn't crash

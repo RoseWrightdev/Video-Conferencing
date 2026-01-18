@@ -178,7 +178,7 @@ func TestSetupClientConnection_WithUsername(t *testing.T) {
 
 	assert.NotNil(t, client)
 	assert.NotNil(t, r)
-	assert.Equal(t, types.ClientIdType("user-123"), client.ID)
+	assert.Equal(t, types.ClientIDType("user-123"), client.ID)
 	assert.Equal(t, types.DisplayNameType("custom-username"), client.DisplayName)
 	assert.True(t, client.rateLimitEnabled)
 }
@@ -263,6 +263,6 @@ func TestSetupClientConnection_DevModeOverride(t *testing.T) {
 
 	assert.NotNil(t, client)
 	assert.NotNil(t, r)
-	assert.Equal(t, types.ClientIdType("unique-dev-username"), client.ID)
+	assert.Equal(t, types.ClientIDType("unique-dev-username"), client.ID)
 	assert.False(t, client.rateLimitEnabled)
 }

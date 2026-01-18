@@ -14,13 +14,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type SFUClient struct {
+// Client handles communication with the SFU service.
+type Client struct {
 	client pb.SfuServiceClient
 	conn   *grpc.ClientConn
 	cb     *gobreaker.CircuitBreaker
 }
 
-func NewSFUClient(address string) (*SFUClient, error) {
+// NewClient creates a new SFU client.
+func NewClient(address string) (*Client, error) {
 	// Connect to Rust (Data Plane)
 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -32,7 +34,7 @@ func NewSFUClient(address string) (*SFUClient, error) {
 		MaxRequests: 3,
 		Interval:    1 * time.Minute,
 		Timeout:     30 * time.Second,
-		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+		OnStateChange: func(_ string, _ gobreaker.State, to gobreaker.State) {
 			// Update Prometheus metrics
 			var stateVal float64
 			switch to {
@@ -47,7 +49,7 @@ func NewSFUClient(address string) (*SFUClient, error) {
 		},
 	}
 
-	return &SFUClient{
+	return &Client{
 		client: pb.NewSfuServiceClient(conn),
 		conn:   conn,
 		cb:     gobreaker.NewCircuitBreaker(st),
@@ -55,7 +57,7 @@ func NewSFUClient(address string) (*SFUClient, error) {
 }
 
 // CreateSession initializes a peer in the Rust SFU
-func (s *SFUClient) CreateSession(ctx context.Context, uid string, roomID string) (*pb.CreateSessionResponse, error) {
+func (s *Client) CreateSession(ctx context.Context, uid string, roomID string) (*pb.CreateSessionResponse, error) {
 	resp, err := s.cb.Execute(func() (interface{}, error) {
 		return s.client.CreateSession(ctx, &pb.CreateSessionRequest{
 			UserId: uid,
@@ -74,7 +76,7 @@ func (s *SFUClient) CreateSession(ctx context.Context, uid string, roomID string
 
 // HandleSignal forwards WebRTC messages (Answer/ICE) from the Frontend to Rust
 // Note: We added roomID here because SignalMessage requires it [cite: 85]
-func (s *SFUClient) HandleSignal(ctx context.Context, uid string, roomID string, signal *pb.SignalRequest) (*pb.SignalResponse, error) {
+func (s *Client) HandleSignal(ctx context.Context, uid string, roomID string, signal *pb.SignalRequest) (*pb.SignalResponse, error) {
 	resp, err := s.cb.Execute(func() (interface{}, error) {
 		// 1. Construct the gRPC Message
 		rpcReq := &pb.SignalMessage{
@@ -104,7 +106,7 @@ func (s *SFUClient) HandleSignal(ctx context.Context, uid string, roomID string,
 }
 
 // DeleteSession cleans up the user in Rust when they disconnect
-func (s *SFUClient) DeleteSession(ctx context.Context, uid string, roomID string) error {
+func (s *Client) DeleteSession(ctx context.Context, uid string, roomID string) error {
 	_, err := s.cb.Execute(func() (interface{}, error) {
 		return s.client.DeleteSession(ctx, &pb.DeleteSessionRequest{
 			UserId: uid,
@@ -122,7 +124,7 @@ func (s *SFUClient) DeleteSession(ctx context.Context, uid string, roomID string
 }
 
 // ListenEvents subscribes to asynchronous events from the SFU (TrackAdded, Renegotiation)
-func (s *SFUClient) ListenEvents(ctx context.Context, uid string, roomID string) (pb.SfuService_ListenEventsClient, error) {
+func (s *Client) ListenEvents(ctx context.Context, uid string, roomID string) (pb.SfuService_ListenEventsClient, error) {
 	// Streaming RPCs are trickier with Circuit Breakers.
 	// We only protect the initial connection attempt.
 	resp, err := s.cb.Execute(func() (interface{}, error) {
@@ -142,7 +144,7 @@ func (s *SFUClient) ListenEvents(ctx context.Context, uid string, roomID string)
 }
 
 // Close gracefully closes the gRPC connection to the SFU
-func (s *SFUClient) Close() error {
+func (s *Client) Close() error {
 	if s.conn != nil {
 		return s.conn.Close()
 	}

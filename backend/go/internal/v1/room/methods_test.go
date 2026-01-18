@@ -30,7 +30,7 @@ func TestAddParticipant(t *testing.T) {
 	assert.Greater(t, len(mockBus.setAddCalls), 0)
 }
 
-func TestAddParticipant_RedisError(t *testing.T) {
+func TestAddParticipant_RedisError(_ *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{failSetAdd: true}
 	room := NewRoom("test-room", nil, mockBus, nil)
@@ -169,10 +169,10 @@ func TestAddChat(t *testing.T) {
 
 	chat := types.ChatInfo{
 		ClientInfo: types.ClientInfo{
-			ClientId:    "user1",
+			ClientID:    "user1",
 			DisplayName: "Test User",
 		},
-		ChatId:      "chat1",
+		ChatID:      "chat1",
 		Timestamp:   123456,
 		ChatContent: "Hello World",
 	}
@@ -183,7 +183,7 @@ func TestAddChat(t *testing.T) {
 	// Verify chat is retrievable
 	chats := room.getRecentChats()
 	assert.Equal(t, 1, len(chats))
-	assert.Equal(t, chat.ChatId, chats[0].ChatId)
+	assert.Equal(t, chat.ChatID, chats[0].ChatID)
 }
 
 func TestGetRecentChats(t *testing.T) {
@@ -192,7 +192,7 @@ func TestGetRecentChats(t *testing.T) {
 	// Add multiple chats
 	for i := 0; i < 60; i++ {
 		chat := types.ChatInfo{
-			ChatId:      types.ChatId(fmt.Sprintf("chat%d", i)),
+			ChatID:      types.ChatID(fmt.Sprintf("chat%d", i)),
 			ChatContent: types.ChatContent("Message"),
 		}
 		room.addChat(chat)
@@ -207,14 +207,14 @@ func TestDeleteChat(t *testing.T) {
 	room := NewRoom("test-room", nil, nil, nil)
 
 	chat := types.ChatInfo{
-		ChatId:      "chat1",
+		ChatID:      "chat1",
 		ChatContent: "Hello",
 	}
 	room.addChat(chat)
 	assert.Equal(t, 1, room.chatHistory.Len())
 
 	// Delete the chat
-	room.deleteChat(types.DeleteChatPayload{ChatId: "chat1"})
+	room.deleteChat(types.DeleteChatPayload{ChatID: "chat1"})
 	assert.Equal(t, 0, room.chatHistory.Len())
 }
 
@@ -286,7 +286,7 @@ func TestChatHistoryLimit(t *testing.T) {
 	// Add more than the limit
 	for i := 0; i < 15; i++ {
 		chat := types.ChatInfo{
-			ChatId:      types.ChatId(fmt.Sprintf("chat%d", i)),
+			ChatID:      types.ChatID(fmt.Sprintf("chat%d", i)),
 			ChatContent: types.ChatContent("Message"),
 		}
 		room.addChat(chat)

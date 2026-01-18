@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// HandleToggleMedia processes a request to toggle audio or video.
 func (r *Room) HandleToggleMedia(ctx context.Context, client types.ClientInterface, req *pb.ToggleMediaRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -33,6 +34,7 @@ func (r *Room) HandleToggleMedia(ctx context.Context, client types.ClientInterfa
 	r.broadcastLocked(msg)
 }
 
+// HandleToggleHand processes a request to toggle a user's raised hand status.
 func (r *Room) HandleToggleHand(ctx context.Context, client types.ClientInterface, req *pb.ToggleHandRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -51,6 +53,7 @@ func (r *Room) HandleToggleHand(ctx context.Context, client types.ClientInterfac
 	r.broadcastLocked(msg)
 }
 
+// HandleChat processes a new chat message.
 func (r *Room) HandleChat(ctx context.Context, client types.ClientInterface, chatReq *pb.ChatRequest) {
 	// 1. Create the Event (business logic)
 	event := buildChatEvent(client, chatReq)
@@ -62,18 +65,13 @@ func (r *Room) HandleChat(ctx context.Context, client types.ClientInterface, cha
 
 	// 3. Broadcast (I/O glue)
 	msg := &pb.WebSocketMessage{
-		Payload: &pb.WebSocketMessage_ChatEvent{
-			ChatEvent: event,
-		},
+		Payload: &pb.WebSocketMessage_ChatEvent{ChatEvent: event},
 	}
 
-	if event.IsPrivate {
-		// todo (Optional logic for DM)
-	} else {
-		r.Broadcast(msg)
-	}
+	r.Broadcast(msg)
 }
 
+// HandleScreenShare processes a request to start or stop screen sharing.
 func (r *Room) HandleScreenShare(ctx context.Context, client types.ClientInterface, req *pb.ScreenShareRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -91,6 +89,7 @@ func (r *Room) HandleScreenShare(ctx context.Context, client types.ClientInterfa
 	r.broadcastLocked(msg)
 }
 
+// HandleGetRecentChats sends recent chat history to the requesting client.
 func (r *Room) HandleGetRecentChats(ctx context.Context, client types.ClientInterface) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -100,8 +99,8 @@ func (r *Room) HandleGetRecentChats(ctx context.Context, client types.ClientInte
 	var protoChats []*pb.ChatEvent
 	for _, msg := range internalChats {
 		protoChats = append(protoChats, &pb.ChatEvent{
-			Id:         string(msg.ChatId),
-			SenderId:   string(msg.ClientId),
+			Id:         string(msg.ChatID),
+			SenderId:   string(msg.ClientID),
 			SenderName: string(msg.DisplayName),
 			Content:    string(msg.ChatContent),
 			Timestamp:  int64(msg.Timestamp),
@@ -117,6 +116,7 @@ func (r *Room) HandleGetRecentChats(ctx context.Context, client types.ClientInte
 	})
 }
 
+// HandleDeleteChat handles a request to delete a chat message.
 // 3. Delete Chat Handler
 func (r *Room) HandleDeleteChat(ctx context.Context, client types.ClientInterface, req *pb.DeleteChatRequest) {
 	r.mu.Lock()
@@ -127,8 +127,12 @@ func (r *Room) HandleDeleteChat(ctx context.Context, client types.ClientInterfac
 		return
 	}
 
+	if req.ChatId == "" {
+		return
+	}
+
 	// Delete from memory
-	r.deleteChatLocked(types.ChatInfo{ChatId: types.ChatId(req.ChatId)})
+	r.deleteChatLocked(types.ChatInfo{ChatID: types.ChatID(req.ChatId)})
 
 	// Broadcast Deletion
 	r.broadcastLocked(&pb.WebSocketMessage{
@@ -140,6 +144,7 @@ func (r *Room) HandleDeleteChat(ctx context.Context, client types.ClientInterfac
 	})
 }
 
+// HandleRequestScreenSharePermission handles a request to ask for screen share permission.
 // 4. Request Screen Share Permission
 func (r *Room) HandleRequestScreenSharePermission(ctx context.Context, client types.ClientInterface) {
 	// Notify all Hosts that "User X wants to share"
@@ -172,14 +177,14 @@ func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterfa
 		return
 	}
 
-	targetId := types.ClientIdType(adminReq.TargetUserId)
+	targetID := types.ClientIDType(adminReq.TargetUserId)
 	action := parseAdminAction(adminReq.Action)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// Find target (business logic)
-	target, err := findTargetClient(r.clients, targetId)
+	target, err := findTargetClient(r.clients, targetID)
 	if err != nil && action != AdminActionKick {
 		// Kick doesn't error on missing target - just no-op
 		return

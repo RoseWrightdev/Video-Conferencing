@@ -1,3 +1,4 @@
+// Package middleware contains Gin middleware for the application.
 package middleware
 
 import (
@@ -6,8 +7,10 @@ import (
 	"github.com/google/uuid"
 )
 
+// HeaderXCorrelationID is the header key for the correlation ID.
 const HeaderXCorrelationID = "X-Correlation-ID"
 
+// CorrelationID adds a correlation ID to the request context.
 func CorrelationID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		correlationID := c.GetHeader(HeaderXCorrelationID)

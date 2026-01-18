@@ -23,7 +23,7 @@ type MockRoom struct {
 	lastMessage          *pb.WebSocketMessage
 }
 
-func (m *MockRoom) GetID() types.RoomIdType { return "test-room" }
+func (m *MockRoom) GetID() types.RoomIDType { return "test-room" }
 func (m *MockRoom) BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent {
 	return &pb.RoomStateEvent{}
 }
@@ -35,7 +35,7 @@ func (m *MockRoom) Router(ctx context.Context, client types.ClientInterface, msg
 	m.lastMessage = msg
 }
 
-func (m *MockRoom) HandleClientDisconnect(c types.ClientInterface) {
+func (m *MockRoom) HandleClientDisconnect(_ types.ClientInterface) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.disconnectCalls++
@@ -57,7 +57,7 @@ func (m *MockRoom) HandleSFUSignal(ctx context.Context, client types.ClientInter
 // Helper to create a client for testing
 func newTestClient(id string, name string, role types.RoleType) *Client {
 	return &Client{
-		ID:           types.ClientIdType(id),
+		ID:           types.ClientIDType(id),
 		DisplayName:  types.DisplayNameType(name),
 		Role:         role,
 		send:         make(chan []byte, 256),
@@ -179,7 +179,7 @@ func TestClientSendProto_ClosedClient(t *testing.T) {
 	}
 }
 
-func TestClientSendProto_ChannelFull(t *testing.T) {
+func TestClientSendProto_ChannelFull(_ *testing.T) {
 	// Create client with small buffer
 	client := &Client{
 		ID:          "user1",

@@ -1,3 +1,4 @@
+// Package types defines shared types and constants for the application.
 package types
 
 import (
@@ -16,11 +17,11 @@ import (
 // RoleType defines the different roles a client can have.
 type RoleType string
 
-// ClientIdType represents a unique identifier for a client connection.
-type ClientIdType string
+// ClientIDType represents a unique identifier for a client connection.
+type ClientIDType string
 
-// RoomIdType represents a unique identifier for a video conference room.
-type RoomIdType string
+// RoomIDType represents a unique identifier for a video conference room.
+type RoomIDType string
 
 // DisplayNameType represents the human-readable name for a client.
 type DisplayNameType string
@@ -34,22 +35,29 @@ const (
 	RoleTypeUnknown     RoleType = "unknown"     // Default/Unknown state
 )
 
+// ChatID represents the unique identifier for a chat message.
 // --- Internal Storage Types (Chat History) ---
-type ChatId string
+type ChatID string
+
+// ChatIndex represents the index of a chat message in history.
 type ChatIndex int
+
+// ChatContent represents the text content of a chat message.
 type ChatContent string
+
+// Timestamp represents a Unix timestamp in milliseconds.
 type Timestamp int64
 
 // ClientInfo is used internally to track user details.
 type ClientInfo struct {
-	ClientId    ClientIdType    `json:"clientId"`
+	ClientID    ClientIDType    `json:"clientId"`
 	DisplayName DisplayNameType `json:"displayName"`
 }
 
 // ChatInfo represents a chat message stored in the Room's history list.
 type ChatInfo struct {
 	ClientInfo
-	ChatId      ChatId      `json:"chatId"`
+	ChatID      ChatID      `json:"chatId"`
 	Timestamp   Timestamp   `json:"timestamp"`
 	ChatContent ChatContent `json:"chatContent"`
 }
@@ -62,15 +70,19 @@ func (c ChatInfo) ValidateChat() error {
 	if len(string(c.ChatContent)) > 1000 {
 		return errors.New("chat content cannot exceed 1000 characters")
 	}
-	if string(c.ClientId) == "" {
+	if string(c.ClientID) == "" {
 		return errors.New("client ID cannot be empty")
 	}
 	return nil
 }
 
-// Payload aliases
+// AddChatPayload is the payload for adding a chat message.
 type AddChatPayload = ChatInfo
+
+// DeleteChatPayload is the payload for deleting a chat message.
 type DeleteChatPayload = ChatInfo
+
+// GetRecentChatsPayload is the payload for retrieving recent chats.
 type GetRecentChatsPayload = ChatInfo
 
 // --- Shared Interfaces ---
@@ -83,7 +95,7 @@ type TokenValidator interface {
 // BusService defines the interface for distributed pub/sub messaging.
 type BusService interface {
 	Publish(ctx context.Context, roomID string, event string, payload any, senderID string, roles []string) error
-	PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error
+	PublishDirect(ctx context.Context, targetUserID string, event string, payload any, senderID string) error
 	Subscribe(ctx context.Context, roomID string, wg *sync.WaitGroup, handler func(bus.PubSubPayload))
 	Close() error
 	// Redis Set operations for distributed state management
@@ -103,7 +115,7 @@ type SFUProvider interface {
 // ClientInterface defines the behavior required from a WebSocket client.
 // This allows the room package to interact with clients without depending on the transport package.
 type ClientInterface interface {
-	GetID() ClientIdType
+	GetID() ClientIDType
 	GetDisplayName() DisplayNameType
 	GetRole() RoleType
 	SetRole(RoleType)
@@ -122,7 +134,7 @@ type ClientInterface interface {
 
 // Roomer defines the interface for room operations that a Client or Signaling layer needs.
 type Roomer interface {
-	GetID() RoomIdType
+	GetID() RoomIDType
 	BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent
 	Router(ctx context.Context, client ClientInterface, msg *pb.WebSocketMessage)
 	HandleClientDisconnect(c ClientInterface)

@@ -15,7 +15,7 @@ import (
 
 // MockClient implements ClientInterface for testing
 type MockClient struct {
-	ID              types.ClientIdType
+	ID              types.ClientIDType
 	DisplayName     types.DisplayNameType
 	Role            types.RoleType
 	IsAudioEnabled  bool
@@ -29,7 +29,7 @@ type MockClient struct {
 	mu              sync.Mutex
 }
 
-func (m *MockClient) GetID() types.ClientIdType             { return m.ID }
+func (m *MockClient) GetID() types.ClientIDType             { return m.ID }
 func (m *MockClient) GetDisplayName() types.DisplayNameType { return m.DisplayName }
 func (m *MockClient) GetRole() types.RoleType               { return m.Role }
 func (m *MockClient) SetRole(role types.RoleType)           { m.Role = role }
@@ -78,7 +78,7 @@ func (m *MockClient) Disconnect() { m.isDisconnected = true }
 
 func NewMockClient(id string, name string, role types.RoleType) *MockClient {
 	return &MockClient{
-		ID:          types.ClientIdType(id),
+		ID:          types.ClientIDType(id),
 		DisplayName: types.DisplayNameType(name),
 		Role:        role,
 		sendChan:    make(chan *pb.WebSocketMessage, 100),
@@ -137,7 +137,7 @@ func (m *MockBusService) Publish(ctx context.Context, roomID string, event strin
 	return nil
 }
 
-func (m *MockBusService) PublishDirect(ctx context.Context, targetUserId string, event string, payload any, senderID string) error {
+func (m *MockBusService) PublishDirect(ctx context.Context, targetUserID string, event string, payload any, senderID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return nil

@@ -1,3 +1,4 @@
+// Package logging provides structured logging with context and PII redaction.
 package logging
 
 import (
@@ -16,9 +17,11 @@ var (
 type contextKey string
 
 const (
+	// CorrelationIDKey is the context key for tracing requests.
 	CorrelationIDKey contextKey = "correlation_id"
-	UserIDKey        contextKey = "user_id"
-	RoomIDKey        contextKey = "room_id"
+	// UserIDKey is the context key for the user ID.
+	UserIDKey contextKey = "user_id"
+	RoomIDKey contextKey = "room_id"
 )
 
 // Initialize sets up the global logger based on the environment

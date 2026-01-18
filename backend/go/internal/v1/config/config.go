@@ -1,3 +1,4 @@
+// Package config provides configuration management for the application.
 package config
 
 import (
@@ -33,12 +34,15 @@ type Config struct {
 	AllowedOrigins  string
 
 	// Rate Limits
-	RateLimitApiGlobal   string
-	RateLimitApiPublic   string
-	RateLimitApiRooms    string
-	RateLimitApiMessages string
-	RateLimitWsIp        string
+	RateLimitAPIGlobal   string
+	RateLimitAPIPublic   string
+	RateLimitAPIRooms    string
+	RateLimitAPIMessages string
+	RateLimitWsIP        string
 	RateLimitWsUser      string
+
+	// Summary Service
+	SummaryServiceAddr string
 }
 
 // ValidateEnv validates all required environment variables and returns a Config object
@@ -107,12 +111,15 @@ func ValidateEnv() (*Config, error) {
 	cfg.DevelopmentMode = os.Getenv("DEVELOPMENT_MODE") == "true"
 	cfg.AllowedOrigins = os.Getenv("ALLOWED_ORIGINS")
 
+	// Optional: SUMMARY_SERVICE_ADDR (defaults to "localhost:50052")
+	cfg.SummaryServiceAddr = getEnvOrDefault("SUMMARY_SERVICE_ADDR", "localhost:50052")
+
 	// Rate Limits (Defaults: M = Minute, H = Hour)
-	cfg.RateLimitApiGlobal = getEnvOrDefault("RATE_LIMIT_API_GLOBAL", "1000-M")
-	cfg.RateLimitApiPublic = getEnvOrDefault("RATE_LIMIT_API_PUBLIC", "100-M")
-	cfg.RateLimitApiRooms = getEnvOrDefault("RATE_LIMIT_API_ROOMS", "100-M")
-	cfg.RateLimitApiMessages = getEnvOrDefault("RATE_LIMIT_API_MESSAGES", "500-M")
-	cfg.RateLimitWsIp = getEnvOrDefault("RATE_LIMIT_WS_IP", "100-M")
+	cfg.RateLimitAPIGlobal = getEnvOrDefault("RATE_LIMIT_API_GLOBAL", "1000-M")
+	cfg.RateLimitAPIPublic = getEnvOrDefault("RATE_LIMIT_API_PUBLIC", "100-M")
+	cfg.RateLimitAPIRooms = getEnvOrDefault("RATE_LIMIT_API_ROOMS", "100-M")
+	cfg.RateLimitAPIMessages = getEnvOrDefault("RATE_LIMIT_API_MESSAGES", "500-M")
+	cfg.RateLimitWsIP = getEnvOrDefault("RATE_LIMIT_WS_IP", "100-M")
 	cfg.RateLimitWsUser = getEnvOrDefault("RATE_LIMIT_WS_USER", "10-M")
 
 	// If there are validation errors, return them
@@ -154,12 +161,13 @@ func logValidatedConfig(cfg *Config) {
 		zap.String("jwt_secret", redactSecret(cfg.JWTSecret)),
 		zap.String("port", cfg.Port),
 		zap.String("rust_sfu_addr", cfg.RustSFUAddr),
+		zap.String("summary_service_addr", cfg.SummaryServiceAddr),
 		zap.Bool("redis_enabled", cfg.RedisEnabled),
 		zap.String("redis_addr", cfg.RedisAddr),
 		zap.String("go_env", cfg.GoEnv),
 		zap.String("log_level", cfg.LogLevel),
 		zap.Bool("development_mode", cfg.DevelopmentMode),
-		zap.String("rate_limit_api_global", cfg.RateLimitApiGlobal),
+		zap.String("rate_limit_api_global", cfg.RateLimitAPIGlobal),
 	)
 }
 

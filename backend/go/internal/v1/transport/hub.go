@@ -22,10 +22,10 @@ import (
 
 // Hub serves as the central coordinator for all video conference rooms in the system.
 type Hub struct {
-	rooms               map[types.RoomIdType]*room.Room  // Registry of active rooms by room ID
+	rooms               map[types.RoomIDType]*room.Room  // Registry of active rooms by room ID
 	mu                  sync.Mutex                       // Protects concurrent access to rooms map
 	validator           types.TokenValidator             // JWT authentication service
-	pendingRoomCleanups map[types.RoomIdType]*time.Timer // Timers for delayed room cleanup
+	pendingRoomCleanups map[types.RoomIDType]*time.Timer // Timers for delayed room cleanup
 	bus                 types.BusService                 // Optional Redis pub/sub for cross-pod messaging
 	cleanupGracePeriod  time.Duration                    // Optional grace period for room deletion w/ no users
 	devMode             bool                             // Disable rate limiting in development mode
@@ -46,7 +46,7 @@ func getSFUClientFromEnv() types.SFUProvider {
 	}
 
 	logging.Info(context.Background(), "🔌 SFU Enabled. Connecting...", zap.String("addr", sfuAddr))
-	sfuClient, err := sfu.NewSFUClient(sfuAddr)
+	sfuClient, err := sfu.NewClient(sfuAddr)
 	if err != nil {
 		logging.Error(context.Background(), "SFU Connection Failed", zap.Error(err))
 		panic(err)
@@ -63,9 +63,9 @@ func NewHub(validator types.TokenValidator, bus types.BusService, devMode bool, 
 // NewHubWithSFU creates a new Hub with a specific SFU provider.
 func NewHubWithSFU(validator types.TokenValidator, bus types.BusService, devMode bool, sfu types.SFUProvider, rateLimiter *ratelimit.RateLimiter) *Hub {
 	return &Hub{
-		rooms:               make(map[types.RoomIdType]*room.Room),
+		rooms:               make(map[types.RoomIDType]*room.Room),
 		validator:           validator,
-		pendingRoomCleanups: make(map[types.RoomIdType]*time.Timer),
+		pendingRoomCleanups: make(map[types.RoomIDType]*time.Timer),
 		bus:                 bus,
 		cleanupGracePeriod:  5 * time.Second,
 		devMode:             devMode,
@@ -113,12 +113,12 @@ func (h *Hub) ServeWs(c *gin.Context) {
 
 // HandleConnection takes an established WebSocket connection and sets up the client/room.
 func (h *Hub) HandleConnection(c *gin.Context, conn wsConnection, claims *auth.CustomClaims) {
-	roomIdStr := c.Param("roomId")
+	roomIDStr := c.Param("roomId")
 	username := c.Query("username")
 
 	client, r := h.setupClientConnection(&clientSetupParams{
-		RoomID:   types.RoomIdType(roomIdStr),
-		UserID:   types.ClientIdType(claims.Subject),
+		RoomID:   types.RoomIDType(roomIDStr),
+		UserID:   types.ClientIDType(claims.Subject),
 		Username: username,
 		Claims:   claims,
 		DevMode:  h.devMode,
@@ -137,7 +137,7 @@ func (h *Hub) HandleConnection(c *gin.Context, conn wsConnection, claims *auth.C
 }
 
 // removeRoom is a private method for the Hub to clean up empty rooms.
-func (h *Hub) removeRoom(roomID types.RoomIdType) {
+func (h *Hub) removeRoom(roomID types.RoomIDType) {
 	h.mu.Lock()
 
 	// Cancel any existing cleanup timer for this room
@@ -181,7 +181,7 @@ func (h *Hub) removeRoom(roomID types.RoomIdType) {
 }
 
 // getOrCreateRoom retrieves the Room associated with the given RoomId from the Hub.
-func (h *Hub) getOrCreateRoom(roomID types.RoomIdType) *room.Room {
+func (h *Hub) getOrCreateRoom(roomID types.RoomIDType) *room.Room {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

@@ -74,7 +74,7 @@ type MockSFUChecker struct {
 	status string
 }
 
-func (m *MockSFUChecker) Check(ctx context.Context, addr string) string {
+func (m *MockSFUChecker) Check(_ context.Context, _ string) string {
 	return m.status
 }
 

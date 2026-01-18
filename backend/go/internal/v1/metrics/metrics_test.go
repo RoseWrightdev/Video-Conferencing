@@ -7,6 +7,7 @@ import (
 )
 
 func TestMetricsRegistration(t *testing.T) {
+	// Reset registry for testing
 
 	t.Run("RedisOperationsTotal", func(t *testing.T) {
 		RedisOperationsTotal.WithLabelValues("get", "success").Inc()
@@ -18,7 +19,7 @@ func TestMetricsRegistration(t *testing.T) {
 		}
 	})
 
-	t.Run("RedisOperationDuration", func(t *testing.T) {
+	t.Run("RedisOperationDuration", func(_ *testing.T) {
 		RedisOperationDuration.WithLabelValues("get").Observe(0.1)
 		// verifying histogram is complex, but no-panic is the main goal here for registration
 	})

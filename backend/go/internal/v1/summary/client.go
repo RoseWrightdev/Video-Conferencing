@@ -1,3 +1,4 @@
+// Package summary provides a client for the Summary Service.
 package summary
 
 import (
@@ -10,14 +11,14 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// SummaryClient wraps the gRPC client for the Summary Service
-type SummaryClient struct {
+// Client wraps the gRPC client for the Summary Service
+type Client struct {
 	client pb.SummaryServiceClient
 	conn   *grpc.ClientConn
 }
 
-// NewSummaryClient creates a new client connection to the Summary Service
-func NewSummaryClient(addr string) (*SummaryClient, error) {
+// NewClient creates a new client connection to the Summary Service
+func NewClient(addr string) (*Client, error) {
 	// 1. Dial the service
 	// In production, use proper credentials/TLS
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -28,19 +29,19 @@ func NewSummaryClient(addr string) (*SummaryClient, error) {
 	// 2. Create the protobuf client
 	client := pb.NewSummaryServiceClient(conn)
 
-	return &SummaryClient{
+	return &Client{
 		client: client,
 		conn:   conn,
 	}, nil
 }
 
 // Close closes the underlying connection
-func (c *SummaryClient) Close() error {
+func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
 // Summarize requests a summary for the given room ID
-func (c *SummaryClient) Summarize(ctx context.Context, roomID string) (*pb.SummaryResponse, error) {
+func (c *Client) Summarize(ctx context.Context, roomID string) (*pb.SummaryResponse, error) {
 	req := &pb.SummaryRequest{
 		RoomId: roomID,
 	}

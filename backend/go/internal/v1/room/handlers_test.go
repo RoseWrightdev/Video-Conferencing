@@ -103,7 +103,7 @@ func TestHandleChat(t *testing.T) {
 	chats := r.GetRecentChats()
 	assert.Equal(t, 1, len(chats))
 	assert.Equal(t, "Hello everyone!", string(chats[0].ChatContent))
-	assert.Equal(t, participant.GetID(), chats[0].ClientId)
+	assert.Equal(t, participant.GetID(), chats[0].ClientID)
 
 	// Both clients should receive the broadcast
 	time.Sleep(100 * time.Millisecond)
@@ -146,10 +146,10 @@ func TestHandleGetRecentChats(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		chat := types.ChatInfo{
 			ClientInfo: types.ClientInfo{
-				ClientId:    client.GetID(),
+				ClientID:    client.GetID(),
 				DisplayName: client.GetDisplayName(),
 			},
-			ChatId:      types.ChatId("chat" + string(rune(i))),
+			ChatID:      types.ChatID("chat" + string(rune(i))),
 			ChatContent: types.ChatContent("Message " + string(rune(i))),
 			Timestamp:   types.Timestamp(time.Now().UnixMilli()),
 		}
@@ -174,7 +174,7 @@ func TestHandleDeleteChat(t *testing.T) {
 
 	// Add a chat
 	chat := types.ChatInfo{
-		ChatId:      "chat1",
+		ChatID:      "chat1",
 		ChatContent: "To be deleted",
 	}
 	r.AddChat(chat)
@@ -199,7 +199,7 @@ func TestHandleDeleteChat_UnauthorizedUser(t *testing.T) {
 
 	// Add a chat
 	chat := types.ChatInfo{
-		ChatId:      "chat1",
+		ChatID:      "chat1",
 		ChatContent: "Should not be deleted",
 	}
 	r.AddChat(chat)

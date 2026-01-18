@@ -25,7 +25,7 @@ func (r *Room) addParticipantLocked(ctx context.Context, client types.ClientInte
 	r.clients[client.GetID()] = client
 
 	if r.bus != nil {
-		clientInfo := types.ClientInfo{ClientId: client.GetID(), DisplayName: client.GetDisplayName()}
+		clientInfo := types.ClientInfo{ClientID: client.GetID(), DisplayName: client.GetDisplayName()}
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:participants", r.ID)
 		if err := r.bus.SetAdd(ctx, key, string(data)); err != nil {
@@ -52,7 +52,7 @@ func (r *Room) deleteParticipantLocked(ctx context.Context, client types.ClientI
 	}
 
 	if r.bus != nil {
-		clientInfo := types.ClientInfo{ClientId: client.GetID(), DisplayName: client.GetDisplayName()}
+		clientInfo := types.ClientInfo{ClientID: client.GetID(), DisplayName: client.GetDisplayName()}
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:participants", r.ID)
 		if err := r.bus.SetRem(ctx, key, string(data)); err != nil {
@@ -75,7 +75,7 @@ func (r *Room) addHostLocked(ctx context.Context, client types.ClientInterface) 
 	r.clients[client.GetID()] = client
 
 	if r.bus != nil {
-		clientInfo := types.ClientInfo{ClientId: client.GetID(), DisplayName: client.GetDisplayName()}
+		clientInfo := types.ClientInfo{ClientID: client.GetID(), DisplayName: client.GetDisplayName()}
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:hosts", r.ID)
 		if err := r.bus.SetAdd(ctx, key, string(data)); err != nil {
@@ -101,7 +101,7 @@ func (r *Room) deleteHostLocked(ctx context.Context, client types.ClientInterfac
 	}
 
 	if r.bus != nil {
-		clientInfo := types.ClientInfo{ClientId: client.GetID(), DisplayName: client.GetDisplayName()}
+		clientInfo := types.ClientInfo{ClientID: client.GetID(), DisplayName: client.GetDisplayName()}
 		data, _ := json.Marshal(clientInfo)
 		key := fmt.Sprintf("room:%s:hosts", r.ID)
 		if err := r.bus.SetRem(ctx, key, string(data)); err != nil {
@@ -202,7 +202,7 @@ func (r *Room) deleteChatLocked(payload types.DeleteChatPayload) {
 	// Linear search to find and remove message
 	for e := r.chatHistory.Front(); e != nil; e = e.Next() {
 		if chatMsg, ok := e.Value.(types.ChatInfo); ok {
-			if chatMsg.ChatId == payload.ChatId {
+			if chatMsg.ChatID == payload.ChatID {
 				r.chatHistory.Remove(e)
 				return
 			}

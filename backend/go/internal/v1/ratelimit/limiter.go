@@ -1,3 +1,4 @@
+// Package ratelimit implements rate limiting logic using Redis or local memory.
 package ratelimit
 
 import (
@@ -26,7 +27,7 @@ type RateLimiter struct {
 	apiPublic   *limiter.Limiter
 	apiRooms    *limiter.Limiter
 	apiMessages *limiter.Limiter
-	wsIp        *limiter.Limiter
+	wsIP        *limiter.Limiter
 	wsUser      *limiter.Limiter
 	store       limiter.Store
 	redisClient *redis.Client
@@ -35,27 +36,27 @@ type RateLimiter struct {
 // NewRateLimiter creates a new RateLimiter instance
 func NewRateLimiter(cfg *config.Config, redisClient *redis.Client) (*RateLimiter, error) {
 	// Parse rates
-	apiGlobalRate, err := limiter.NewRateFromFormatted(cfg.RateLimitApiGlobal)
+	apiGlobalRate, err := limiter.NewRateFromFormatted(cfg.RateLimitAPIGlobal)
 	if err != nil {
 		return nil, fmt.Errorf("invalid API global rate: %w", err)
 	}
 
-	apiPublicRate, err := limiter.NewRateFromFormatted(cfg.RateLimitApiPublic)
+	apiPublicRate, err := limiter.NewRateFromFormatted(cfg.RateLimitAPIPublic)
 	if err != nil {
 		return nil, fmt.Errorf("invalid API public rate: %w", err)
 	}
 
-	apiRoomsRate, err := limiter.NewRateFromFormatted(cfg.RateLimitApiRooms)
+	apiRoomsRate, err := limiter.NewRateFromFormatted(cfg.RateLimitAPIRooms)
 	if err != nil {
 		return nil, fmt.Errorf("invalid API rooms rate: %w", err)
 	}
 
-	apiMessagesRate, err := limiter.NewRateFromFormatted(cfg.RateLimitApiMessages)
+	apiMessagesRate, err := limiter.NewRateFromFormatted(cfg.RateLimitAPIMessages)
 	if err != nil {
 		return nil, fmt.Errorf("invalid API messages rate: %w", err)
 	}
 
-	wsIpRate, err := limiter.NewRateFromFormatted(cfg.RateLimitWsIp)
+	wsIPRate, err := limiter.NewRateFromFormatted(cfg.RateLimitWsIP)
 	if err != nil {
 		return nil, fmt.Errorf("invalid WS IP rate: %w", err)
 	}
@@ -88,7 +89,7 @@ func NewRateLimiter(cfg *config.Config, redisClient *redis.Client) (*RateLimiter
 		apiPublic:   limiter.New(store, apiPublicRate),
 		apiRooms:    limiter.New(store, apiRoomsRate),
 		apiMessages: limiter.New(store, apiMessagesRate),
-		wsIp:        limiter.New(store, wsIpRate),
+		wsIP:        limiter.New(store, wsIPRate),
 		wsUser:      limiter.New(store, wsUserRate),
 		store:       store,
 		redisClient: redisClient,
@@ -264,7 +265,7 @@ func (rl *RateLimiter) CheckWebSocket(c *gin.Context) bool {
 
 	// 1. IP Limit
 	ip := c.ClientIP()
-	ipContext, err := rl.wsIp.Get(ctx, ip)
+	ipContext, err := rl.wsIP.Get(ctx, ip)
 	if err != nil {
 		logging.Error(ctx, "WS Rate limiter store failed (IP)", zap.Error(err))
 		return true // Fail open

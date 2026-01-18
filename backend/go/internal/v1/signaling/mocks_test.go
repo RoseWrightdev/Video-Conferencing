@@ -1,3 +1,4 @@
+// Package signaling provides signaling logic for the SFU.
 package signaling
 
 import (
@@ -14,29 +15,29 @@ import (
 
 // MockRoom implements types.Roomer for testing signaling logic
 type MockRoom struct {
-	ID types.RoomIdType
+	ID types.RoomIDType
 }
 
-func (m *MockRoom) GetID() types.RoomIdType {
+func (m *MockRoom) GetID() types.RoomIDType {
 	return m.ID
 }
 
-func (m *MockRoom) BuildRoomStateProto(ctx context.Context) *pb.RoomStateEvent {
+func (m *MockRoom) BuildRoomStateProto(_ context.Context) *pb.RoomStateEvent {
 	return &pb.RoomStateEvent{}
 }
 
-func (m *MockRoom) Router(ctx context.Context, client types.ClientInterface, msg *pb.WebSocketMessage) {
+func (m *MockRoom) Router(_ context.Context, _ types.ClientInterface, _ *pb.WebSocketMessage) {
 }
-func (m *MockRoom) HandleClientDisconnect(c types.ClientInterface) {}
-func (m *MockRoom) CreateSFUSession(ctx context.Context, client types.ClientInterface) error {
+func (m *MockRoom) HandleClientDisconnect(_ types.ClientInterface) {}
+func (m *MockRoom) CreateSFUSession(_ context.Context, _ types.ClientInterface) error {
 	return nil
 }
-func (m *MockRoom) HandleSFUSignal(ctx context.Context, client types.ClientInterface, signal *pb.SignalRequest) {
+func (m *MockRoom) HandleSFUSignal(_ context.Context, _ types.ClientInterface, _ *pb.SignalRequest) {
 }
 
 // MockClient implements types.ClientInterface for testing signaling logic
 type MockClient struct {
-	ID              types.ClientIdType
+	ID              types.ClientIDType
 	DisplayName     types.DisplayNameType
 	Role            types.RoleType
 	IsAudioEnabled  bool
@@ -47,7 +48,7 @@ type MockClient struct {
 	mu              sync.Mutex
 }
 
-func (m *MockClient) GetID() types.ClientIdType             { return m.ID }
+func (m *MockClient) GetID() types.ClientIDType             { return m.ID }
 func (m *MockClient) GetDisplayName() types.DisplayNameType { return m.DisplayName }
 func (m *MockClient) GetRole() types.RoleType               { return m.Role }
 func (m *MockClient) SetRole(role types.RoleType)           { m.Role = role }
@@ -93,7 +94,7 @@ func (m *MockClient) Disconnect() {
 
 func NewMockClient(id string, name string, role types.RoleType) *MockClient {
 	return &MockClient{
-		ID:          types.ClientIdType(id),
+		ID:          types.ClientIDType(id),
 		DisplayName: types.DisplayNameType(name),
 		Role:        role,
 	}
@@ -108,6 +109,7 @@ type MockSFUClient struct {
 	listenEventsCalls  int
 	shouldFailCreate   bool
 	shouldFailListen   bool
+	CreateSessionFunc  func(uid string, roomID string) (*pb.CreateSessionResponse, error)
 	mockEvents         chan *pb.SfuEvent
 }
 
@@ -117,17 +119,21 @@ func NewMockSFUClient() *MockSFUClient {
 	}
 }
 
-func (m *MockSFUClient) CreateSession(ctx context.Context, uid string, roomID string) (*pb.CreateSessionResponse, error) {
+func (m *MockSFUClient) CreateSession(_ context.Context, uid string, roomID string) (*pb.CreateSessionResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.createSessionCalls++
+
+	if m.CreateSessionFunc != nil {
+		return m.CreateSessionFunc(uid, roomID)
+	}
 	if m.shouldFailCreate {
 		return nil, fmt.Errorf("mock create session error")
 	}
-	return &pb.CreateSessionResponse{SdpOffer: "v=0\r\no=- 123 123 IN IP4 0.0.0.0\r\n"}, nil
+	return &pb.CreateSessionResponse{SdpOffer: "mock-sdp-offer"}, nil
 }
 
-func (m *MockSFUClient) HandleSignal(ctx context.Context, uid string, roomID string, signal *pb.SignalRequest) (*pb.SignalResponse, error) {
+func (m *MockSFUClient) HandleSignal(_ context.Context, uid string, roomID string, signal *pb.SignalRequest) (*pb.SignalResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.handleSignalCalls++

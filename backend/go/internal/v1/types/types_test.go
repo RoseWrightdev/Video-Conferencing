@@ -13,13 +13,13 @@ func TestRoleTypeConstants(t *testing.T) {
 	assert.Equal(t, RoleType("host"), RoleTypeHost)
 }
 
-func TestClientIdType(t *testing.T) {
-	id := ClientIdType("user-123")
+func TestClientIDType(t *testing.T) {
+	id := ClientIDType("user-123")
 	assert.Equal(t, "user-123", string(id))
 }
 
-func TestRoomIdType(t *testing.T) {
-	id := RoomIdType("room-456")
+func TestRoomIDType(t *testing.T) {
+	id := RoomIDType("room-456")
 	assert.Equal(t, "room-456", string(id))
 }
 
@@ -30,26 +30,26 @@ func TestDisplayNameType(t *testing.T) {
 
 func TestClientInfo(t *testing.T) {
 	info := ClientInfo{
-		ClientId:    "user-1",
+		ClientID:    "user-1",
 		DisplayName: "Test User",
 	}
 
-	assert.Equal(t, ClientIdType("user-1"), info.ClientId)
+	assert.Equal(t, ClientIDType("user-1"), info.ClientID)
 	assert.Equal(t, DisplayNameType("Test User"), info.DisplayName)
 }
 
 func TestChatInfo(t *testing.T) {
 	chat := ChatInfo{
 		ClientInfo: ClientInfo{
-			ClientId:    "user-1",
+			ClientID:    "user-1",
 			DisplayName: "Test User",
 		},
-		ChatId:      "chat-123",
+		ChatID:      "chat-123",
 		Timestamp:   1234567890,
 		ChatContent: "Hello, World!",
 	}
 
-	assert.Equal(t, ChatId("chat-123"), chat.ChatId)
+	assert.Equal(t, ChatID("chat-123"), chat.ChatID)
 	assert.Equal(t, Timestamp(1234567890), chat.Timestamp)
 	assert.Equal(t, ChatContent("Hello, World!"), chat.ChatContent)
 }
@@ -57,10 +57,10 @@ func TestChatInfo(t *testing.T) {
 func TestValidateChat_Valid(t *testing.T) {
 	chat := ChatInfo{
 		ClientInfo: ClientInfo{
-			ClientId:    "user-1",
+			ClientID:    "user-1",
 			DisplayName: "Test User",
 		},
-		ChatId:      "chat-123",
+		ChatID:      "chat-123",
 		ChatContent: "Valid message",
 	}
 
@@ -71,10 +71,10 @@ func TestValidateChat_Valid(t *testing.T) {
 func TestValidateChat_EmptyContent(t *testing.T) {
 	chat := ChatInfo{
 		ClientInfo: ClientInfo{
-			ClientId:    "user-1",
+			ClientID:    "user-1",
 			DisplayName: "Test User",
 		},
-		ChatId:      "chat-123",
+		ChatID:      "chat-123",
 		ChatContent: "",
 	}
 
@@ -92,10 +92,10 @@ func TestValidateChat_TooLong(t *testing.T) {
 
 	chat := ChatInfo{
 		ClientInfo: ClientInfo{
-			ClientId:    "user-1",
+			ClientID:    "user-1",
 			DisplayName: "Test User",
 		},
-		ChatId:      "chat-123",
+		ChatID:      "chat-123",
 		ChatContent: ChatContent(longContent),
 	}
 
@@ -104,13 +104,13 @@ func TestValidateChat_TooLong(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot exceed 1000 characters")
 }
 
-func TestValidateChat_EmptyClientId(t *testing.T) {
+func TestValidateChat_EmptyClientID(t *testing.T) {
 	chat := ChatInfo{
 		ClientInfo: ClientInfo{
-			ClientId:    "",
+			ClientID:    "",
 			DisplayName: "Test User",
 		},
-		ChatId:      "chat-123",
+		ChatID:      "chat-123",
 		ChatContent: "Valid message",
 	}
 
@@ -128,10 +128,10 @@ func TestChatContent1000Chars(t *testing.T) {
 
 	chat := ChatInfo{
 		ClientInfo: ClientInfo{
-			ClientId:    "user-1",
+			ClientID:    "user-1",
 			DisplayName: "Test User",
 		},
-		ChatId:      "chat-123",
+		ChatID:      "chat-123",
 		ChatContent: ChatContent(content),
 	}
 
@@ -142,23 +142,23 @@ func TestChatContent1000Chars(t *testing.T) {
 func TestTypeAliases(t *testing.T) {
 	// Test that payload aliases are correctly defined
 	var addChat = ChatInfo{
-		ChatId:      "chat-1",
+		ChatID:      "chat-1",
 		ChatContent: "Test",
 	}
-	assert.Equal(t, ChatId("chat-1"), addChat.ChatId)
+	assert.Equal(t, ChatID("chat-1"), addChat.ChatID)
 	assert.Equal(t, ChatContent("Test"), addChat.ChatContent)
 
 	var deleteChat = ChatInfo{
-		ChatId: "chat-2",
+		ChatID: "chat-2",
 	}
-	assert.Equal(t, ChatId("chat-2"), deleteChat.ChatId)
+	assert.Equal(t, ChatID("chat-2"), deleteChat.ChatID)
 
 	var getRecent = ChatInfo{}
 	assert.NotNil(t, getRecent)
 }
 
-func TestChatId(t *testing.T) {
-	id := ChatId("unique-chat-id")
+func TestChatID(t *testing.T) {
+	id := ChatID("unique-chat-id")
 	assert.Equal(t, "unique-chat-id", string(id))
 }
 
@@ -189,17 +189,17 @@ func TestRoleTypeComparison(t *testing.T) {
 
 func TestClientInfoEquality(t *testing.T) {
 	info1 := ClientInfo{
-		ClientId:    "user-1",
+		ClientID:    "user-1",
 		DisplayName: "User One",
 	}
 
 	info2 := ClientInfo{
-		ClientId:    "user-1",
+		ClientID:    "user-1",
 		DisplayName: "User One",
 	}
 
 	info3 := ClientInfo{
-		ClientId:    "user-2",
+		ClientID:    "user-2",
 		DisplayName: "User Two",
 	}
 
@@ -211,18 +211,18 @@ func TestChatInfoComplete(t *testing.T) {
 	// Test a complete chat info structure
 	chat := ChatInfo{
 		ClientInfo: ClientInfo{
-			ClientId:    "sender-123",
+			ClientID:    "sender-123",
 			DisplayName: "John Doe",
 		},
-		ChatId:      "msg-uuid-12345",
+		ChatID:      "msg-uuid-12345",
 		Timestamp:   1703347200000, // 2023-12-23 18:00:00
 		ChatContent: "This is a complete message with all fields populated.",
 	}
 
 	// Validate all fields
-	assert.Equal(t, ClientIdType("sender-123"), chat.ClientId)
+	assert.Equal(t, ClientIDType("sender-123"), chat.ClientID)
 	assert.Equal(t, DisplayNameType("John Doe"), chat.DisplayName)
-	assert.Equal(t, ChatId("msg-uuid-12345"), chat.ChatId)
+	assert.Equal(t, ChatID("msg-uuid-12345"), chat.ChatID)
 	assert.Equal(t, Timestamp(1703347200000), chat.Timestamp)
 	assert.Equal(t, ChatContent("This is a complete message with all fields populated."), chat.ChatContent)
 

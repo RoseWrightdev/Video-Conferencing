@@ -7,7 +7,7 @@ import (
 )
 
 // setupTestEnv sets up environment variables for testing
-func setupTestEnv(t *testing.T) func() {
+func setupTestEnv(_ *testing.T) func() {
 	// Save original env vars
 	origVars := map[string]string{
 		"JWT_SECRET":    os.Getenv("JWT_SECRET"),

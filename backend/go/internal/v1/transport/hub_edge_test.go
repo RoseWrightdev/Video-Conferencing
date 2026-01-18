@@ -14,11 +14,11 @@ import (
 
 func newMockRateLimiter() *ratelimit.RateLimiter {
 	cfg := &config.Config{
-		RateLimitApiGlobal:   "1000-M",
-		RateLimitApiPublic:   "100-M",
-		RateLimitApiRooms:    "100-M",
-		RateLimitApiMessages: "500-M",
-		RateLimitWsIp:        "100-M",
+		RateLimitAPIGlobal:   "1000-M",
+		RateLimitAPIPublic:   "100-M",
+		RateLimitAPIRooms:    "100-M",
+		RateLimitAPIMessages: "500-M",
+		RateLimitWsIP:        "100-M",
 		RateLimitWsUser:      "10-M",
 	}
 	rl, _ := ratelimit.NewRateLimiter(cfg, nil)
@@ -71,7 +71,7 @@ func TestHandleClientConnect_FirstUserBecomesOwner(t *testing.T) {
 	r.HandleClientConnect(client1)
 
 	// First user should become owner and host
-	assert.Equal(t, types.ClientIdType("user1"), r.GetOwnerID())
+	assert.Equal(t, types.ClientIDType("user1"), r.GetOwnerID())
 	assert.Equal(t, types.RoleTypeHost, client1.GetRole())
 	assert.True(t, r.IsParticipant(client1.GetID()))
 }
@@ -92,7 +92,7 @@ func TestHandleClientConnect_OwnerReconnects(t *testing.T) {
 	r.HandleClientConnect(client1Reconnect)
 
 	// Should still be owner and host
-	assert.Equal(t, types.ClientIdType("user1"), r.GetOwnerID())
+	assert.Equal(t, types.ClientIDType("user1"), r.GetOwnerID())
 	assert.Equal(t, types.RoleTypeHost, client1Reconnect.GetRole())
 }
 
@@ -134,7 +134,7 @@ func TestHandleClientConnect_DuplicateConnectionRemovesOld(t *testing.T) {
 	r.HandleClientConnect(client1Duplicate)
 
 	// New connection should be in room
-	assert.True(t, r.IsParticipant(types.ClientIdType("user1")))
+	assert.True(t, r.IsParticipant(types.ClientIDType("user1")))
 }
 
 func TestHandleClientConnect_SubsequentUserGoesToWaiting(t *testing.T) {
