@@ -43,10 +43,11 @@ func main() {
 	}
 
 	// Temporarily load config to check development mode for logger init
-	tempCfg, _ := config.ValidateEnv()
+	// We read the env var directly to avoid full config validation panic
+	devMode := os.Getenv("DEVELOPMENT_MODE") == "true"
 
 	// Initialize Logger
-	if err := logging.Initialize(tempCfg.DevelopmentMode); err != nil {
+	if err := logging.Initialize(devMode); err != nil {
 		fmt.Fprintf(os.Stderr, "FATAL: Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
@@ -173,6 +174,8 @@ func main() {
 	config.AllowOrigins = allowedOrigins
 	// Expose header so frontend can read it
 	config.ExposeHeaders = []string{middleware.HeaderXCorrelationID}
+	// Allow frontend to send these headers
+	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", middleware.HeaderXCorrelationID, "x-correlation-id"}
 	router.Use(cors.New(config))
 
 	// Rate Limiting

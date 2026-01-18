@@ -1,0 +1,189 @@
+
+
+services:
+  # ------------------------------------------------------------------
+  # Database & Cache
+  # ------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_local:/data
+    networks:
+      - dev-net
+
+  # ------------------------------------------------------------------
+  # Backend (Go)
+  # ------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend/go
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=${PORT}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - REDIS_ENABLED=${REDIS_ENABLED}
+      - REDIS_ADDR=${REDIS_ADDR}
+      - RUST_SFU_ADDR=${RUST_SFU_ADDR}
+      - RUST_SFU_HEALTH_CHECK_ENABLED=${RUST_SFU_HEALTH_CHECK_ENABLED}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - GO_ENV=${GO_ENV}
+      - JWT_SECRET=${JWT_SECRET}
+      # Development Auth Configuration
+      - SKIP_AUTH=${SKIP_AUTH}
+      - DEVELOPMENT_MODE=${DEVELOPMENT_MODE}
+      # Values from frontend .env (optional if SKIP_AUTH=true but good to have)
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN}
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
+      # SFU Configuration (Required by transport/hub.go)
+      - ENABLE_SFU=${ENABLE_SFU}
+      - SFU_ADDR=${SFU_ADDR}
+    depends_on:
+      - redis
+      - rust-sfu
+    networks:
+      - dev-net
+
+  # ------------------------------------------------------------------
+  # SFU (Rust)
+  # ------------------------------------------------------------------
+  rust-sfu:
+    build:
+      context: .
+      dockerfile: backend/rust/sfu/Dockerfile
+    restart: unless-stopped
+    # For local dev, we can try to use bridge network if we expose UDP ports correctly,
+    # but host network is always safest for WebRTC. However, host network doesn't work well on Mac Docker Desktop.
+    # We will try to expose a range and use direct IP announcement if possible, or fallback to host networking if the user is on Linux.
+    # Since user is on Mac, we cannot use network_mode: host effectively for port mapping.
+    # We'll expose the signalling port and a small range of UDP ports.
+    ports:
+      - "50051:50051" # gRPC
+      - "3030:3030"   # Metrics
+      - "40000-40050:40000-40050/udp" # WebRTC Media
+    environment:
+      - RUST_LOG=${RUST_LOG}
+      - GRPC_PORT=${GRPC_PORT}
+      - HTTP_METRICS_PORT=${HTTP_METRICS_PORT}
+      # Development trick: use 0.0.0.0 or localhost? 
+      # On Mac, we might need the internal IP or just let it try to auto-discover.
+    networks:
+      - dev-net
+
+  # ------------------------------------------------------------------
+  # Stream Processor (Python)
+  # ------------------------------------------------------------------
+  stream-processor:
+    build:
+      context: ./backend/python/stream-processor
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED}
+    depends_on:
+      - redis
+    networks:
+      - dev-net
+
+  # ------------------------------------------------------------------
+  # Summary Service (Python)
+  # ------------------------------------------------------------------
+  summary-service:
+    build:
+      context: ./backend/python/summary-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED}
+    volumes:
+      - summary_models_local:/app/models
+    depends_on:
+      - redis
+    networks:
+      - dev-net
+
+  # ------------------------------------------------------------------
+  # Frontend (Next.js)
+  # ------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: dockerfile # Using the existing lowercase filename
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}
+      - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
+      - AUTH0_ISSUER=${AUTH0_ISSUER}
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+    networks:
+      - dev-net
+
+  # ------------------------------------------------------------------
+  # Observability Stack
+  # ------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./devops/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - dev-net
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+    volumes:
+      - ./devops/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - ./devops/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
+      - ./devops/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    networks:
+      - dev-net
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./devops/loki-config.yaml:/etc/loki/local-config.yaml
+    networks:
+      - dev-net
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ./devops/promtail-config.yaml:/etc/promtail/config.yaml
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yaml
+    networks:
+      - dev-net
+
+
+
+volumes:
+  redis_data_local:
+  summary_models_local:
+
+networks:
+  dev-net:
+    driver: bridge

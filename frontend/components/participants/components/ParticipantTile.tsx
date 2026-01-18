@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { MicOff, VideoOff, Hand, Monitor, Pin } from 'lucide-react';
+import { MicOff, Hand, Monitor, Pin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import type { Participant } from '@/store/types';
@@ -283,11 +283,6 @@ export default function ParticipantTile({
           </div>
 
           <div className="flex gap-1.5">
-            {!isVideoEnabled && (
-              <div className="w-6 h-6 rounded-full bg-red-500/90 flex items-center justify-center backdrop-blur-sm">
-                <VideoOff className="w-3 h-3 text-white" />
-              </div>
-            )}
             {!isAudioEnabled && (
               <div className="w-6 h-6 rounded-full bg-red-500/90 flex items-center justify-center backdrop-blur-sm">
                 <MicOff className="w-3 h-3 text-white" />
