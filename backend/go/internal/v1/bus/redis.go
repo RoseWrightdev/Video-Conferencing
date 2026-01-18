@@ -122,7 +122,7 @@ func (s *Service) Publish(ctx context.Context, roomID string, event string, payl
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			logging.Warn(context.Background(), "Redis Circuit Breaker Open: dropping publish", zap.String("roomID", roomID))
+			logging.Warn(ctx, "Redis Circuit Breaker Open: dropping publish", zap.String("roomID", roomID))
 			return nil // Graceful degradation: drop message, don't crash caller
 		}
 		logging.Error(ctx, "Redis Publish Failed", zap.String("roomID", roomID), zap.Error(err))
@@ -166,7 +166,7 @@ func (s *Service) PublishDirect(ctx context.Context, targetUserID string, event 
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			logging.Warn(context.Background(), "Redis Circuit Breaker Open: dropping direct message", zap.String("targetUserId", targetUserID))
+			logging.Warn(ctx, "Redis Circuit Breaker Open: dropping direct message", zap.String("targetUserId", targetUserID))
 			return nil // Graceful degradation
 		}
 		logging.Error(ctx, "Redis PublishDirect failed",
@@ -278,7 +278,7 @@ func (s *Service) SetAdd(ctx context.Context, key string, member string) error {
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			logging.Warn(context.Background(), "Redis Circuit Breaker Open: skipping SetAdd", zap.String("key", key))
+			logging.Warn(ctx, "Redis Circuit Breaker Open: skipping SetAdd", zap.String("key", key))
 			return nil // Graceful degradation
 		}
 		logging.Error(ctx, "Redis SetAdd failed", zap.String("key", key), zap.String("member", member), zap.Error(err))
@@ -300,7 +300,7 @@ func (s *Service) SetRem(ctx context.Context, key string, member string) error {
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			logging.Warn(context.Background(), "Redis Circuit Breaker Open: skipping SetRem", zap.String("key", key))
+			logging.Warn(ctx, "Redis Circuit Breaker Open: skipping SetRem", zap.String("key", key))
 			return nil // Graceful degradation
 		}
 		logging.Error(ctx, "Redis SetRem failed", zap.String("key", key), zap.String("member", member), zap.Error(err))
@@ -322,7 +322,7 @@ func (s *Service) SetMembers(ctx context.Context, key string) ([]string, error) 
 	if err != nil {
 		if err == gobreaker.ErrOpenState {
 			metrics.CircuitBreakerFailures.WithLabelValues("redis").Inc()
-			logging.Warn(context.Background(), "Redis Circuit Breaker Open: returning empty set members", zap.String("key", key))
+			logging.Warn(ctx, "Redis Circuit Breaker Open: returning empty set members", zap.String("key", key))
 			return nil, nil // Graceful degradation: return empty list so room can still function locally
 		}
 		logging.Error(ctx, "Redis SetMembers failed", zap.String("key", key), zap.Error(err))

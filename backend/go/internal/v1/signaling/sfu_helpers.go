@@ -27,10 +27,10 @@ func GetSignalType(signal *pb.SignalRequest) string {
 
 // ProcessSFUEvent processes an incoming SFU event and returns a WebSocket message to send to the client.
 // Returns nil if the event is not recognized or doesn't require a message to be sent.
-func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSocketMessage {
+func ProcessSFUEvent(ctx context.Context, client types.ClientInterface, event *pb.SfuEvent) *pb.WebSocketMessage {
 	// Handle TrackAdded
 	if trackEvent := event.GetTrackEvent(); trackEvent != nil {
-		logging.Info(context.Background(), "SFU Track Added event received",
+		logging.Info(ctx, "SFU Track Added event received",
 			zap.String("targetClientId", string(client.GetID())),
 			zap.String("sourceUserId", trackEvent.UserId),
 			zap.String("streamId", trackEvent.StreamId),
@@ -45,7 +45,7 @@ func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSo
 
 	// Handle Renegotiation Offer from SFU
 	if sdp := event.GetRenegotiateSdpOffer(); sdp != "" {
-		logging.Info(context.Background(), "SFU Renegotiation Offer", zap.String("clientId", string(client.GetID())))
+		logging.Info(ctx, "SFU Renegotiation Offer", zap.String("clientId", string(client.GetID())))
 		return &pb.WebSocketMessage{
 			Payload: &pb.WebSocketMessage_SignalEvent{
 				SignalEvent: &pb.SignalEvent{
@@ -59,7 +59,7 @@ func ProcessSFUEvent(client types.ClientInterface, event *pb.SfuEvent) *pb.WebSo
 
 	// Handle Answer from SFU
 	if sdp := event.GetSdpAnswer(); sdp != "" {
-		logging.Info(context.Background(), "SFU Answer received", zap.String("clientId", string(client.GetID())))
+		logging.Info(ctx, "SFU Answer received", zap.String("clientId", string(client.GetID())))
 		return &pb.WebSocketMessage{
 			Payload: &pb.WebSocketMessage_SignalEvent{
 				SignalEvent: &pb.SignalEvent{

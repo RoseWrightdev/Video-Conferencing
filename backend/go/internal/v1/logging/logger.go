@@ -52,9 +52,11 @@ func Initialize(development bool) error {
 func GetLogger() *zap.Logger {
 	if logger == nil {
 		// Fallback specific for tests or before init
+		// Use a basic no-op logger if development logger fails
 		l, err := zap.NewDevelopment()
 		if err != nil {
-			panic(err)
+			// Last resort: return a no-op logger to prevent crashes
+			return zap.NewNop()
 		}
 		return l
 	}

@@ -1,6 +1,7 @@
 package signaling
 
 import (
+	"context"
 	"testing"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
@@ -99,7 +100,7 @@ func TestProcessSFUEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			msg := ProcessSFUEvent(client, tt.event)
+			msg := ProcessSFUEvent(context.Background(), client, tt.event)
 			tt.verify(t, msg)
 		})
 	}

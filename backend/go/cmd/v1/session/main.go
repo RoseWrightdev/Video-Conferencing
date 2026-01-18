@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -46,7 +47,8 @@ func main() {
 
 	// Initialize Logger
 	if err := logging.Initialize(tempCfg.DevelopmentMode); err != nil {
-		panic("Failed to initialize logger: " + err.Error())
+		fmt.Fprintf(os.Stderr, "FATAL: Failed to initialize logger: %v\n", err)
+		os.Exit(1)
 	}
 	// Ensure buffered logs are flushed
 	defer func() { _ = logging.GetLogger().Sync() }()
