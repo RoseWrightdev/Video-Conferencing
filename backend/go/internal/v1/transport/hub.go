@@ -48,9 +48,9 @@ func getSFUClientFromEnv() types.SFUProvider {
 	logging.Info(context.Background(), "🔌 SFU Enabled. Connecting...", zap.String("addr", sfuAddr))
 	sfuClient, err := sfu.NewClient(sfuAddr)
 	if err != nil {
-		logging.Error(context.Background(), "SFU Connection Failed - running in degraded mode", zap.Error(err))
-		// Return nil to allow graceful degradation instead of crashing
-		return nil
+		logging.Error(context.Background(), "SFU Connection Failed", zap.Error(err))
+		// Fatal error: if SFU is enabled, it must be available
+		logging.Fatal(context.Background(), "Cannot start without SFU connection", zap.Error(err))
 	}
 	logging.Info(context.Background(), "✅ SFU Connected")
 	return sfuClient
