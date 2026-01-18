@@ -1,5 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { Participant } from '@/store/types';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('AudioDetection');
 
 /**
  * Hook to detect speaking activity for multiple participants using a single AudioContext.
@@ -37,7 +40,7 @@ export function useAudioDetection(
           audioContextRef.current = new AudioContextClass();
         }
       } catch (e) {
-        console.error('Failed to create AudioContext', e);
+        logger.error('Failed to create AudioContext', e);
         return;
       }
     }
@@ -94,7 +97,7 @@ export function useAudioDetection(
 
           analysersRef.current.set(p.id, { analyser, source });
         } catch (err) {
-          console.error(`Failed to create analyser for ${p.id}`, err);
+          logger.error(`Failed to create analyser for ${p.id}`, err);
         }
       }
     });
@@ -137,7 +140,7 @@ export function useAudioDetection(
 
     // Resume context if suspended (browser requirements)
     if (ctx.state === 'suspended') {
-      ctx.resume().catch(err => console.error('Failed to resume AudioContext', err));
+      ctx.resume().catch(err => logger.error('Failed to resume AudioContext', err));
     }
 
   }, [participants, enabled, threshold]); // Re-run when list changes

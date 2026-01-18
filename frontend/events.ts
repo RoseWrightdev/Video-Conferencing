@@ -169,6 +169,10 @@ export interface WebSocketMessage {
 
 type EventHandler<T = any> = (data: T) => void;
 
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('EventEmitter');
+
 export class EventEmitter {
   private events: Map<string, EventHandler[]>;
 
@@ -233,7 +237,7 @@ export class EventEmitter {
         handler(data);
       } catch (error) {
         // Catch errors to prevent one handler from breaking others
-        console.error(`Error in event handler for "${event}":`, error);
+        logger.error(`Error in event handler for "${event}":`, error);
       }
     }
   }

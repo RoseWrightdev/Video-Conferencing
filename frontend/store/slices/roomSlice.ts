@@ -1,6 +1,9 @@
 import { StateCreator } from 'zustand';
 import { RoomClient } from '@/lib/RoomClient';
 import { type RoomSlice, type RoomStoreState } from '../types';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('RoomSlice');
 
 // Basic Singleton for HMR handling
 let activeRoomClient: RoomClient | null = null;
@@ -107,7 +110,7 @@ export const createRoomSlice: StateCreator<
 
   // FIX: Track the active client instance at module level to prevent HMR leaks.
   if (activeRoomClient) {
-    console.warn('[RoomSlice] Disconnecting previous RoomClient instance due to store recreation/HMR');
+    logger.warn('Disconnecting previous RoomClient instance due to store recreation/HMR');
     activeRoomClient.disconnect();
   }
 
@@ -118,7 +121,7 @@ export const createRoomSlice: StateCreator<
   if ((import.meta as any).hot) {
     (import.meta as any).hot.dispose(() => {
       if (activeRoomClient) {
-        console.warn('[RoomSlice] HMR Dispose: Disconnecting RoomClient');
+        logger.warn('HMR Dispose: Disconnecting RoomClient');
         activeRoomClient.disconnect();
         activeRoomClient = null;
       }

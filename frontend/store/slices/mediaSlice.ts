@@ -103,7 +103,6 @@ export const createMediaSlice: StateCreator<
         loggers.media.debug('Video enabled successfully');
       } catch (e) {
         loggers.media.error('Failed to enable video', e);
-        console.error('Failed to enable video:', e);
       }
     } else {
       // Disable video
@@ -193,7 +192,6 @@ export const createMediaSlice: StateCreator<
         loggers.media.debug('Audio enabled successfully');
       } catch (e) {
         loggers.media.error('Failed to enable audio', e);
-        console.error('Failed to enable audio:', e);
       }
     } else {
       // Disable audio
@@ -265,7 +263,7 @@ export const createMediaSlice: StateCreator<
         });
       }
     } catch (e) {
-      console.error(e);
+      loggers.media.error('Failed to start screen share', e);
     }
   },
 

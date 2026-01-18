@@ -107,7 +107,8 @@ class Logger {
     consoleMethod(`[${level.toUpperCase()}] [${this.serviceName}] ${msgStr}`, ...args);
 
     // Send to backend in production (or if configured)
-    if (level === 'error' || level === 'warn') {
+    // We send INFO, WARN, and ERROR to the backend for observability.
+    if (level === 'error' || level === 'warn' || level === 'info') {
       this.sendToBackend(entry);
     }
   }

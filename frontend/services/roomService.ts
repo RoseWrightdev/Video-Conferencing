@@ -1,7 +1,11 @@
 
+import { createLogger } from '@/lib/logger';
+
 export interface WebRTCManager {
     addPeer(peerId: string): Promise<void>;
 }
+
+const logger = createLogger('RoomService');
 
 export class RoomService {
     private webrtcManager: WebRTCManager;
@@ -19,7 +23,7 @@ export class RoomService {
         // Update the queue pointer, catching errors so the queue doesn't stall on failure
         this.queue = operation.catch(() => {
             // Log error but allow queue to continue
-            console.error(`Error adding peer ${peerId}`);
+            logger.error(`Error adding peer ${peerId}`);
         });
 
         return operation;
