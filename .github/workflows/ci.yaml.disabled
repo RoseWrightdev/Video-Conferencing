@@ -31,6 +31,13 @@ jobs:
         cd backend/go
         go vet ./...
 
+    - name: Run Linting
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        working-directory: backend/go
+        args: -E gosec -E gocritic -E whitespace -E revive ./...
+
     - name: Run Tests
       run: |
         cd backend/go
