@@ -274,3 +274,30 @@ func TestCleanupGracePeriod(t *testing.T) {
 	// Default grace period should be set
 	assert.Greater(t, hub.cleanupGracePeriod, time.Duration(0))
 }
+
+func TestShutdown(t *testing.T) {
+	ctx := context.Background()
+	validator := &MockTokenValidator{}
+	mockBus := &MockBusService{}
+	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+
+	// Create some rooms
+	room1 := hub.getOrCreateRoom("room1")
+	room2 := hub.getOrCreateRoom("room2")
+
+	// Add clients
+	client1 := &hubMockClient{id: "user1"}
+	client2 := &hubMockClient{id: "user2"}
+	room1.AddHost(ctx, client1)
+	room2.AddHost(ctx, client2)
+
+	// Trigger a pending cleanup
+	hub.removeRoom("room3")
+
+	// Shutdown
+	err := hub.Shutdown(ctx)
+	assert.NoError(t, err)
+
+	// Pending cleanups should be cancelled
+	assert.Equal(t, 0, len(hub.pendingRoomCleanups))
+}

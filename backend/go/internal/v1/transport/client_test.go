@@ -385,3 +385,53 @@ func TestClientRateLimitEnabled(t *testing.T) {
 
 	assert.False(t, clientNoLimit.rateLimitEnabled)
 }
+
+func TestClientSetters(t *testing.T) {
+	client := newTestClient("user1", "User", types.RoleTypeParticipant)
+
+	client.SetIsAudioEnabled(true)
+	assert.True(t, client.GetIsAudioEnabled())
+
+	client.SetIsVideoEnabled(true)
+	assert.True(t, client.GetIsVideoEnabled())
+
+	client.SetIsScreenSharing(true)
+	assert.True(t, client.GetIsScreenSharing())
+
+	client.SetIsHandRaised(true)
+	assert.True(t, client.GetIsHandRaised())
+}
+
+func TestClientDisconnect(t *testing.T) {
+	mockConn := &MockConnection{}
+
+	client := &Client{
+		conn:         mockConn,
+		send:         make(chan []byte, 1),
+		prioritySend: make(chan []byte, 1),
+	}
+
+	client.Disconnect()
+
+	client.mu.Lock()
+	closed := client.closed
+	client.mu.Unlock()
+	assert.True(t, closed)
+	// Verify channel closed
+	_, ok := <-client.send
+	assert.False(t, ok)
+}
+
+func TestClientSendRaw(t *testing.T) {
+	client := newTestClient("user1", "User", types.RoleTypeParticipant)
+
+	data := []byte("raw data")
+	client.SendRaw(data)
+
+	select {
+	case received := <-client.send:
+		assert.Equal(t, data, received)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Raw message not sent")
+	}
+}

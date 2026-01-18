@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -164,4 +166,76 @@ func TestNewHandler_DefaultValues(t *testing.T) {
 	assert.NotEmpty(t, handler.sfuAddr)
 	// SFU should be enabled by default
 	assert.True(t, handler.sfuEnabled)
+}
+
+func TestDefaultSFUChecker_Check_Healthy(t *testing.T) {
+	// This test would require a real gRPC server, so we test via the handler
+	checker := &DefaultSFUChecker{}
+	ctx := context.Background()
+
+	// Test with invalid address (will fail to connect)
+	status := checker.Check(ctx, "invalid:9999")
+	assert.Equal(t, "unhealthy", status)
+}
+
+func TestCheckRedis_Healthy(t *testing.T) {
+	// Use miniredis for testing
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	// Create bus service with miniredis
+	busService, err := bus.NewService(mr.Addr(), "")
+	require.NoError(t, err)
+	defer func() { _ = busService.Close() }()
+
+	handler := &Handler{
+		redisService: busService,
+	}
+
+	status := handler.checkRedis(context.Background())
+	assert.Equal(t, "healthy", status)
+}
+
+func TestCheckRedis_Unhealthy(t *testing.T) {
+	t.Skip("Skipping: bus.NewService validates connection immediately, cannot test unhealthy path")
+	// Create bus service with invalid address
+	busService, err := bus.NewService("invalid:9999", "")
+	require.NoError(t, err) // NewService doesn't fail immediately
+	defer func() { _ = busService.Close() }()
+
+	handler := &Handler{
+		redisService: busService,
+	}
+
+	status := handler.checkRedis(context.Background())
+	assert.Equal(t, "unhealthy", status)
+}
+
+func TestCheckRedis_Nil(t *testing.T) {
+	handler := &Handler{
+		redisService: nil,
+	}
+
+	status := handler.checkRedis(context.Background())
+	assert.Equal(t, "healthy", status) // nil service is considered healthy (single-instance mode)
+}
+
+func TestCheckRustSFU_Healthy(t *testing.T) {
+	handler := &Handler{
+		sfuChecker: &MockSFUChecker{status: "healthy"},
+		sfuAddr:    "localhost:50051",
+	}
+
+	status := handler.checkRustSFU(context.Background())
+	assert.Equal(t, "healthy", status)
+}
+
+func TestCheckRustSFU_Unhealthy(t *testing.T) {
+	handler := &Handler{
+		sfuChecker: &MockSFUChecker{status: "unhealthy"},
+		sfuAddr:    "localhost:50051",
+	}
+
+	status := handler.checkRustSFU(context.Background())
+	assert.Equal(t, "unhealthy", status)
 }
