@@ -14,10 +14,7 @@ This project implements a "Split-Brain" SFU architecture that decouples signalin
 graph TD
     User["User / Browser"]
     Auth0["Auth0"]
-    
-    subgraph "Public Internet"
-        LB["Load Balancer"]
-    end
+    LB["Load Balancer"]
     
     subgraph "Kubernetes Cluster"
         FE["Frontend<br/>(Next.js)"]
