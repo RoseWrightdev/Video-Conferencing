@@ -10,40 +10,77 @@ This project implements a "Split-Brain" SFU architecture that decouples signalin
 
 ## 🏗 System Architecture
 
-The platform consists of three primary services working in concert:
+The platform consists of microservices with a full observability stack:
 
 ```mermaid
 graph TD
     User["User / Browser"]
+    Auth0["Auth0 (JWT Auth)"]
     
     subgraph "Public Internet"
         LB["Caddy / Load Balancer"]
     end
     
-    subgraph "Private Network / Cluster"
-        FE["Frontend Service (Next.js)"]
-        BE["Backend Service (Go)"]
-        Redis[("Redis")]
-        SFU["SFU Service (Rust)"]
-        CC["Stream Processor (Python)"]
-        Sum["Summary Service (Python)"]
+    subgraph "Kubernetes Cluster (EKS)"
+        subgraph "Application Services"
+            FE["Frontend Service<br/>(Next.js)"]
+            BE["Backend Service<br/>(Go)"]
+            SFU["SFU Service<br/>(Rust)"]
+            CC["Stream Processor<br/>(Python)"]
+            Sum["Summary Service<br/>(Python)"]
+        end
+        
+        subgraph "Data Layer"
+            Redis[("Redis<br/>(Pub/Sub + Cache)")]
+        end
+        
+        subgraph "Observability Stack"
+            OTEL["OpenTelemetry<br/>Collector"]
+            Prom["Prometheus<br/>(Metrics)"]
+            Grafana["Grafana<br/>(Dashboards)"]
+            Loki["Loki<br/>(Logs)"]
+            Tempo["Tempo<br/>(Traces)"]
+        end
     end
 
-    User -- HTTPS --> LB
-    LB -- HTTP --> FE
-    LB -- WebSocket --> BE
-    User -- WebRTC (UDP/TCP) --> SFU
+    %% User Connections
+    User -- "HTTPS" --> LB
+    User -- "WebRTC (UDP/TCP)" --> SFU
     
-    FE -- HTTP/API --> BE
-    BE -- gRPC --> SFU
-    BE -- Pub/Sub --> Redis
-    SFU -- Metrics --> BE
-    SFU -- gRPC (Audio) --> CC
-    CC -- gRPC (Text) --> SFU
-    CC -- Push (Transcript) --> Redis
-    BE -- gRPC (Summarize) --> Sum
-    Sum -- Redis --> Pull (Transcript)
+    %% Load Balancer Routes
+    LB -- "HTTP" --> FE
+    LB -- "WebSocket" --> BE
+    
+    %% Auth Flow
+    BE -. "Validate JWT" .-> Auth0
+    
+    %% Application Communication
+    FE -- "API + Metrics<br/>(POST /api/logs)" --> BE
+    BE -- "gRPC" --> SFU
+    BE -- "Pub/Sub" --> Redis
+    BE -- "gRPC (Summarize)" --> Sum
+    SFU -- "Metrics" --> BE
+    SFU -- "gRPC (Audio)" --> CC
+    CC -- "gRPC (Text)" --> SFU
+    CC -- "Push (Transcript)" --> Redis
+    Sum -- "Pull (Transcript)" --> Redis
+    
+    %% Observability Flows
+    FE -- "Traces/Metrics" --> OTEL
+    BE -- "Traces/Logs/Metrics" --> OTEL
+    SFU -- "Traces/Logs/Metrics" --> OTEL
+    CC -- "Traces/Logs/Metrics" --> OTEL
+    Sum -- "Traces/Logs/Metrics" --> OTEL
+    
+    OTEL -- "Metrics" --> Prom
+    OTEL -- "Logs" --> Loki
+    OTEL -- "Traces" --> Tempo
+    
+    Prom --> Grafana
+    Loki --> Grafana
+    Tempo --> Grafana
 ```
+
 
 ### 1. Frontend Service
 - **Stack:** Next.js 16, React 19, Zustand, Tailwind CSS.
