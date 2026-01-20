@@ -10,7 +10,7 @@ import nextPlugin from "@next/eslint-plugin-next";
 import globals from "globals";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+
 
 export default [
   {
@@ -58,6 +58,13 @@ export default [
       react: {
         version: "detect"
       }
+    }
+  },
+  {
+    files: ["**/__tests__/**/*.[jt]s?(x)", "**/*.test.[jt]s?(x)"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
     }
   }
 ];

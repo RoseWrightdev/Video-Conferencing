@@ -61,9 +61,11 @@ vi.mock('@/hooks/useChat', () => ({
 
 // Mock the store but keep the real useRoom hook
 vi.mock('@/store/useRoomStore', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { create } = require('zustand');
 
-    const useRoomStoreMock = create((set: any, get: any) => ({
+    // Create mock store using actual zustand create
+    const useRoomStoreMock = create((set: any, _get: any) => ({
         roomId: null,
         roomName: '',
         connectionState: {

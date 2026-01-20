@@ -1,30 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useMediaStreamLifecycle } from '../../hooks/useMediaStreamLifecycle';
 
 describe('useMediaStreamLifecycle', () => {
     let mockStream: any;
     let mockTrack: any;
-    let eventListeners: Record<string, Function[]> = {};
+    let eventListeners: Record<string, ((...args: any[]) => void)[]> = {};
 
     beforeEach(() => {
         eventListeners = {};
-
-        const addEventListener = vi.fn((event: string, handler: Function) => {
-            if (!eventListeners[event]) eventListeners[event] = [];
-            eventListeners[event].push(handler);
-        });
-
-        const removeEventListener = vi.fn((event: string, handler: Function) => {
-            if (!eventListeners[event]) return;
-            eventListeners[event] = eventListeners[event].filter(h => h !== handler);
-        });
-
-        const dispatchEvent = (event: string, data?: any) => {
-            if (eventListeners[event]) {
-                eventListeners[event].forEach(h => h(data));
-            }
-        };
 
         mockTrack = {
             id: 'track-1',
@@ -35,7 +19,7 @@ describe('useMediaStreamLifecycle', () => {
 
         // Simple mock for EventTarget behavior
         const createMockEventTarget = () => {
-            const listeners: Record<string, Function[]> = {};
+            const listeners: Record<string, ((...args: any[]) => void)[]> = {};
             return {
                 addEventListener: vi.fn((e, h) => {
                     if (!listeners[e]) listeners[e] = [];

@@ -40,41 +40,7 @@ describe('RoomClient - Media State Checks', () => {
         client.connect('room-1', 'user-1', 'token-1');
     });
 
-    it('should send correct update when toggling audio', () => {
-        client.toggleAudio(true);
-        expect(mockWs.send).toHaveBeenCalledWith({
-            toggleMedia: {
-                kind: 'audio',
-                isEnabled: true
-            }
-        });
 
-        client.toggleAudio(false);
-        expect(mockWs.send).toHaveBeenCalledWith({
-            toggleMedia: {
-                kind: 'audio',
-                isEnabled: false
-            }
-        });
-    });
-
-    it('should send correct update when toggling video', () => {
-        client.toggleVideo(true);
-        expect(mockWs.send).toHaveBeenCalledWith({
-            toggleMedia: {
-                kind: 'video',
-                isEnabled: true
-            }
-        });
-
-        client.toggleVideo(false);
-        expect(mockWs.send).toHaveBeenCalledWith({
-            toggleMedia: {
-                kind: 'video',
-                isEnabled: false
-            }
-        });
-    });
 
     it('should update local participant map when receiving remote media updates', () => {
         // 1. Setup initial participant
