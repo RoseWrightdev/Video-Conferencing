@@ -16,21 +16,18 @@ graph TD
     Auth0["Auth0"]
     LB["Load Balancer"]
     
-    subgraph "Kubernetes Cluster"
-        FE["Frontend<br/>(Next.js)"]
-        BE["Backend<br/>(Go)"]
-        SFU["SFU<br/>(Rust)"]
-        CC["Stream Processor<br/>(Python)"]
-        Sum["Summary Service<br/>(Python)"]
-        Redis[("Redis")]
-    end
+    FE["Frontend<br/>(Next.js)"]
+    BE["Backend<br/>(Go)"]
+    SFU["SFU<br/>(Rust)"]
+    CC["Stream Processor<br/>(Python)"]
+    Sum["Summary Service<br/>(Python)"]
+    Redis[("Redis")]
 
     User -->|HTTPS| LB
     User -.->|WebRTC| SFU
     LB --> FE
     LB --> BE
     
-    BE -.->|Validate JWT| Auth0
     FE -->|API + Metrics| BE
     BE -->|gRPC| SFU
     BE <-->|Pub/Sub| Redis
