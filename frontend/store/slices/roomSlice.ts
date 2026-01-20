@@ -233,6 +233,14 @@ export const createRoomSlice: StateCreator<
     captions: [],
     addCaption: (caption) => {
       set((state) => {
+        // Prevent duplicate captions (same text from same user consecutively)
+        if (state.captions.length > 0) {
+          const last = state.captions[state.captions.length - 1];
+          if (last.sessionId === caption.sessionId && last.text === caption.text) {
+            return { captions: state.captions };
+          }
+        }
+
         // Append new caption.
         // Optional: Keep only last N captions to avoid memory issues.
         const MAX_CAPTIONS = 50;

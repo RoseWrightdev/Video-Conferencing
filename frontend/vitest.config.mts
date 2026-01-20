@@ -17,11 +17,6 @@ Object.assign(process.env, env);
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
   plugins: [tsconfigPaths(), react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(dirname, '.')
-    }
-  },
   optimizeDeps: {
     include: ['zustand']
   },
@@ -50,11 +45,6 @@ export default defineConfig({
       // Unit tests project
       {
         plugins: [tsconfigPaths(), react()],
-        resolve: {
-          alias: {
-            '@': path.resolve(dirname, '.')
-          }
-        },
         test: {
           name: 'unit',
           environment: 'jsdom',
@@ -75,11 +65,6 @@ export default defineConfig({
             configDir: path.join(dirname, '.storybook')
           })
         ],
-        resolve: {
-          alias: {
-            '@': path.resolve(dirname, '.')
-          }
-        },
         test: {
           name: 'storybook',
           browser: {
