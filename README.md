@@ -13,8 +13,6 @@ This project implements a "Split-Brain" SFU architecture that decouples signalin
 ```mermaid
 graph TD
     User["User / Browser"]
-    Auth0["Auth0"]
-    LB["Load Balancer"]
     
     FE["Frontend<br/>(Next.js)"]
     BE["Backend<br/>(Go)"]
@@ -23,10 +21,9 @@ graph TD
     Sum["Summary Service<br/>(Python)"]
     Redis[("Redis")]
 
-    User -->|HTTPS| LB
+    User -->|HTTPS| FE
+    User -->|WebSocket| BE
     User -.->|WebRTC| SFU
-    LB --> FE
-    LB --> BE
     
     FE -->|API + Metrics| BE
     BE -->|gRPC| SFU
