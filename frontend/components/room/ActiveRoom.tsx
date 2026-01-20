@@ -7,6 +7,7 @@ import ParticipantGrid from '@/components/participants/components/ParticipantGri
 import ParticipantsPanel from '@/components/participants/components/ParticipantsPanel';
 import SettingsPanel from '@/components/settings/components/SettingsPanel';
 import LeaveRoomDialog from '@/components/room/components/LeaveRoomDialog';
+import { CaptionOverlay } from '@/components/room/components/CaptionOverlay';
 import { useRoomStore } from '@/store/useRoomStore';
 import { useChat } from '@/hooks';
 import { useAudioDetection } from '@/hooks/useAudioDetection';
@@ -101,6 +102,9 @@ export const ActiveRoom = ({ permissionsGranted, refreshDevices }: ActiveRoomPro
                     >
                         <ControlBar />
                     </div>
+
+                    {/* Caption Overlay */}
+                    <CaptionOverlay />
                 </div>
 
                 {/* Chat Panel - Right Side */}

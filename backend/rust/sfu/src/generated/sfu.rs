@@ -119,6 +119,208 @@ pub mod sfu_event {
         Caption(super::super::signaling::CaptionEvent),
     }
 }
+/// Generated client implementations.
+pub mod sfu_service_client {
+    #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
+    use tonic::codegen::*;
+    use tonic::codegen::http::Uri;
+    /// SfuService defines the gRPC interface for the Rust Selective Forwarding Unit (SFU).
+    /// It handles peer session management, signaling, and media routing in the Data Plane.
+    #[derive(Debug, Clone)]
+    pub struct SfuServiceClient<T> {
+        inner: tonic::client::Grpc<T>,
+    }
+    impl SfuServiceClient<tonic::transport::Channel> {
+        /// Attempt to create a new client by connecting to a given endpoint.
+        pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
+        where
+            D: TryInto<tonic::transport::Endpoint>,
+            D::Error: Into<StdError>,
+        {
+            let conn = tonic::transport::Endpoint::new(dst)?.connect().await?;
+            Ok(Self::new(conn))
+        }
+    }
+    impl<T> SfuServiceClient<T>
+    where
+        T: tonic::client::GrpcService<tonic::body::BoxBody>,
+        T::Error: Into<StdError>,
+        T::ResponseBody: Body<Data = Bytes> + Send + 'static,
+        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+    {
+        pub fn new(inner: T) -> Self {
+            let inner = tonic::client::Grpc::new(inner);
+            Self { inner }
+        }
+        pub fn with_origin(inner: T, origin: Uri) -> Self {
+            let inner = tonic::client::Grpc::with_origin(inner, origin);
+            Self { inner }
+        }
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> SfuServiceClient<InterceptedService<T, F>>
+        where
+            F: tonic::service::Interceptor,
+            T::ResponseBody: Default,
+            T: tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+                Response = http::Response<
+                    <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
+                >,
+            >,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+            >>::Error: Into<StdError> + Send + Sync,
+        {
+            SfuServiceClient::new(InterceptedService::new(inner, interceptor))
+        }
+        /// Compress requests with the given encoding.
+        ///
+        /// This requires the server to support it otherwise it might respond with an
+        /// error.
+        #[must_use]
+        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.inner = self.inner.send_compressed(encoding);
+            self
+        }
+        /// Enable decompressing responses.
+        #[must_use]
+        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.inner = self.inner.accept_compressed(encoding);
+            self
+        }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_decoding_message_size(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_encoding_message_size(limit);
+            self
+        }
+        /// CreateSession initializes a new WebRTC session for a peer in the Rust SFU.
+        /// The SFU acts as the "passive" side (or answerer) in most cases, but here it
+        /// prepares resources and may return an SDP offer if configured to initiate.
+        /// In the current architecture:
+        /// 1. Backend calls CreateSession
+        /// 2. SFU creates PeerConnection
+        /// 3. SFU returns CreateSessionResponse (containing SDP Offer)
+        pub async fn create_session(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CreateSessionRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::CreateSessionResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/sfu.SfuService/CreateSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("sfu.SfuService", "CreateSession"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// HandleSignal forwards protocol messages (SDP Answer, ICE Candidates) from the Client
+        /// to the SFU. This allows the SFU to complete the WebRTC handshake.
+        pub async fn handle_signal(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SignalMessage>,
+        ) -> std::result::Result<tonic::Response<super::SignalResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/sfu.SfuService/HandleSignal",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("sfu.SfuService", "HandleSignal"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// DeleteSession tears down a peer's WebRTC session and releases all associated resources
+        /// (transceivers, tracks, ports).
+        pub async fn delete_session(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DeleteSessionRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::DeleteSessionResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/sfu.SfuService/DeleteSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("sfu.SfuService", "DeleteSession"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// ListenEvents establishes a server-side stream to receive asynchronous events from the SFU.
+        /// Events include:
+        /// - New tracks published by other peers
+        /// - ICE candidates generated by the SFU
+        /// - Renegotiation requests
+        pub async fn listen_events(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListenRequest>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::SfuEvent>>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/sfu.SfuService/ListenEvents",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("sfu.SfuService", "ListenEvents"));
+            self.inner.server_streaming(req, path, codec).await
+        }
+    }
+}
 /// Generated server implementations.
 pub mod sfu_service_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]

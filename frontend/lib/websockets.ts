@@ -96,7 +96,7 @@ export class WebSocketClient {
         key !== 'toJSON' &&
         key !== 'constructor'
       );
-      this.logger.info(`Received: ${type || 'Unknown Message'}`);
+      this.logger.debug(`Received: ${type || 'Unknown Message'}`);
     }
   }
 

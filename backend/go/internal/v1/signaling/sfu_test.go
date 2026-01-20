@@ -232,3 +232,47 @@ func TestHandleSFUSignal_NoSFU(_ *testing.T) {
 	// Should not panic
 	HandleSFUSignal(ctx, room, client, nil, signal)
 }
+
+func TestCreateSFUSession_CaptionBroadcast(t *testing.T) {
+	ctx := context.Background()
+	mockSFU := NewMockSFUClient()
+
+	// Add a caption event
+	mockSFU.AddMockEvent(&pb.SfuEvent{
+		Payload: &pb.SfuEvent_Caption{
+			Caption: &pb.CaptionEvent{
+				SessionId:  "session1",
+				Text:       "Hello World",
+				IsFinal:    true,
+				Confidence: 0.99,
+			},
+		},
+	})
+
+	room := &MockRoom{ID: "test-room"}
+	client := NewMockClient("user1", "Test User", types.RoleTypeParticipant)
+
+	err := CreateSFUSession(ctx, room, client, mockSFU, nil)
+	assert.NoError(t, err)
+
+	// Wait for event processing
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify Broadcast was called on the room
+	room.mu.Lock()
+	broadcastCount := len(room.BroadcastCalls)
+	lastBroadcast := room.BroadcastCalls[0]
+	room.mu.Unlock()
+
+	assert.Equal(t, 1, broadcastCount, "Should have broadcasted 1 message")
+	assert.NotNil(t, lastBroadcast.GetCaption(), "Broadcast message should be a Caption")
+	assert.Equal(t, "Hello World", lastBroadcast.GetCaption().Text)
+
+	// Verify the loop did NOT send it directly to the client (MockRoom.Broadcast just captures, doesn't forward)
+	// So client.SentMessages usually has JoinResponse(1) + SdpOffer(2). If it sent caption directly, it would be 3.
+	// But since it calls Broadcast, the loop sends nothing more.
+	client.mu.Lock()
+	msgCount := len(client.SentMessages)
+	client.mu.Unlock()
+	assert.Equal(t, 2, msgCount, "Client should only receive initial handshake messages directly")
+}

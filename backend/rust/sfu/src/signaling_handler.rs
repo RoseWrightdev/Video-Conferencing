@@ -27,7 +27,7 @@ pub async fn perform_renegotiation(
                     payload: Some(EventPayload::TrackEvent(event)),
                 }))
                 .await;
-            println!("[SFU] TrackAdded event sent to channel for {}", user_id);
+            info!(user_id = %user_id, "[SFU] TrackAdded event sent to channel");
         }
     }
 

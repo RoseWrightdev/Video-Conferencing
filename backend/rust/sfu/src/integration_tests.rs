@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
 
-    use crate::pb::cc::captioning_service_server::{CaptioningService, CaptioningServiceServer};
-    use crate::pb::cc::{AudioChunk, CaptionEvent};
+    use crate::pb::stream_processor::captioning_service_server::{CaptioningService, CaptioningServiceServer};
+    use crate::pb::stream_processor::{AudioChunk, CaptionEvent};
     use tokio_stream::wrappers::ReceiverStream;
     use tonic::transport::Server;
     use tonic::{Request, Response, Status};
@@ -60,7 +60,7 @@ mod tests {
             .expect("Failed to connect to mock server");
 
         let mut client =
-            crate::pb::cc::captioning_service_client::CaptioningServiceClient::new(channel);
+            crate::pb::stream_processor::captioning_service_client::CaptioningServiceClient::new(channel);
 
         // 3. Send Audio Stream
         let (tx, rx) = tokio::sync::mpsc::channel(4);

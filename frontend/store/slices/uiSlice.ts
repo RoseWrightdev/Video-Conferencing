@@ -12,6 +12,7 @@ export const createUISlice: StateCreator<
   isPinned: false,
   pinnedParticipantId: null,
   isLeaveDialogOpen: false,
+  isSummaryModalOpen: false,
 
   toggleSettingsPanel: () => {
     set((state) => ({ isSettingsPanelOpen: !state.isSettingsPanelOpen }));
@@ -30,5 +31,14 @@ export const createUISlice: StateCreator<
 
   setLeaveDialogOpen: (open: boolean) => {
     set({ isLeaveDialogOpen: open });
+  },
+
+  toggleSummaryModal: () => {
+    set((state) => ({ isSummaryModalOpen: !state.isSummaryModalOpen }));
+  },
+
+  isCaptionsEnabled: false,
+  toggleCaptions: () => {
+    set((state) => ({ isCaptionsEnabled: !state.isCaptionsEnabled }));
   },
 });

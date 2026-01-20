@@ -14,7 +14,9 @@ RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json* ./
 
 # Install dependencies
-RUN npm ci --only=production --ignore-scripts
+# Disable Cypress binary download to avoid network issues during build
+ENV CYPRESS_INSTALL_BINARY=0
+RUN npm ci
 
 # Copy source code
 COPY . .

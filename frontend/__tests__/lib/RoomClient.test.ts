@@ -68,6 +68,10 @@ describe('RoomClient', () => {
             join: {
                 roomId: 'room1',
                 displayName: 'user1',
+                // targetLanguage: 'en', // Added by default? No, only if passed? Connect doesn't take it?
+                // Wait, connect takes (roomId, username, token, targetLanguage?)
+                // Looking at RoomClient.ts: connect(roomId: string, username: string, token: string, targetLanguage: string = 'en')
+                targetLanguage: 'en',
                 token: 'token1'
             }
         }));

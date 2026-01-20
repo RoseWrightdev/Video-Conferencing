@@ -57,7 +57,7 @@ pub struct TrackHandlerContext {
     pub tracks: crate::types::TrackMap,
     pub room_manager: Arc<crate::room_manager::RoomManager>,
     pub cc_client: Option<
-        crate::pb::cc::captioning_service_client::CaptioningServiceClient<
+        crate::pb::stream_processor::captioning_service_client::CaptioningServiceClient<
             tonic::transport::Channel,
         >,
     >,
@@ -241,7 +241,7 @@ pub async fn handle_new_track(
     let mime_type = track.codec_capability().mime_type.to_lowercase();
 
     // Setup CC Forwarding if Audio
-    let (cc_tx, cc_rx) = tokio::sync::mpsc::channel::<crate::pb::cc::AudioChunk>(500);
+    let (cc_tx, cc_rx) = tokio::sync::mpsc::channel::<crate::pb::stream_processor::AudioChunk>(500);
     let mut _join_handle_cc: Option<tokio::task::JoinHandle<()>> = None;
     if track.kind() == "audio" {
         if let Some(mut client) = context.cc_client {
@@ -350,7 +350,7 @@ pub async fn handle_new_track(
 
                     // Forward to CC
                     if mime_type.starts_with("audio") {
-                        let chunk = crate::pb::cc::AudioChunk {
+                        let chunk = crate::pb::stream_processor::AudioChunk {
                             session_id: format!("{}:{}", room_id, user_id),
                             audio_data: packet.payload.to_vec(),
                             target_language: "".to_string(), // Default; TODO: Pass from signaling

@@ -5,6 +5,7 @@ use std::num::ParseIntError;
 pub struct Config {
     pub grpc_port: u16,
     pub rust_log: String,
+    pub cc_service_addr: String,
 }
 
 #[derive(Debug)]
@@ -51,22 +52,21 @@ pub fn validate_env() -> Result<Config, ConfigError> {
 
     // Optional: RUST_LOG (defaults to "info")
     let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| {
-        tracing::warn!("RUST_LOG not set, using default: info");
+        eprintln!("RUST_LOG not set, using default: info");
         "info".to_string()
+    });
+
+    // Optional: CC_SERVICE_ADDR (defaults to "http://localhost:50051")
+    let cc_service_addr = env::var("CC_SERVICE_ADDR").unwrap_or_else(|_| {
+        eprintln!("CC_SERVICE_ADDR not set, using default: http://localhost:50051");
+        "http://localhost:50051".to_string()
     });
 
     let config = Config {
         grpc_port,
         rust_log,
+        cc_service_addr,
     };
-
-    // Log validated configuration
-    tracing::info!("✅ Environment configuration validated successfully");
-    tracing::info!(
-        grpc_port = config.grpc_port,
-        rust_log = config.rust_log,
-        "Configuration"
-    );
 
     Ok(config)
 }

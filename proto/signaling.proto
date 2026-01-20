@@ -81,6 +81,9 @@ message WebSocketMessage {
     TrackAddedEvent track_added = 26;
     // Real-time caption event.
     CaptionEvent caption = 27;
+
+    // --- Language ---
+    SetLanguageRequest set_language = 28;
   }
 }
 
@@ -93,6 +96,7 @@ message JoinRequest {
   string token = 1;       // JWT token for authentication (optional if room is public)
   string room_id = 2;     // The ID of the room to join
   string display_name = 3; // The name the user wishes to display
+  string target_language = 4; // Preferred language for translation (e.g., "es", "fr")
 }
 
 // JoinResponse acknowledges the JoinRequest.
@@ -107,6 +111,11 @@ message JoinResponse {
 message ReconnectRequest {
   string token = 1;
   string previous_session_id = 2;
+}
+
+// SetLanguageRequest signals a user's intent to change their preferred language.
+message SetLanguageRequest {
+  string language_code = 1; // ISO language code
 }
 
 // ---------------------------------------------------------

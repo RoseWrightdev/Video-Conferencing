@@ -55,6 +55,31 @@ const nextConfig: NextConfig = {
     // Enable optimizations
     optimizeCss: true,
   },
+
+  async rewrites() {
+    // Check if we are in a docker container (simple check or env var)
+    // Default to localhost for local dev, but allow override.
+    const backendUrl = 'http://backend:8080';
+    console.log('Rewrites configuration:', {
+      BACKEND_INTERNAL_URL: process.env.BACKEND_INTERNAL_URL,
+      resolvedBackendUrl: backendUrl,
+    });
+
+    return [
+      {
+        source: '/api/rooms/:path*',
+        destination: `${backendUrl}/api/rooms/:path*`,
+      },
+      {
+        source: '/api/messages/:path*',
+        destination: `${backendUrl}/api/messages/:path*`,
+      },
+      {
+        source: '/api/logs/:path*',
+        destination: `${backendUrl}/api/logs/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

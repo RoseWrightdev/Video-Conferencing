@@ -17,8 +17,12 @@ REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 
 # --- Logging ---
-logging.basicConfig(level=logging.INFO)
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+LoggingInstrumentor().instrument(set_logging_format=True)
+
+# logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("summary-service")
+logger.setLevel(logging.INFO)
 
 # --- Model Setup ---
 from huggingface_hub import hf_hub_download

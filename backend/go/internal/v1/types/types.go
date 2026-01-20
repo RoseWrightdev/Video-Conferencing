@@ -140,4 +140,5 @@ type Roomer interface {
 	HandleClientDisconnect(c ClientInterface)
 	CreateSFUSession(ctx context.Context, client ClientInterface) error
 	HandleSFUSignal(ctx context.Context, client ClientInterface, signal *pb.SignalRequest)
+	Broadcast(msg *pb.WebSocketMessage)
 }

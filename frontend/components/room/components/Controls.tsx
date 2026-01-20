@@ -13,7 +13,12 @@ import {
   Users,
   Hand,
   Settings,
+  Sparkles,
+  Captions,
+  CaptionsOff,
 } from "lucide-react";
+import { LanguageSelector } from "./LanguageSelector";
+import { SummaryModal } from "./SummaryModal";
 import { useState, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,10 +77,22 @@ const ControlBar = memo(function ControlBar() {
   const router = useRouter();
 
   // Hand raise is in participant slice, let's get it correctly
-  const { currentUserId, raisingHandParticipants, toggleHand } = useRoomStore(useShallow(state => ({
+  const {
+    currentUserId,
+    raisingHandParticipants,
+    toggleHand,
+    generateSummary,
+    toggleSummaryModal,
+    isCaptionsEnabled,
+    toggleCaptions,
+  } = useRoomStore(useShallow(state => ({
     currentUserId: state.currentUserId,
     raisingHandParticipants: state.raisingHandParticipants,
-    toggleHand: state.toggleHand
+    toggleHand: state.toggleHand,
+    generateSummary: state.generateSummary,
+    toggleSummaryModal: state.toggleSummaryModal,
+    isCaptionsEnabled: state.isCaptionsEnabled,
+    toggleCaptions: state.toggleCaptions,
   })));
 
   const isHandRaised = currentUserId ? raisingHandParticipants.has(currentUserId) : false;
@@ -102,6 +119,7 @@ const ControlBar = memo(function ControlBar() {
             <Typo.P>Settings</Typo.P>
           </TooltipContent>
         </Tooltip>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="relative">
@@ -128,7 +146,11 @@ const ControlBar = memo(function ControlBar() {
             <Typo.P>Participants</Typo.P>
           </TooltipContent>
         </Tooltip>
+
+        {/* Language Selector */}
+        <LanguageSelector />
       </div>
+
       <div className="m-3 bg-white/15 frosted-2 rounded-full p-1 flex items-center justify-center">
         {/* Center controls */}
         <div className="flex items-center gap-3">
@@ -237,7 +259,7 @@ const ControlBar = memo(function ControlBar() {
                 <Typo.P>{isScreenSharing ? "Stop sharing" : "Share screen"}</Typo.P>
               </TooltipContent>
             </Tooltip>
-          ) :
+          ) : (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -256,7 +278,54 @@ const ControlBar = memo(function ControlBar() {
               <TooltipContent>
                 <Typo.P>{hasRequestedScreenShare ? "Permission requested" : "Request screen share permission"}</Typo.P>
               </TooltipContent>
-            </Tooltip>}
+            </Tooltip>
+          )}
+
+          {/* Summarize Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="default"
+                size="icon"
+                className="rounded-full w-14 bg-purple-600 hover:bg-purple-700 text-white"
+                onClick={() => {
+                  toggleSummaryModal();
+                  generateSummary();
+                }}
+                aria-label="Summarize Meeting"
+              >
+                <Sparkles className="size-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <Typo.P>Summarize Meeting</Typo.P>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Caption Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={isCaptionsEnabled ? "default" : "outline"}
+                size="icon"
+                className={`rounded-full w-14 transition-colors ${isCaptionsEnabled
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-white/10 hover:bg-white/80 text-white"
+                  }`}
+                onClick={toggleCaptions}
+                aria-label="Toggle Captions"
+              >
+                {isCaptionsEnabled ? (
+                  <Captions className="size-5" />
+                ) : (
+                  <CaptionsOff className="size-5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <Typo.P>{isCaptionsEnabled ? "Hide Captions" : "Show Captions"}</Typo.P>
+            </TooltipContent>
+          </Tooltip>
 
           {/* Spacer */}
           <div className="w-2" />
@@ -311,6 +380,8 @@ const ControlBar = memo(function ControlBar() {
           <Typo.P>Chat</Typo.P>
         </TooltipContent>
       </Tooltip>
+
+      <SummaryModal />
     </div>
   );
 });

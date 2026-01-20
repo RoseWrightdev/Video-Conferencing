@@ -25,8 +25,10 @@ import (
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/middleware"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/ratelimit"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/summary"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/tracing"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/transport"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 func main() {
@@ -150,6 +152,20 @@ func main() {
 		defer func() { _ = summaryClient.Close() }()
 	}
 
+	// --- OpenTelemetry Tracing ---
+	// Initialize OTEL Tracer
+	tracerProvider, err := tracing.InitTracer(ctx, "backend-go", "otel-collector:4317")
+	if err != nil {
+		logging.Error(ctx, "Failed to initialize OpenTelemetry tracer", zap.Error(err))
+	} else {
+		logging.Info(ctx, "✅ OpenTelemetry tracer initialized")
+		defer func() {
+			if err := tracerProvider.Shutdown(ctx); err != nil {
+				logging.Error(ctx, "Failed to shutdown tracer provider", zap.Error(err))
+			}
+		}()
+	}
+
 	// --- Create Hubs with Dependencies ---
 	// Each feature gets its own hub, configured with the same dependencies.
 	var validator types.TokenValidator
@@ -164,6 +180,9 @@ func main() {
 	// --- Set up Server ---
 	router := gin.New() // Use New() to avoid default logger
 	router.Use(gin.Recovery())
+
+	// OpenTelemetry Middleware
+	router.Use(otelgin.Middleware("backend-go"))
 
 	// Add Correlation ID middleware
 	router.Use(middleware.CorrelationID())

@@ -2,6 +2,7 @@ package room
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
@@ -32,15 +33,22 @@ func (r *Room) handleRedisMessage(payload bus.PubSubPayload) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Decode JSON (Base64 string) to []byte
+	var data []byte
+	if err := json.Unmarshal(payload.Payload, &data); err != nil {
+		logging.Error(r.ctx, "Failed to decode JSON payload", zap.Error(err))
+		return
+	}
+
 	// Decode Protobuf
 	var msg pb.WebSocketMessage
-	if err := proto.Unmarshal(payload.Payload, &msg); err != nil {
+	if err := proto.Unmarshal(data, &msg); err != nil {
 		logging.Error(r.ctx, "Redis proto unmarshal failed", zap.Error(err))
 		return
 	}
 
 	// Broadcast to LOCAL users
-	r.broadcastLocked(&msg)
+	r.broadcastLocalLocked(&msg)
 }
 
 func (r *Room) publishToRedis(ctx context.Context, msg *pb.WebSocketMessage) {

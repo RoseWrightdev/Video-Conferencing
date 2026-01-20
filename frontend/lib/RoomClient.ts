@@ -2,7 +2,7 @@ import { WebSocketClient } from './websockets';
 import { SFUClient } from './webrtc';
 import { createLogger } from './logger';
 import { WebSocketMessage, RoomStateEvent, ParticipantInfo } from '@/types/proto/signaling';
-import { Participant, ChatMessage } from '@/store/types';
+import { Participant, ChatMessage, CaptionEvent } from '@/store/types';
 
 const logger = createLogger('RoomClient');
 
@@ -22,6 +22,7 @@ export interface RoomClientState {
     unmutedParticipants?: Set<string>;
     cameraOnParticipants?: Set<string>;
     sharingScreenParticipants?: Set<string>;
+    lastCaption?: CaptionEvent;
 }
 
 export class RoomClient {
@@ -61,7 +62,7 @@ export class RoomClient {
         this.onMediaTrackAdded = onMediaTrackAdded;
     }
 
-    public async connect(roomId: string, username: string, token: string) {
+    public async connect(roomId: string, username: string, token: string, targetLanguage: string = 'en') {
         // Enforce cleanup of any existing connection before starting a new one
         if (this.ws || this.sfu) {
             logger.warn('Cleaning up existing connection before new connect', { roomId, username });
@@ -100,7 +101,8 @@ export class RoomClient {
                 join: {
                     token,
                     roomId,
-                    displayName: username
+                    displayName: username,
+                    targetLanguage
                 }
             });
         } catch (e) {
@@ -285,6 +287,20 @@ export class RoomClient {
             case 'error':
                 if (msg.error) {
                     this.onStateChange({ error: msg.error.message });
+                }
+                break;
+            case 'caption':
+                if (msg.caption) {
+                    this.onStateChange({
+                        lastCaption: {
+                            sessionId: msg.caption.sessionId,
+                            text: msg.caption.text,
+                            isFinal: msg.caption.isFinal,
+                            confidence: msg.caption.confidence,
+                            // Add timestamp manually since proto doesn't have it explicitly or we trust receive time
+                            timestamp: Date.now()
+                        }
+                    });
                 }
                 break;
             default:
@@ -534,6 +550,14 @@ export class RoomClient {
         this.ws?.send({
             toggleHand: {
                 isRaised: raised
+            }
+        });
+    }
+
+    public setTargetLanguage(languageCode: string) {
+        this.ws?.send({
+            setLanguage: {
+                languageCode
             }
         });
     }

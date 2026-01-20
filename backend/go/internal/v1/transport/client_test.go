@@ -54,6 +54,9 @@ func (m *MockRoom) HandleSFUSignal(_ context.Context, _ types.ClientInterface, _
 	m.handleSFUSignalCalls++
 }
 
+func (m *MockRoom) Broadcast(_ *pb.WebSocketMessage) {
+}
+
 // Helper to create a client for testing
 func newTestClient(id string, name string, role types.RoleType) *Client {
 	return &Client{

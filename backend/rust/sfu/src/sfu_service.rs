@@ -33,7 +33,7 @@ pub struct MySfu {
     pub room_manager: Arc<RoomManager>,
     // CC Client
     pub cc_client: Option<
-        crate::pb::cc::captioning_service_client::CaptioningServiceClient<
+        crate::pb::stream_processor::captioning_service_client::CaptioningServiceClient<
             tonic::transport::Channel,
         >,
     >,

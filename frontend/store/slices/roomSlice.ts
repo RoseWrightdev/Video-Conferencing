@@ -1,6 +1,7 @@
 import { StateCreator } from 'zustand';
 import { RoomClient } from '@/lib/RoomClient';
 import { type RoomSlice, type RoomStoreState } from '../types';
+import { summarizeMeeting } from '@/lib/api';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('RoomSlice');
@@ -19,6 +20,13 @@ export const createRoomSlice: StateCreator<
   const onRoomStateChange = (stateUpdate: any) => {
     // Current state access
     const currentState = get();
+
+    // INTERCEPT: Handle new Caption
+    if (stateUpdate.lastCaption) {
+      get().addCaption(stateUpdate.lastCaption);
+      // Remove from update to avoid polluting store with non-slice property
+      delete stateUpdate.lastCaption;
+    }
 
     // INTERCEPT: Calculate unread count for new messages
     if (stateUpdate.messages) {
@@ -140,6 +148,12 @@ export const createRoomSlice: StateCreator<
     clientInfo: null,
     wsClient: null, // Legacy, will be null
     sfuClient: null, // Legacy, will be null
+    // Summarization & Translation
+    targetLanguage: 'en',
+    isGeneratingSummary: false,
+    summaryData: null,
+    actionItems: [],
+
     roomClient: roomClient, // Exposed for other slices
 
     initializeRoom: async (roomId, username, token) => {
@@ -152,7 +166,7 @@ export const createRoomSlice: StateCreator<
         connectionState: { ...get().connectionState, isInitializing: true } // Ensure clean state
       });
 
-      await roomClient.connect(roomId, username, token);
+      await roomClient.connect(roomId, username, token, get().targetLanguage);
 
       // Patch Legacy Clients into Store
       set({
@@ -189,8 +203,45 @@ export const createRoomSlice: StateCreator<
 
     updateRoomSettings: () => { },
 
-    // Expose client for other slices (hacky but works for now without changing all types immediately)
-    // We might need to add `roomClient` to the Store type to access `toggleAudio` etc properly.
-    // For now, let's attach the actions that delegate to roomClient.
+    setTargetLanguage: (lang: string) => {
+      set({ targetLanguage: lang });
+      roomClient.setTargetLanguage(lang);
+    },
+
+    generateSummary: async () => {
+      const { roomId, targetLanguage } = get();
+      if (!roomId) return;
+
+      set({ isGeneratingSummary: true, summaryData: null, actionItems: [] });
+
+      try {
+        const response = await summarizeMeeting(roomId);
+        set({
+          isGeneratingSummary: false,
+          summaryData: response.summary,
+          actionItems: response.action_items,
+        });
+      } catch (error) {
+        logger.error('Failed to generate summary', error);
+        set({
+          isGeneratingSummary: false,
+          summaryData: `Error generating summary: ${(error as Error).message}`
+        });
+      }
+    },
+
+    captions: [],
+    addCaption: (caption) => {
+      set((state) => {
+        // Append new caption.
+        // Optional: Keep only last N captions to avoid memory issues.
+        const MAX_CAPTIONS = 50;
+        const newCaptions = [...state.captions, caption];
+        if (newCaptions.length > MAX_CAPTIONS) {
+          return { captions: newCaptions.slice(newCaptions.length - MAX_CAPTIONS) };
+        }
+        return { captions: newCaptions };
+      });
+    },
   };
 };

@@ -5,8 +5,8 @@ pub mod pb {
     pub mod sfu {
         include!("generated/sfu.rs");
     }
-    pub mod cc {
-        include!("generated/cc.rs");
+    pub mod stream_processor {
+        include!("generated/stream_processor.rs");
     }
 }
 

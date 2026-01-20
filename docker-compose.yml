@@ -43,6 +43,7 @@ services:
       # SFU Configuration (Required by transport/hub.go)
       - ENABLE_SFU=${ENABLE_SFU}
       - SFU_ADDR=${SFU_ADDR}
+      - SUMMARY_SERVICE_ADDR=${SUMMARY_SERVICE_ADDR}
     depends_on:
       - redis
       - rust-sfu
@@ -70,6 +71,7 @@ services:
       - RUST_LOG=${RUST_LOG}
       - GRPC_PORT=${GRPC_PORT}
       - HTTP_METRICS_PORT=${HTTP_METRICS_PORT}
+      - CC_SERVICE_ADDR=http://stream-processor:50051
       # Development trick: use 0.0.0.0 or localhost? 
       # On Mac, we might need the internal IP or just let it try to auto-discover.
     networks:
@@ -128,7 +130,9 @@ services:
       - AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
       - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+      - BACKEND_INTERNAL_URL=http://backend:8080
     networks:
       - dev-net
 
@@ -178,11 +182,41 @@ services:
     networks:
       - dev-net
 
+  tempo:
+    image: grafana/tempo:latest
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./devops/tempo.yaml:/etc/tempo.yaml
+      - tempo_data_local:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP
+      - "9095:9095"   # Tempo gRPC
+      - "4317"        # OTLP gRPC
+      - "4318"        # OTLP HTTP
+    networks:
+      - dev-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    volumes:
+      - ./devops/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Prometheus metrics exposed by the collector
+      - "8889:8889"   # Prometheus exporter metrics
+    networks:
+      - dev-net
+    depends_on:
+      - tempo
+
 
 
 volumes:
   redis_data_local:
   summary_models_local:
+  tempo_data_local:
 
 networks:
   dev-net:

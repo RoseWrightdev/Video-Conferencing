@@ -147,7 +147,11 @@ export interface WebSocketMessage {
     | TrackAddedEvent
     | undefined;
   /** Real-time caption event. */
-  caption?: CaptionEvent | undefined;
+  caption?:
+    | CaptionEvent
+    | undefined;
+  /** --- Language --- */
+  setLanguage?: SetLanguageRequest | undefined;
 }
 
 /** JoinRequest is sent by the client to authenticate and join a specific room. */
@@ -158,6 +162,8 @@ export interface JoinRequest {
   roomId: string;
   /** The name the user wishes to display */
   displayName: string;
+  /** Preferred language for translation (e.g., "es", "fr") */
+  targetLanguage: string;
 }
 
 /** JoinResponse acknowledges the JoinRequest. */
@@ -177,6 +183,12 @@ export interface JoinResponse {
 export interface ReconnectRequest {
   token: string;
   previousSessionId: string;
+}
+
+/** SetLanguageRequest signals a user's intent to change their preferred language. */
+export interface SetLanguageRequest {
+  /** ISO language code */
+  languageCode: string;
 }
 
 /** ToggleMediaRequest signals a user's intent to mute/unmute audio or video. */
@@ -366,6 +378,7 @@ function createBaseWebSocketMessage(): WebSocketMessage {
     error: undefined,
     trackAdded: undefined,
     caption: undefined,
+    setLanguage: undefined,
   };
 }
 
@@ -448,6 +461,9 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
     }
     if (message.caption !== undefined) {
       CaptionEvent.encode(message.caption, writer.uint32(218).fork()).join();
+    }
+    if (message.setLanguage !== undefined) {
+      SetLanguageRequest.encode(message.setLanguage, writer.uint32(226).fork()).join();
     }
     return writer;
   },
@@ -667,6 +683,14 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
           message.caption = CaptionEvent.decode(reader, reader.uint32());
           continue;
         }
+        case 28: {
+          if (tag !== 226) {
+            break;
+          }
+
+          message.setLanguage = SetLanguageRequest.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -762,12 +786,15 @@ export const WebSocketMessage: MessageFns<WebSocketMessage> = {
     message.caption = (object.caption !== undefined && object.caption !== null)
       ? CaptionEvent.fromPartial(object.caption)
       : undefined;
+    message.setLanguage = (object.setLanguage !== undefined && object.setLanguage !== null)
+      ? SetLanguageRequest.fromPartial(object.setLanguage)
+      : undefined;
     return message;
   },
 };
 
 function createBaseJoinRequest(): JoinRequest {
-  return { token: "", roomId: "", displayName: "" };
+  return { token: "", roomId: "", displayName: "", targetLanguage: "" };
 }
 
 export const JoinRequest: MessageFns<JoinRequest> = {
@@ -780,6 +807,9 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     }
     if (message.displayName !== "") {
       writer.uint32(26).string(message.displayName);
+    }
+    if (message.targetLanguage !== "") {
+      writer.uint32(34).string(message.targetLanguage);
     }
     return writer;
   },
@@ -815,6 +845,14 @@ export const JoinRequest: MessageFns<JoinRequest> = {
           message.displayName = reader.string();
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.targetLanguage = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -832,6 +870,7 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     message.token = object.token ?? "";
     message.roomId = object.roomId ?? "";
     message.displayName = object.displayName ?? "";
+    message.targetLanguage = object.targetLanguage ?? "";
     return message;
   },
 };
@@ -974,6 +1013,52 @@ export const ReconnectRequest: MessageFns<ReconnectRequest> = {
     const message = createBaseReconnectRequest();
     message.token = object.token ?? "";
     message.previousSessionId = object.previousSessionId ?? "";
+    return message;
+  },
+};
+
+function createBaseSetLanguageRequest(): SetLanguageRequest {
+  return { languageCode: "" };
+}
+
+export const SetLanguageRequest: MessageFns<SetLanguageRequest> = {
+  encode(message: SetLanguageRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.languageCode !== "") {
+      writer.uint32(10).string(message.languageCode);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetLanguageRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetLanguageRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.languageCode = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SetLanguageRequest>, I>>(base?: I): SetLanguageRequest {
+    return SetLanguageRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetLanguageRequest>, I>>(object: I): SetLanguageRequest {
+    const message = createBaseSetLanguageRequest();
+    message.languageCode = object.languageCode ?? "";
     return message;
   },
 };

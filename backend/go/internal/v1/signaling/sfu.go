@@ -71,7 +71,11 @@ func CreateSFUSession(ctx context.Context, r types.Roomer, client types.ClientIn
 				}
 
 				if msg := ProcessSFUEvent(ctx, client, event); msg != nil {
-					client.SendProto(msg)
+					if msg.GetCaption() != nil {
+						r.Broadcast(msg)
+					} else {
+						client.SendProto(msg)
+					}
 				}
 			}
 		}()

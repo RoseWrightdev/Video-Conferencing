@@ -54,6 +54,7 @@ type WebSocketMessage struct {
 	//	*WebSocketMessage_Error
 	//	*WebSocketMessage_TrackAdded
 	//	*WebSocketMessage_Caption
+	//	*WebSocketMessage_SetLanguage
 	Payload       isWebSocketMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -330,6 +331,15 @@ func (x *WebSocketMessage) GetCaption() *CaptionEvent {
 	return nil
 }
 
+func (x *WebSocketMessage) GetSetLanguage() *SetLanguageRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*WebSocketMessage_SetLanguage); ok {
+			return x.SetLanguage
+		}
+	}
+	return nil
+}
+
 type isWebSocketMessage_Payload interface {
 	isWebSocketMessage_Payload()
 }
@@ -475,6 +485,11 @@ type WebSocketMessage_Caption struct {
 	Caption *CaptionEvent `protobuf:"bytes,27,opt,name=caption,proto3,oneof"`
 }
 
+type WebSocketMessage_SetLanguage struct {
+	// --- Language ---
+	SetLanguage *SetLanguageRequest `protobuf:"bytes,28,opt,name=set_language,json=setLanguage,proto3,oneof"`
+}
+
 func (*WebSocketMessage_Join) isWebSocketMessage_Payload() {}
 
 func (*WebSocketMessage_JoinResponse) isWebSocketMessage_Payload() {}
@@ -527,14 +542,17 @@ func (*WebSocketMessage_TrackAdded) isWebSocketMessage_Payload() {}
 
 func (*WebSocketMessage_Caption) isWebSocketMessage_Payload() {}
 
+func (*WebSocketMessage_SetLanguage) isWebSocketMessage_Payload() {}
+
 // JoinRequest is sent by the client to authenticate and join a specific room.
 type JoinRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                // JWT token for authentication (optional if room is public)
-	RoomId        string                 `protobuf:"bytes,2,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`                // The ID of the room to join
-	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"` // The name the user wishes to display
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Token          string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                         // JWT token for authentication (optional if room is public)
+	RoomId         string                 `protobuf:"bytes,2,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`                         // The ID of the room to join
+	DisplayName    string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`          // The name the user wishes to display
+	TargetLanguage string                 `protobuf:"bytes,4,opt,name=target_language,json=targetLanguage,proto3" json:"target_language,omitempty"` // Preferred language for translation (e.g., "es", "fr")
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *JoinRequest) Reset() {
@@ -584,6 +602,13 @@ func (x *JoinRequest) GetRoomId() string {
 func (x *JoinRequest) GetDisplayName() string {
 	if x != nil {
 		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetTargetLanguage() string {
+	if x != nil {
+		return x.TargetLanguage
 	}
 	return ""
 }
@@ -710,6 +735,51 @@ func (x *ReconnectRequest) GetPreviousSessionId() string {
 	return ""
 }
 
+// SetLanguageRequest signals a user's intent to change their preferred language.
+type SetLanguageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LanguageCode  string                 `protobuf:"bytes,1,opt,name=language_code,json=languageCode,proto3" json:"language_code,omitempty"` // ISO language code
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetLanguageRequest) Reset() {
+	*x = SetLanguageRequest{}
+	mi := &file_proto_signaling_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetLanguageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetLanguageRequest) ProtoMessage() {}
+
+func (x *SetLanguageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_signaling_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetLanguageRequest.ProtoReflect.Descriptor instead.
+func (*SetLanguageRequest) Descriptor() ([]byte, []int) {
+	return file_proto_signaling_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SetLanguageRequest) GetLanguageCode() string {
+	if x != nil {
+		return x.LanguageCode
+	}
+	return ""
+}
+
 // ToggleMediaRequest signals a user's intent to mute/unmute audio or video.
 type ToggleMediaRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -721,7 +791,7 @@ type ToggleMediaRequest struct {
 
 func (x *ToggleMediaRequest) Reset() {
 	*x = ToggleMediaRequest{}
-	mi := &file_proto_signaling_proto_msgTypes[4]
+	mi := &file_proto_signaling_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -733,7 +803,7 @@ func (x *ToggleMediaRequest) String() string {
 func (*ToggleMediaRequest) ProtoMessage() {}
 
 func (x *ToggleMediaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[4]
+	mi := &file_proto_signaling_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -746,7 +816,7 @@ func (x *ToggleMediaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToggleMediaRequest.ProtoReflect.Descriptor instead.
 func (*ToggleMediaRequest) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{4}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ToggleMediaRequest) GetKind() string {
@@ -775,7 +845,7 @@ type MediaStateEvent struct {
 
 func (x *MediaStateEvent) Reset() {
 	*x = MediaStateEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[5]
+	mi := &file_proto_signaling_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -787,7 +857,7 @@ func (x *MediaStateEvent) String() string {
 func (*MediaStateEvent) ProtoMessage() {}
 
 func (x *MediaStateEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[5]
+	mi := &file_proto_signaling_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -800,7 +870,7 @@ func (x *MediaStateEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaStateEvent.ProtoReflect.Descriptor instead.
 func (*MediaStateEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{5}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MediaStateEvent) GetUserId() string {
@@ -834,7 +904,7 @@ type ToggleHandRequest struct {
 
 func (x *ToggleHandRequest) Reset() {
 	*x = ToggleHandRequest{}
-	mi := &file_proto_signaling_proto_msgTypes[6]
+	mi := &file_proto_signaling_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -846,7 +916,7 @@ func (x *ToggleHandRequest) String() string {
 func (*ToggleHandRequest) ProtoMessage() {}
 
 func (x *ToggleHandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[6]
+	mi := &file_proto_signaling_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -859,7 +929,7 @@ func (x *ToggleHandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToggleHandRequest.ProtoReflect.Descriptor instead.
 func (*ToggleHandRequest) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{6}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ToggleHandRequest) GetIsRaised() bool {
@@ -880,7 +950,7 @@ type HandUpdateEvent struct {
 
 func (x *HandUpdateEvent) Reset() {
 	*x = HandUpdateEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[7]
+	mi := &file_proto_signaling_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -892,7 +962,7 @@ func (x *HandUpdateEvent) String() string {
 func (*HandUpdateEvent) ProtoMessage() {}
 
 func (x *HandUpdateEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[7]
+	mi := &file_proto_signaling_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -905,7 +975,7 @@ func (x *HandUpdateEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandUpdateEvent.ProtoReflect.Descriptor instead.
 func (*HandUpdateEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{7}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *HandUpdateEvent) GetUserId() string {
@@ -932,7 +1002,7 @@ type ScreenShareRequest struct {
 
 func (x *ScreenShareRequest) Reset() {
 	*x = ScreenShareRequest{}
-	mi := &file_proto_signaling_proto_msgTypes[8]
+	mi := &file_proto_signaling_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -944,7 +1014,7 @@ func (x *ScreenShareRequest) String() string {
 func (*ScreenShareRequest) ProtoMessage() {}
 
 func (x *ScreenShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[8]
+	mi := &file_proto_signaling_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -957,7 +1027,7 @@ func (x *ScreenShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScreenShareRequest.ProtoReflect.Descriptor instead.
 func (*ScreenShareRequest) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{8}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ScreenShareRequest) GetIsSharing() bool {
@@ -978,7 +1048,7 @@ type ScreenShareEvent struct {
 
 func (x *ScreenShareEvent) Reset() {
 	*x = ScreenShareEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[9]
+	mi := &file_proto_signaling_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -990,7 +1060,7 @@ func (x *ScreenShareEvent) String() string {
 func (*ScreenShareEvent) ProtoMessage() {}
 
 func (x *ScreenShareEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[9]
+	mi := &file_proto_signaling_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1003,7 +1073,7 @@ func (x *ScreenShareEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScreenShareEvent.ProtoReflect.Descriptor instead.
 func (*ScreenShareEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{9}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ScreenShareEvent) GetUserId() string {
@@ -1028,7 +1098,7 @@ type RequestScreenSharePermission struct {
 
 func (x *RequestScreenSharePermission) Reset() {
 	*x = RequestScreenSharePermission{}
-	mi := &file_proto_signaling_proto_msgTypes[10]
+	mi := &file_proto_signaling_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1040,7 +1110,7 @@ func (x *RequestScreenSharePermission) String() string {
 func (*RequestScreenSharePermission) ProtoMessage() {}
 
 func (x *RequestScreenSharePermission) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[10]
+	mi := &file_proto_signaling_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1053,7 +1123,7 @@ func (x *RequestScreenSharePermission) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestScreenSharePermission.ProtoReflect.Descriptor instead.
 func (*RequestScreenSharePermission) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{10}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{11}
 }
 
 // ScreenSharePermissionEvent notifies a user if their request was granted/denied.
@@ -1068,7 +1138,7 @@ type ScreenSharePermissionEvent struct {
 
 func (x *ScreenSharePermissionEvent) Reset() {
 	*x = ScreenSharePermissionEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[11]
+	mi := &file_proto_signaling_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1080,7 +1150,7 @@ func (x *ScreenSharePermissionEvent) String() string {
 func (*ScreenSharePermissionEvent) ProtoMessage() {}
 
 func (x *ScreenSharePermissionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[11]
+	mi := &file_proto_signaling_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1093,7 +1163,7 @@ func (x *ScreenSharePermissionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScreenSharePermissionEvent.ProtoReflect.Descriptor instead.
 func (*ScreenSharePermissionEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{11}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ScreenSharePermissionEvent) GetUserId() string {
@@ -1128,7 +1198,7 @@ type ChatRequest struct {
 
 func (x *ChatRequest) Reset() {
 	*x = ChatRequest{}
-	mi := &file_proto_signaling_proto_msgTypes[12]
+	mi := &file_proto_signaling_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1140,7 +1210,7 @@ func (x *ChatRequest) String() string {
 func (*ChatRequest) ProtoMessage() {}
 
 func (x *ChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[12]
+	mi := &file_proto_signaling_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1153,7 +1223,7 @@ func (x *ChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatRequest.ProtoReflect.Descriptor instead.
 func (*ChatRequest) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{12}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ChatRequest) GetContent() string {
@@ -1185,7 +1255,7 @@ type ChatEvent struct {
 
 func (x *ChatEvent) Reset() {
 	*x = ChatEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[13]
+	mi := &file_proto_signaling_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1197,7 +1267,7 @@ func (x *ChatEvent) String() string {
 func (*ChatEvent) ProtoMessage() {}
 
 func (x *ChatEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[13]
+	mi := &file_proto_signaling_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1210,7 +1280,7 @@ func (x *ChatEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatEvent.ProtoReflect.Descriptor instead.
 func (*ChatEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{13}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ChatEvent) GetId() string {
@@ -1263,7 +1333,7 @@ type GetRecentChatsRequest struct {
 
 func (x *GetRecentChatsRequest) Reset() {
 	*x = GetRecentChatsRequest{}
-	mi := &file_proto_signaling_proto_msgTypes[14]
+	mi := &file_proto_signaling_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1275,7 +1345,7 @@ func (x *GetRecentChatsRequest) String() string {
 func (*GetRecentChatsRequest) ProtoMessage() {}
 
 func (x *GetRecentChatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[14]
+	mi := &file_proto_signaling_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1288,7 +1358,7 @@ func (x *GetRecentChatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRecentChatsRequest.ProtoReflect.Descriptor instead.
 func (*GetRecentChatsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{14}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{15}
 }
 
 type RecentChatsEvent struct {
@@ -1300,7 +1370,7 @@ type RecentChatsEvent struct {
 
 func (x *RecentChatsEvent) Reset() {
 	*x = RecentChatsEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[15]
+	mi := &file_proto_signaling_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1312,7 +1382,7 @@ func (x *RecentChatsEvent) String() string {
 func (*RecentChatsEvent) ProtoMessage() {}
 
 func (x *RecentChatsEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[15]
+	mi := &file_proto_signaling_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1325,7 +1395,7 @@ func (x *RecentChatsEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecentChatsEvent.ProtoReflect.Descriptor instead.
 func (*RecentChatsEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{15}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RecentChatsEvent) GetChats() []*ChatEvent {
@@ -1344,7 +1414,7 @@ type DeleteChatRequest struct {
 
 func (x *DeleteChatRequest) Reset() {
 	*x = DeleteChatRequest{}
-	mi := &file_proto_signaling_proto_msgTypes[16]
+	mi := &file_proto_signaling_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1356,7 +1426,7 @@ func (x *DeleteChatRequest) String() string {
 func (*DeleteChatRequest) ProtoMessage() {}
 
 func (x *DeleteChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[16]
+	mi := &file_proto_signaling_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1369,7 +1439,7 @@ func (x *DeleteChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteChatRequest.ProtoReflect.Descriptor instead.
 func (*DeleteChatRequest) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{16}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteChatRequest) GetChatId() string {
@@ -1388,7 +1458,7 @@ type DeleteChatEvent struct {
 
 func (x *DeleteChatEvent) Reset() {
 	*x = DeleteChatEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[17]
+	mi := &file_proto_signaling_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1400,7 +1470,7 @@ func (x *DeleteChatEvent) String() string {
 func (*DeleteChatEvent) ProtoMessage() {}
 
 func (x *DeleteChatEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[17]
+	mi := &file_proto_signaling_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1413,7 +1483,7 @@ func (x *DeleteChatEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteChatEvent.ProtoReflect.Descriptor instead.
 func (*DeleteChatEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{17}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DeleteChatEvent) GetChatId() string {
@@ -1435,7 +1505,7 @@ type WaitingRoomEvent struct {
 
 func (x *WaitingRoomEvent) Reset() {
 	*x = WaitingRoomEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[18]
+	mi := &file_proto_signaling_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1447,7 +1517,7 @@ func (x *WaitingRoomEvent) String() string {
 func (*WaitingRoomEvent) ProtoMessage() {}
 
 func (x *WaitingRoomEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[18]
+	mi := &file_proto_signaling_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1460,7 +1530,7 @@ func (x *WaitingRoomEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitingRoomEvent.ProtoReflect.Descriptor instead.
 func (*WaitingRoomEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{18}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *WaitingRoomEvent) GetUserId() string {
@@ -1496,7 +1566,7 @@ type AdminActionRequest struct {
 
 func (x *AdminActionRequest) Reset() {
 	*x = AdminActionRequest{}
-	mi := &file_proto_signaling_proto_msgTypes[19]
+	mi := &file_proto_signaling_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1508,7 +1578,7 @@ func (x *AdminActionRequest) String() string {
 func (*AdminActionRequest) ProtoMessage() {}
 
 func (x *AdminActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[19]
+	mi := &file_proto_signaling_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1521,7 +1591,7 @@ func (x *AdminActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdminActionRequest.ProtoReflect.Descriptor instead.
 func (*AdminActionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{19}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *AdminActionRequest) GetTargetUserId() string {
@@ -1549,7 +1619,7 @@ type AdminActionEvent struct {
 
 func (x *AdminActionEvent) Reset() {
 	*x = AdminActionEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[20]
+	mi := &file_proto_signaling_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1561,7 +1631,7 @@ func (x *AdminActionEvent) String() string {
 func (*AdminActionEvent) ProtoMessage() {}
 
 func (x *AdminActionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[20]
+	mi := &file_proto_signaling_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1574,7 +1644,7 @@ func (x *AdminActionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdminActionEvent.ProtoReflect.Descriptor instead.
 func (*AdminActionEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{20}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AdminActionEvent) GetAction() string {
@@ -1607,7 +1677,7 @@ type SignalRequest struct {
 
 func (x *SignalRequest) Reset() {
 	*x = SignalRequest{}
-	mi := &file_proto_signaling_proto_msgTypes[21]
+	mi := &file_proto_signaling_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1619,7 +1689,7 @@ func (x *SignalRequest) String() string {
 func (*SignalRequest) ProtoMessage() {}
 
 func (x *SignalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[21]
+	mi := &file_proto_signaling_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1632,7 +1702,7 @@ func (x *SignalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignalRequest.ProtoReflect.Descriptor instead.
 func (*SignalRequest) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{21}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SignalRequest) GetSignal() isSignalRequest_Signal {
@@ -1721,7 +1791,7 @@ type SignalEvent struct {
 
 func (x *SignalEvent) Reset() {
 	*x = SignalEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[22]
+	mi := &file_proto_signaling_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1733,7 +1803,7 @@ func (x *SignalEvent) String() string {
 func (*SignalEvent) ProtoMessage() {}
 
 func (x *SignalEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[22]
+	mi := &file_proto_signaling_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1746,7 +1816,7 @@ func (x *SignalEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignalEvent.ProtoReflect.Descriptor instead.
 func (*SignalEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{22}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SignalEvent) GetSignal() isSignalEvent_Signal {
@@ -1816,7 +1886,7 @@ type RoomStateEvent struct {
 
 func (x *RoomStateEvent) Reset() {
 	*x = RoomStateEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[23]
+	mi := &file_proto_signaling_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1828,7 +1898,7 @@ func (x *RoomStateEvent) String() string {
 func (*RoomStateEvent) ProtoMessage() {}
 
 func (x *RoomStateEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[23]
+	mi := &file_proto_signaling_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1841,7 +1911,7 @@ func (x *RoomStateEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoomStateEvent.ProtoReflect.Descriptor instead.
 func (*RoomStateEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{23}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *RoomStateEvent) GetParticipants() []*ParticipantInfo {
@@ -1874,7 +1944,7 @@ type ParticipantInfo struct {
 
 func (x *ParticipantInfo) Reset() {
 	*x = ParticipantInfo{}
-	mi := &file_proto_signaling_proto_msgTypes[24]
+	mi := &file_proto_signaling_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1886,7 +1956,7 @@ func (x *ParticipantInfo) String() string {
 func (*ParticipantInfo) ProtoMessage() {}
 
 func (x *ParticipantInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[24]
+	mi := &file_proto_signaling_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1899,7 +1969,7 @@ func (x *ParticipantInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParticipantInfo.ProtoReflect.Descriptor instead.
 func (*ParticipantInfo) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{24}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ParticipantInfo) GetId() string {
@@ -1962,7 +2032,7 @@ type ErrorEvent struct {
 
 func (x *ErrorEvent) Reset() {
 	*x = ErrorEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[25]
+	mi := &file_proto_signaling_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1974,7 +2044,7 @@ func (x *ErrorEvent) String() string {
 func (*ErrorEvent) ProtoMessage() {}
 
 func (x *ErrorEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[25]
+	mi := &file_proto_signaling_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1987,7 +2057,7 @@ func (x *ErrorEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorEvent.ProtoReflect.Descriptor instead.
 func (*ErrorEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{25}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ErrorEvent) GetCode() string {
@@ -2024,7 +2094,7 @@ type TrackAddedEvent struct {
 
 func (x *TrackAddedEvent) Reset() {
 	*x = TrackAddedEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[26]
+	mi := &file_proto_signaling_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2036,7 +2106,7 @@ func (x *TrackAddedEvent) String() string {
 func (*TrackAddedEvent) ProtoMessage() {}
 
 func (x *TrackAddedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[26]
+	mi := &file_proto_signaling_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2049,7 +2119,7 @@ func (x *TrackAddedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrackAddedEvent.ProtoReflect.Descriptor instead.
 func (*TrackAddedEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{26}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *TrackAddedEvent) GetUserId() string {
@@ -2086,7 +2156,7 @@ type CaptionEvent struct {
 
 func (x *CaptionEvent) Reset() {
 	*x = CaptionEvent{}
-	mi := &file_proto_signaling_proto_msgTypes[27]
+	mi := &file_proto_signaling_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2098,7 +2168,7 @@ func (x *CaptionEvent) String() string {
 func (*CaptionEvent) ProtoMessage() {}
 
 func (x *CaptionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_signaling_proto_msgTypes[27]
+	mi := &file_proto_signaling_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2111,7 +2181,7 @@ func (x *CaptionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CaptionEvent.ProtoReflect.Descriptor instead.
 func (*CaptionEvent) Descriptor() ([]byte, []int) {
-	return file_proto_signaling_proto_rawDescGZIP(), []int{27}
+	return file_proto_signaling_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CaptionEvent) GetSessionId() string {
@@ -2146,7 +2216,7 @@ var File_proto_signaling_proto protoreflect.FileDescriptor
 
 const file_proto_signaling_proto_rawDesc = "" +
 	"\n" +
-	"\x15proto/signaling.proto\x12\tsignaling\"\xfc\r\n" +
+	"\x15proto/signaling.proto\x12\tsignaling\"\xc0\x0e\n" +
 	"\x10WebSocketMessage\x12,\n" +
 	"\x04join\x18\x01 \x01(\v2\x16.signaling.JoinRequestH\x00R\x04join\x12>\n" +
 	"\rjoin_response\x18\x02 \x01(\v2\x17.signaling.JoinResponseH\x00R\fjoinResponse\x12;\n" +
@@ -2181,12 +2251,14 @@ const file_proto_signaling_proto_rawDesc = "" +
 	"\x05error\x18\x12 \x01(\v2\x15.signaling.ErrorEventH\x00R\x05error\x12=\n" +
 	"\vtrack_added\x18\x1a \x01(\v2\x1a.signaling.TrackAddedEventH\x00R\n" +
 	"trackAdded\x123\n" +
-	"\acaption\x18\x1b \x01(\v2\x17.signaling.CaptionEventH\x00R\acaptionB\t\n" +
-	"\apayload\"_\n" +
+	"\acaption\x18\x1b \x01(\v2\x17.signaling.CaptionEventH\x00R\acaption\x12B\n" +
+	"\fset_language\x18\x1c \x01(\v2\x1d.signaling.SetLanguageRequestH\x00R\vsetLanguageB\t\n" +
+	"\apayload\"\x88\x01\n" +
 	"\vJoinRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
 	"\aroom_id\x18\x02 \x01(\tR\x06roomId\x12!\n" +
-	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"\x9a\x01\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12'\n" +
+	"\x0ftarget_language\x18\x04 \x01(\tR\x0etargetLanguage\"\x9a\x01\n" +
 	"\fJoinResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12>\n" +
@@ -2194,7 +2266,9 @@ const file_proto_signaling_proto_rawDesc = "" +
 	"\ais_host\x18\x04 \x01(\bR\x06isHost\"X\n" +
 	"\x10ReconnectRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12.\n" +
-	"\x13previous_session_id\x18\x02 \x01(\tR\x11previousSessionId\"G\n" +
+	"\x13previous_session_id\x18\x02 \x01(\tR\x11previousSessionId\"9\n" +
+	"\x12SetLanguageRequest\x12#\n" +
+	"\rlanguage_code\x18\x01 \x01(\tR\flanguageCode\"G\n" +
 	"\x12ToggleMediaRequest\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1d\n" +
 	"\n" +
@@ -2305,73 +2379,75 @@ func file_proto_signaling_proto_rawDescGZIP() []byte {
 	return file_proto_signaling_proto_rawDescData
 }
 
-var file_proto_signaling_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_proto_signaling_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_proto_signaling_proto_goTypes = []any{
 	(*WebSocketMessage)(nil),             // 0: signaling.WebSocketMessage
 	(*JoinRequest)(nil),                  // 1: signaling.JoinRequest
 	(*JoinResponse)(nil),                 // 2: signaling.JoinResponse
 	(*ReconnectRequest)(nil),             // 3: signaling.ReconnectRequest
-	(*ToggleMediaRequest)(nil),           // 4: signaling.ToggleMediaRequest
-	(*MediaStateEvent)(nil),              // 5: signaling.MediaStateEvent
-	(*ToggleHandRequest)(nil),            // 6: signaling.ToggleHandRequest
-	(*HandUpdateEvent)(nil),              // 7: signaling.HandUpdateEvent
-	(*ScreenShareRequest)(nil),           // 8: signaling.ScreenShareRequest
-	(*ScreenShareEvent)(nil),             // 9: signaling.ScreenShareEvent
-	(*RequestScreenSharePermission)(nil), // 10: signaling.RequestScreenSharePermission
-	(*ScreenSharePermissionEvent)(nil),   // 11: signaling.ScreenSharePermissionEvent
-	(*ChatRequest)(nil),                  // 12: signaling.ChatRequest
-	(*ChatEvent)(nil),                    // 13: signaling.ChatEvent
-	(*GetRecentChatsRequest)(nil),        // 14: signaling.GetRecentChatsRequest
-	(*RecentChatsEvent)(nil),             // 15: signaling.RecentChatsEvent
-	(*DeleteChatRequest)(nil),            // 16: signaling.DeleteChatRequest
-	(*DeleteChatEvent)(nil),              // 17: signaling.DeleteChatEvent
-	(*WaitingRoomEvent)(nil),             // 18: signaling.WaitingRoomEvent
-	(*AdminActionRequest)(nil),           // 19: signaling.AdminActionRequest
-	(*AdminActionEvent)(nil),             // 20: signaling.AdminActionEvent
-	(*SignalRequest)(nil),                // 21: signaling.SignalRequest
-	(*SignalEvent)(nil),                  // 22: signaling.SignalEvent
-	(*RoomStateEvent)(nil),               // 23: signaling.RoomStateEvent
-	(*ParticipantInfo)(nil),              // 24: signaling.ParticipantInfo
-	(*ErrorEvent)(nil),                   // 25: signaling.ErrorEvent
-	(*TrackAddedEvent)(nil),              // 26: signaling.TrackAddedEvent
-	(*CaptionEvent)(nil),                 // 27: signaling.CaptionEvent
+	(*SetLanguageRequest)(nil),           // 4: signaling.SetLanguageRequest
+	(*ToggleMediaRequest)(nil),           // 5: signaling.ToggleMediaRequest
+	(*MediaStateEvent)(nil),              // 6: signaling.MediaStateEvent
+	(*ToggleHandRequest)(nil),            // 7: signaling.ToggleHandRequest
+	(*HandUpdateEvent)(nil),              // 8: signaling.HandUpdateEvent
+	(*ScreenShareRequest)(nil),           // 9: signaling.ScreenShareRequest
+	(*ScreenShareEvent)(nil),             // 10: signaling.ScreenShareEvent
+	(*RequestScreenSharePermission)(nil), // 11: signaling.RequestScreenSharePermission
+	(*ScreenSharePermissionEvent)(nil),   // 12: signaling.ScreenSharePermissionEvent
+	(*ChatRequest)(nil),                  // 13: signaling.ChatRequest
+	(*ChatEvent)(nil),                    // 14: signaling.ChatEvent
+	(*GetRecentChatsRequest)(nil),        // 15: signaling.GetRecentChatsRequest
+	(*RecentChatsEvent)(nil),             // 16: signaling.RecentChatsEvent
+	(*DeleteChatRequest)(nil),            // 17: signaling.DeleteChatRequest
+	(*DeleteChatEvent)(nil),              // 18: signaling.DeleteChatEvent
+	(*WaitingRoomEvent)(nil),             // 19: signaling.WaitingRoomEvent
+	(*AdminActionRequest)(nil),           // 20: signaling.AdminActionRequest
+	(*AdminActionEvent)(nil),             // 21: signaling.AdminActionEvent
+	(*SignalRequest)(nil),                // 22: signaling.SignalRequest
+	(*SignalEvent)(nil),                  // 23: signaling.SignalEvent
+	(*RoomStateEvent)(nil),               // 24: signaling.RoomStateEvent
+	(*ParticipantInfo)(nil),              // 25: signaling.ParticipantInfo
+	(*ErrorEvent)(nil),                   // 26: signaling.ErrorEvent
+	(*TrackAddedEvent)(nil),              // 27: signaling.TrackAddedEvent
+	(*CaptionEvent)(nil),                 // 28: signaling.CaptionEvent
 }
 var file_proto_signaling_proto_depIdxs = []int32{
 	1,  // 0: signaling.WebSocketMessage.join:type_name -> signaling.JoinRequest
 	2,  // 1: signaling.WebSocketMessage.join_response:type_name -> signaling.JoinResponse
 	3,  // 2: signaling.WebSocketMessage.reconnect:type_name -> signaling.ReconnectRequest
-	4,  // 3: signaling.WebSocketMessage.toggle_media:type_name -> signaling.ToggleMediaRequest
-	5,  // 4: signaling.WebSocketMessage.media_state_changed:type_name -> signaling.MediaStateEvent
-	8,  // 5: signaling.WebSocketMessage.screen_share:type_name -> signaling.ScreenShareRequest
-	9,  // 6: signaling.WebSocketMessage.screen_share_changed:type_name -> signaling.ScreenShareEvent
-	10, // 7: signaling.WebSocketMessage.request_screen_share_permission:type_name -> signaling.RequestScreenSharePermission
-	11, // 8: signaling.WebSocketMessage.screen_share_permission_event:type_name -> signaling.ScreenSharePermissionEvent
-	12, // 9: signaling.WebSocketMessage.chat:type_name -> signaling.ChatRequest
-	13, // 10: signaling.WebSocketMessage.chat_event:type_name -> signaling.ChatEvent
-	14, // 11: signaling.WebSocketMessage.get_recent_chats:type_name -> signaling.GetRecentChatsRequest
-	15, // 12: signaling.WebSocketMessage.recent_chats:type_name -> signaling.RecentChatsEvent
-	16, // 13: signaling.WebSocketMessage.delete_chat:type_name -> signaling.DeleteChatRequest
-	17, // 14: signaling.WebSocketMessage.delete_chat_event:type_name -> signaling.DeleteChatEvent
-	6,  // 15: signaling.WebSocketMessage.toggle_hand:type_name -> signaling.ToggleHandRequest
-	7,  // 16: signaling.WebSocketMessage.hand_update:type_name -> signaling.HandUpdateEvent
-	18, // 17: signaling.WebSocketMessage.waiting_room_notification:type_name -> signaling.WaitingRoomEvent
-	19, // 18: signaling.WebSocketMessage.admin_action:type_name -> signaling.AdminActionRequest
-	20, // 19: signaling.WebSocketMessage.admin_event:type_name -> signaling.AdminActionEvent
-	21, // 20: signaling.WebSocketMessage.signal:type_name -> signaling.SignalRequest
-	22, // 21: signaling.WebSocketMessage.signal_event:type_name -> signaling.SignalEvent
-	23, // 22: signaling.WebSocketMessage.room_state:type_name -> signaling.RoomStateEvent
-	25, // 23: signaling.WebSocketMessage.error:type_name -> signaling.ErrorEvent
-	26, // 24: signaling.WebSocketMessage.track_added:type_name -> signaling.TrackAddedEvent
-	27, // 25: signaling.WebSocketMessage.caption:type_name -> signaling.CaptionEvent
-	23, // 26: signaling.JoinResponse.initial_state:type_name -> signaling.RoomStateEvent
-	13, // 27: signaling.RecentChatsEvent.chats:type_name -> signaling.ChatEvent
-	24, // 28: signaling.RoomStateEvent.participants:type_name -> signaling.ParticipantInfo
-	24, // 29: signaling.RoomStateEvent.waiting_users:type_name -> signaling.ParticipantInfo
-	30, // [30:30] is the sub-list for method output_type
-	30, // [30:30] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	5,  // 3: signaling.WebSocketMessage.toggle_media:type_name -> signaling.ToggleMediaRequest
+	6,  // 4: signaling.WebSocketMessage.media_state_changed:type_name -> signaling.MediaStateEvent
+	9,  // 5: signaling.WebSocketMessage.screen_share:type_name -> signaling.ScreenShareRequest
+	10, // 6: signaling.WebSocketMessage.screen_share_changed:type_name -> signaling.ScreenShareEvent
+	11, // 7: signaling.WebSocketMessage.request_screen_share_permission:type_name -> signaling.RequestScreenSharePermission
+	12, // 8: signaling.WebSocketMessage.screen_share_permission_event:type_name -> signaling.ScreenSharePermissionEvent
+	13, // 9: signaling.WebSocketMessage.chat:type_name -> signaling.ChatRequest
+	14, // 10: signaling.WebSocketMessage.chat_event:type_name -> signaling.ChatEvent
+	15, // 11: signaling.WebSocketMessage.get_recent_chats:type_name -> signaling.GetRecentChatsRequest
+	16, // 12: signaling.WebSocketMessage.recent_chats:type_name -> signaling.RecentChatsEvent
+	17, // 13: signaling.WebSocketMessage.delete_chat:type_name -> signaling.DeleteChatRequest
+	18, // 14: signaling.WebSocketMessage.delete_chat_event:type_name -> signaling.DeleteChatEvent
+	7,  // 15: signaling.WebSocketMessage.toggle_hand:type_name -> signaling.ToggleHandRequest
+	8,  // 16: signaling.WebSocketMessage.hand_update:type_name -> signaling.HandUpdateEvent
+	19, // 17: signaling.WebSocketMessage.waiting_room_notification:type_name -> signaling.WaitingRoomEvent
+	20, // 18: signaling.WebSocketMessage.admin_action:type_name -> signaling.AdminActionRequest
+	21, // 19: signaling.WebSocketMessage.admin_event:type_name -> signaling.AdminActionEvent
+	22, // 20: signaling.WebSocketMessage.signal:type_name -> signaling.SignalRequest
+	23, // 21: signaling.WebSocketMessage.signal_event:type_name -> signaling.SignalEvent
+	24, // 22: signaling.WebSocketMessage.room_state:type_name -> signaling.RoomStateEvent
+	26, // 23: signaling.WebSocketMessage.error:type_name -> signaling.ErrorEvent
+	27, // 24: signaling.WebSocketMessage.track_added:type_name -> signaling.TrackAddedEvent
+	28, // 25: signaling.WebSocketMessage.caption:type_name -> signaling.CaptionEvent
+	4,  // 26: signaling.WebSocketMessage.set_language:type_name -> signaling.SetLanguageRequest
+	24, // 27: signaling.JoinResponse.initial_state:type_name -> signaling.RoomStateEvent
+	14, // 28: signaling.RecentChatsEvent.chats:type_name -> signaling.ChatEvent
+	25, // 29: signaling.RoomStateEvent.participants:type_name -> signaling.ParticipantInfo
+	25, // 30: signaling.RoomStateEvent.waiting_users:type_name -> signaling.ParticipantInfo
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_proto_signaling_proto_init() }
@@ -2406,14 +2482,15 @@ func file_proto_signaling_proto_init() {
 		(*WebSocketMessage_Error)(nil),
 		(*WebSocketMessage_TrackAdded)(nil),
 		(*WebSocketMessage_Caption)(nil),
+		(*WebSocketMessage_SetLanguage)(nil),
 	}
-	file_proto_signaling_proto_msgTypes[21].OneofWrappers = []any{
+	file_proto_signaling_proto_msgTypes[22].OneofWrappers = []any{
 		(*SignalRequest_SdpAnswer)(nil),
 		(*SignalRequest_IceCandidate)(nil),
 		(*SignalRequest_Renegotiate)(nil),
 		(*SignalRequest_SdpOffer)(nil),
 	}
-	file_proto_signaling_proto_msgTypes[22].OneofWrappers = []any{
+	file_proto_signaling_proto_msgTypes[23].OneofWrappers = []any{
 		(*SignalEvent_SdpOffer)(nil),
 		(*SignalEvent_IceCandidate)(nil),
 		(*SignalEvent_SdpAnswer)(nil),
@@ -2424,7 +2501,7 @@ func file_proto_signaling_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_signaling_proto_rawDesc), len(file_proto_signaling_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

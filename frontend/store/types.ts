@@ -166,6 +166,26 @@ export interface RoomSlice {
   joinRoom: (approvalToken?: string) => Promise<void>;
   leaveRoom: () => void;
   updateRoomSettings: (settings: Partial<RoomSettings>) => void;
+
+  // Summarization & Translation
+  targetLanguage: string;
+  isGeneratingSummary: boolean;
+  summaryData: string | null;
+  actionItems: string[];
+  setTargetLanguage: (lang: string) => void;
+  generateSummary: () => Promise<void>;
+
+  // Captions
+  captions: CaptionEvent[];
+  addCaption: (caption: CaptionEvent) => void;
+}
+
+export interface CaptionEvent {
+  sessionId: string;
+  text: string;
+  isFinal: boolean;
+  confidence: number;
+  timestamp: number; // Added for UI helper
 }
 
 export interface UiSlice {
@@ -179,6 +199,12 @@ export interface UiSlice {
   pinParticipant: (participantId: string | null) => void;
   isLeaveDialogOpen: boolean;
   setLeaveDialogOpen: (open: boolean) => void;
+
+  isSummaryModalOpen: boolean;
+  toggleSummaryModal: () => void;
+
+  isCaptionsEnabled: boolean;
+  toggleCaptions: () => void;
 }
 
 export type RoomStoreState = ChatSlice &

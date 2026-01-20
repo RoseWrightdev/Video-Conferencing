@@ -405,17 +405,23 @@ func (r *Room) sendRoomStateToClient(client types.ClientInterface) {
 	})
 }
 
-func (r *Room) broadcastLocked(msg *pb.WebSocketMessage) {
-	var targets []types.ClientInterface
+// broadcastLocalLocked sends a message to all local non-waiting clients.
+// It does NOT publish to Redis.
+func (r *Room) broadcastLocalLocked(msg *pb.WebSocketMessage) {
+	var recipients []types.ClientInterface
 	for _, client := range r.clients {
 		if client.GetRole() != types.RoleTypeWaiting {
-			targets = append(targets, client)
+			recipients = append(recipients, client)
 		}
 	}
 
-	for _, client := range targets {
+	for _, client := range recipients {
 		client.SendProto(msg)
 	}
+}
+
+func (r *Room) broadcastLocked(msg *pb.WebSocketMessage) {
+	r.broadcastLocalLocked(msg)
 
 	r.wg.Add(1)
 	go func() {

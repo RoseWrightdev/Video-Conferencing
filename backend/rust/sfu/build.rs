@@ -10,12 +10,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. Compile the protos for SFU Server
     tonic_build::configure()
         .build_server(true)
-        .build_client(false)
+        .build_client(true)
         .out_dir("src/generated")
         .compile(
             &[
                 &format!("{}/sfu.proto", proto_dir),
                 &format!("{}/signaling.proto", proto_dir),
+                &format!("{}/stream-processor.proto", proto_dir),
             ],
             &[root_dir],
         )?;

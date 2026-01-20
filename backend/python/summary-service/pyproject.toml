@@ -13,6 +13,12 @@ dependencies = [
     "grpcio-tools>=1.76.0",
     "llama-cpp-python>=0.2.23",
     "huggingface-hub>=0.20.0",
+    "opentelemetry-distro",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-grpc",
+    "opentelemetry-instrumentation-redis",
+    "opentelemetry-instrumentation-logging",
 ]
 
 [tool.setuptools]

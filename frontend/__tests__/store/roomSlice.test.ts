@@ -94,7 +94,7 @@ describe('roomSlice', () => {
         await promise;
 
         // Verify RoomClient usage
-        expect(mockConnect).toHaveBeenCalledWith(roomId, username, 'token');
+        expect(mockConnect).toHaveBeenCalledWith(roomId, username, 'token', 'en');
 
         // Verify legacy clients are attached
         expect(currentState.wsClient).toBe(mockWs);

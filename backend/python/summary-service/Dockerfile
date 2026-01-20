@@ -25,4 +25,4 @@ EXPOSE 50052
 EXPOSE 8001
 
 # Run the service
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "opentelemetry-instrument", "--traces_exporter", "otlp", "--metrics_exporter", "none", "--service_name", "summary-service", "--exporter_otlp_endpoint", "http://otel-collector:4317", "python", "main.py"]

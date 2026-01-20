@@ -6,7 +6,7 @@
 pub struct WebSocketMessage {
     #[prost(
         oneof = "web_socket_message::Payload",
-        tags = "1, 2, 3, 4, 5, 6, 7, 20, 21, 8, 9, 22, 23, 24, 25, 10, 11, 12, 13, 14, 15, 16, 17, 18, 26, 27"
+        tags = "1, 2, 3, 4, 5, 6, 7, 20, 21, 8, 9, 22, 23, 24, 25, 10, 11, 12, 13, 14, 15, 16, 17, 18, 26, 27, 28"
     )]
     pub payload: ::core::option::Option<web_socket_message::Payload>,
 }
@@ -104,6 +104,9 @@ pub mod web_socket_message {
         /// Real-time caption event.
         #[prost(message, tag = "27")]
         Caption(super::CaptionEvent),
+        /// --- Language ---
+        #[prost(message, tag = "28")]
+        SetLanguage(super::SetLanguageRequest),
     }
 }
 /// JoinRequest is sent by the client to authenticate and join a specific room.
@@ -119,6 +122,9 @@ pub struct JoinRequest {
     /// The name the user wishes to display
     #[prost(string, tag = "3")]
     pub display_name: ::prost::alloc::string::String,
+    /// Preferred language for translation (e.g., "es", "fr")
+    #[prost(string, tag = "4")]
+    pub target_language: ::prost::alloc::string::String,
 }
 /// JoinResponse acknowledges the JoinRequest.
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -144,6 +150,14 @@ pub struct ReconnectRequest {
     pub token: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub previous_session_id: ::prost::alloc::string::String,
+}
+/// SetLanguageRequest signals a user's intent to change their preferred language.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetLanguageRequest {
+    /// ISO language code
+    #[prost(string, tag = "1")]
+    pub language_code: ::prost::alloc::string::String,
 }
 /// ToggleMediaRequest signals a user's intent to mute/unmute audio or video.
 #[allow(clippy::derive_partial_eq_without_eq)]

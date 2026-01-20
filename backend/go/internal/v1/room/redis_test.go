@@ -2,6 +2,7 @@ package room
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -46,12 +47,13 @@ func TestHandleRedisMessage(t *testing.T) {
 	}
 
 	data, _ := proto.Marshal(chatMsg)
+	jsonData, _ := json.Marshal(data)
 
 	// Simulate Redis message
 	payload := bus.PubSubPayload{
 		RoomID:   "test-room",
 		Event:    "chat",
-		Payload:  data,
+		Payload:  jsonData,
 		SenderID: "other-pod-user",
 	}
 
@@ -61,6 +63,46 @@ func TestHandleRedisMessage(t *testing.T) {
 	assert.Eventually(t, func() bool {
 		return len(host.sendChan) > 0
 	}, time.Second*1, time.Millisecond*10)
+}
+
+func TestHandleRedisMessage_NoPublishLoop(t *testing.T) {
+	ctx := context.Background()
+	mockBus := &MockBusService{}
+	r := NewRoom("test-room", nil, mockBus, nil)
+
+	host := newMockClient("host1", "Host", types.RoleTypeHost)
+	r.addHost(ctx, host)
+
+	// Create a chat message
+	chatMsg := &pb.WebSocketMessage{
+		Payload: &pb.WebSocketMessage_ChatEvent{
+			ChatEvent: &pb.ChatEvent{
+				Id:      "test-chat-loop",
+				Content: "Hello Loop",
+			},
+		},
+	}
+
+	data, _ := proto.Marshal(chatMsg)
+	jsonData, _ := json.Marshal(data)
+
+	// Simulate Redis message
+	payload := bus.PubSubPayload{
+		RoomID:   "test-room",
+		Event:    "chat",
+		Payload:  jsonData,
+		SenderID: "other-pod-user",
+	}
+
+	r.handleRedisMessage(payload)
+
+	// Host should receive the message locally
+	assert.Eventually(t, func() bool {
+		return len(host.sendChan) > 0
+	}, time.Second*1, time.Millisecond*10)
+
+	// CRITICAL: Bus Publish should NOT be called again
+	assert.Equal(t, 0, mockBus.publishCalls, "handleRedisMessage triggered a Publish call, causing an infinite loop")
 }
 
 func TestHandleRedisMessage_EmptyPayload(_ *testing.T) {

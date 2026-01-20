@@ -15,7 +15,9 @@ import (
 
 // MockRoom implements types.Roomer for testing signaling logic
 type MockRoom struct {
-	ID types.RoomIDType
+	ID             types.RoomIDType
+	BroadcastCalls []*pb.WebSocketMessage
+	mu             sync.Mutex
 }
 
 func (m *MockRoom) GetID() types.RoomIDType {
@@ -33,6 +35,12 @@ func (m *MockRoom) CreateSFUSession(_ context.Context, _ types.ClientInterface) 
 	return nil
 }
 func (m *MockRoom) HandleSFUSignal(_ context.Context, _ types.ClientInterface, _ *pb.SignalRequest) {
+}
+
+func (m *MockRoom) Broadcast(msg *pb.WebSocketMessage) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.BroadcastCalls = append(m.BroadcastCalls, msg)
 }
 
 // MockClient implements types.ClientInterface for testing signaling logic

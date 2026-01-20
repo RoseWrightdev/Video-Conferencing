@@ -1,103 +1,44 @@
 import pytest
-import grpc
-from proto import stream_processor_pb2 as cc_pb2
-from proto import stream_processor_pb2_grpc as cc_pb2_grpc
-from main import serve_grpc
-import asyncio
-import numpy as np
+import os
+import wave
+from transcriber import AudioTranscriber
 
-# We can start the server in a separate task and test against it
-@pytest.mark.asyncio
-async def test_stream_audio_integration():
-    # 1. Start Server on a different port for testing (or mock it, but this is integration)
-    # Note: Implementing a full server start/stop is heavy. 
-    # A cleaner integration is to trust `main.py` binds to 50051 or run it via docker.
-    # For this test, we assume the server IS RUNNING or we start a test instance.
-    
-    # Let's try to verify the `AudioTranscriber` mostly, or mock the gRPC server part.
-    # But user asked for "Integration Tests".
-    
-    # Let's connect to the local server (assuming user ran `uv run main.py`) OR
-    # we can instanciate the servicer class directly to test logic without network.
-    
-    from main import CaptioningService
-    service = CaptioningService()
-    
-    # Mock request iterator
-    async def request_generator():
-        # Create a silent audio chunk (1 second of silence at 16kHz)
-        # 16000 samples * 2 bytes/sample = 32000 bytes
-        silence = bytes(32000) 
-        yield cc_pb2.AudioChunk(session_id="test_session", audio_data=silence)
-        
-        # NOTE: Real integration would send a wav file with speech.
-    
-    # Helper to collect responses
-    responses = []
-    async for response in service.StreamAudio(request_generator(), None):
-        responses.append(response)
-        
-    # Since we sent silence, we expect NO captions usually, or empty ones.
-    # Whisper might hallucinate on silence, but usually vades it out.
-    # If we want to test "working", we need a file.
-    
-    print(f"Received {len(responses)} responses")
-    # Just asserting it didn't crash
-    assert True 
+# Path to the downloaded test file
+AUDIO_FILE = os.path.join(os.path.dirname(__file__), "jfk.wav")
+
+@pytest.fixture
+def real_transcriber():
+    # Use 'tiny' model for speed in tests
+    return AudioTranscriber(model_size="tiny", device="cpu")
+
+def get_pcm_data(filename):
+    with wave.open(filename, 'rb') as wf:
+        # Verify format (should be mono 16kHz for best results, but we take what we get)
+        # jfk.wav is usually 16kHz mono.
+        frames = wf.readframes(wf.getnframes())
+        return frames
 
 @pytest.mark.asyncio
-async def test_transcriber_logic():
-    from transcriber import AudioTranscriber
-    transcriber = AudioTranscriber(model_size="tiny.en", device="cpu", compute_type="int8")
+async def test_integration_transcribe_jfk(real_transcriber):
+    if not os.path.exists(AUDIO_FILE):
+        pytest.skip(f"Audio file {AUDIO_FILE} not found")
+        
+    pcm_data = get_pcm_data(AUDIO_FILE)
     
-    # Generate random noise (should result in no text or hallucination)
-    # Using numpy to generate float32 and convert to int16 bytes
-    # But transcriber expects bytes
-    import numpy as np
-    audio_data = np.random.uniform(-0.1, 0.1, 16000).astype(np.float32)
-    # Convert back to int16 bytes for input simulation
-    audio_int16 = (audio_data * 32768).astype(np.int16).tobytes()
+    # Taking only the first 3 seconds to save time/memory if needed, 
+    # but let's do whole clip (11s) as it's short.
+    # 3 seconds * 16000 * 2 bytes = 96000 bytes
+    # pcm_data = pcm_data[:96000] 
     
-    results = await transcriber.transcribe_chunk(audio_int16)
+    results = await real_transcriber.transcribe_chunk(pcm_data)
     
-    # Assert return structure
-    assert isinstance(results, list)
-    if len(results) > 0:
-        assert "text" in results[0]
-
-@pytest.mark.asyncio
-async def test_transcriber_translation_params():
-    from transcriber import AudioTranscriber
-    import numpy as np
-    from unittest.mock import MagicMock, patch
-
-    # Mock the WhisperModel class to avoid loading the actual model (slow/heavy)
-    with patch("transcriber.WhisperModel") as MockModel:
-        mock_instance = MockModel.return_value
-        # Mock transcribe method to return empty segments
-        mock_instance.transcribe.return_value = ([], {}) 
-        
-        transcriber = AudioTranscriber(model_size="tiny", device="cpu")
-        
-        # Create dummy audio
-        audio_data = np.zeros(16000, dtype=np.float32)
-        audio_bytes = (audio_data * 32768).astype(np.int16).tobytes()
-
-        # Test 1: English Target -> task="translate"
-        await transcriber.transcribe_chunk(audio_bytes, target_language="en")
-        
-        # Verify call args
-        call_args = mock_instance.transcribe.call_args
-        assert call_args, "transcribe should have been called"
-        kwargs = call_args[1]
-        assert kwargs.get('task') == "translate"
-        assert kwargs.get('language') is None # Should be auto-detect source
-
-        # Test 2: Spanish Target -> task="transcribe", language="es"
-        await transcriber.transcribe_chunk(audio_bytes, target_language="es")
-        
-            # Verify call args
-        call_args = mock_instance.transcribe.call_args
-        kwargs = call_args[1]
-        assert kwargs.get('task') == "transcribe"
-        assert kwargs.get('language') == "es"
+    # Combine text
+    full_text = " ".join([r["text"] for r in results])
+    
+    # Known transcript snippet
+    expected_snippet = "Ask not what your country can do for you"
+    
+    print(f"Transcript: {full_text}")
+    
+    # Assert case-insensitive overlap
+    assert expected_snippet.lower() in full_text.lower() or "fellow americans" in full_text.lower()

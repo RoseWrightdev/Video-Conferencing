@@ -44,6 +44,7 @@ const meta: Meta<typeof ControlBar> = {
         isScreenSharing: { control: 'boolean' },
         currentUserId: { control: 'text' },
         unreadCount: { control: 'number' },
+        isCaptionsEnabled: { control: 'boolean' },
     } as any,
 };
 

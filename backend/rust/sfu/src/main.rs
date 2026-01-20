@@ -24,6 +24,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing with validated RUST_LOG
     logging::init(&cfg.rust_log);
 
+    info!("✅ Environment configuration validated successfully");
+    info!(
+        grpc_port = cfg.grpc_port,
+        rust_log = cfg.rust_log,
+        cc_service_addr = cfg.cc_service_addr,
+        "Configuration"
+    );
+
     // Initialize Metrics
     register_metrics();
 
@@ -45,10 +53,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", cfg.grpc_port).parse()?;
 
     // Initialize CC Client (Lazy)
-    let cc_client = match tonic::transport::Endpoint::new("http://localhost:50051") {
+    let cc_client = match tonic::transport::Endpoint::new(cfg.cc_service_addr.clone()) {
         Ok(e) => {
             let channel = e.connect_lazy();
-            Some(sfu::pb::cc::captioning_service_client::CaptioningServiceClient::new(channel))
+            Some(
+                sfu::pb::stream_processor::captioning_service_client::CaptioningServiceClient::new(
+                    channel,
+                ),
+            )
         }
         Err(e) => {
             tracing::warn!("Failed to create CC endpoint: {}", e);
