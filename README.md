@@ -42,7 +42,7 @@ graph TD
     CC -- gRPC (Text) --> SFU
     CC -- Push (Transcript) --> Redis
     BE -- gRPC (Summarize) --> Sum
-    Sum -- Pull (Transcript) --> Redis
+    Sum -- Redis --> Pull (Transcript)
 ```
 
 ### 1. Frontend Service
