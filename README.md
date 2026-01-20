@@ -98,7 +98,7 @@ graph TD
 
 ---
 
-## � Deployment & Infrastructure
+## Deployment & Infrastructure
 
 The project supports two deployment models depending on your needs.
 
