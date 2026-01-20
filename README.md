@@ -78,7 +78,7 @@ graph TD
 
 ### 5. Summary Service (GenAI)
 - **Path:** `backend/python/summary-service`
-- **Stack:** Python, **FastAPI**, **Redis**, **OpenAI/LLM**.
+- **Stack:** Python, **FastAPI**, **Redis**, **Local LLM (Llama 3.2 3B via llama-cpp-python)**.
 - **Role:** Post-meeting Intelligence.
     - **Triggered** via **gRPC** by the Go Backend.
     - **Retrieves** full conversation transcripts from Redis.
@@ -123,7 +123,7 @@ The full cloud-native setup for production environments.
 - Go 1.22+
 - Node.js 20+
 - Rust (latest stable)
-- Python 3.12+ & `uv` (for Stream Processor)
+- Python 3.12+ & `uv` (for Stream Processor & Summary Service)
 
 ### Quick Start
 1. **Copy Environment Variables:**
