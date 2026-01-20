@@ -6,6 +6,9 @@ backend/go/session
 temp
 backend/rust/sfu/target
 
+# Node
+node_modules/
+
 # Python
 .venv
 __pycache__
