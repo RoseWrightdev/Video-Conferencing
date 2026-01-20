@@ -11,29 +11,21 @@ This project implements a "Split-Brain" SFU architecture that decouples signalin
 ## 🏗 System Architecture
 
 ```mermaid
-graph TB
-    User["User"]
+graph TD
+    User["User / Browser"]
     Auth0["Auth0"]
     
-    subgraph Internet["Public Internet"]
+    subgraph "Public Internet"
         LB["Load Balancer"]
     end
     
-    subgraph K8s["Kubernetes Cluster"]
-        FE["Frontend"]
-        BE["Backend"]
-        SFU["SFU"]
-        CC["Stream Processor"]
-        Sum["Summary Service"]
+    subgraph "Kubernetes Cluster"
+        FE["Frontend<br/>(Next.js)"]
+        BE["Backend<br/>(Go)"]
+        SFU["SFU<br/>(Rust)"]
+        CC["Stream Processor<br/>(Python)"]
+        Sum["Summary Service<br/>(Python)"]
         Redis[("Redis")]
-        
-        subgraph Observability["Observability"]
-            OTEL["OTEL Collector"]
-            Prom["Prometheus"]
-            Grafana["Grafana"]
-            Loki["Loki"]
-            Tempo["Tempo"]
-        end
     end
 
     User -->|HTTPS| LB
@@ -41,20 +33,17 @@ graph TB
     LB --> FE
     LB --> BE
     
-    BE -.->|JWT| Auth0
-    FE -->|API| BE
+    BE -.->|Validate JWT| Auth0
+    FE -->|API + Metrics| BE
     BE -->|gRPC| SFU
     BE <-->|Pub/Sub| Redis
     SFU -->|Audio| CC
     CC -->|Captions| SFU
-    CC --> Redis
+    CC -->|Transcripts| Redis
     BE -->|Summarize| Sum
-    Sum --> Redis
-    
-    FE & BE & SFU & CC & Sum -.->|Telemetry| OTEL
-    OTEL --> Prom & Loki & Tempo
-    Prom & Loki & Tempo --> Grafana
+    Sum -->|Pull| Redis
 ```
+
 
 
 ### 1. Frontend Service
