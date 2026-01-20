@@ -58,10 +58,7 @@ export default function ParticipantGrid({
   layout = 'gallery',
   onPinParticipant,
   className,
-  unmutedParticipants = new Set(),
-  cameraOnParticipants = new Set(),
   sharingScreenParticipants = new Set(),
-  raisingHandParticipants = new Set(),
   speakingParticipants = new Set(),
   screenShareStream,
 }: ParticipantGridProps) {
@@ -136,7 +133,7 @@ export default function ParticipantGrid({
     return (
       <div className={cn('w-full h-full p-4 relative', className)}>
         <div className={cn('grid gap-4 w-full h-full', getGridColumns(participants.length))}>
-          {participants.map((participant, index) => (
+          {participants.map((participant) => (
             <ParticipantTile
               key={participant.id}
               participant={participant}

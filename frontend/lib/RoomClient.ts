@@ -82,7 +82,7 @@ export class RoomClient {
         });
 
         // Setup WebSocket Handlers
-        ws.onMessage((msg) => this.handleMessage(msg, roomId, username, token));
+        ws.onMessage((msg) => this.handleMessage(msg));
 
         try {
             await ws.connect();
@@ -194,8 +194,8 @@ export class RoomClient {
 
     // --- Event Handlers ---
 
-    private handleMessage(msg: WebSocketMessage, roomId: string, username: string, token: string) {
-        const messageType = Object.keys(msg).find(key => (msg as any)[key] !== undefined) as keyof WebSocketMessage;
+    private handleMessage(msg: WebSocketMessage) {
+        const messageType = Object.keys(msg).find(key => (msg as Record<string, unknown>)[key] !== undefined) as keyof WebSocketMessage;
 
         switch (messageType) {
             case 'joinResponse':
@@ -326,7 +326,7 @@ export class RoomClient {
             // Re-evaluate the best stream to show (e.g. if screen share stopped)
             // We want the last ACTIVE stream.
             const bestStream = this.getBestStream(localStreams);
-            const localStreamRef = bestStream;
+
 
             // If we have a stream locally but it's not on the participant object, attach it
 
@@ -350,7 +350,7 @@ export class RoomClient {
         }
     }
 
-    private handleJoinResponse(response: any) {
+    private handleJoinResponse(response: NonNullable<WebSocketMessage['joinResponse']>) {
         if (response.success) {
             this.currentUserId = response.userId;
             // Check if we are actually in the waiting room (race condition fix: roomState arrived before joinResponse)
@@ -502,40 +502,6 @@ export class RoomClient {
     }
 
     // --- Actions ---
-    public toggleAudio(enabled: boolean) {
-        this.ws?.send({ toggleMedia: { kind: 'audio', isEnabled: enabled } });
-    }
-
-    public toggleVideo(enabled: boolean) {
-        this.ws?.send({ toggleMedia: { kind: 'video', isEnabled: enabled } });
-    }
-
-    public sendChatMessage(content: string, type: 'text' | 'private' = 'text', targetId?: string) {
-        this.ws?.send({
-            chat: {
-                content,
-                targetId: targetId || ''
-            }
-        });
-    }
-
-    public approveParticipant(userId: string) {
-        this.ws?.send({
-            adminAction: {
-                action: 'approve',
-                targetUserId: userId
-            }
-        });
-    }
-
-    public kickParticipant(userId: string) {
-        this.ws?.send({
-            adminAction: {
-                action: 'kick',
-                targetUserId: userId
-            }
-        });
-    }
 
     public transferOwnership(userId: string) {
         this.ws?.send({

@@ -1,5 +1,5 @@
 import { StateCreator } from 'zustand';
-import { type ParticipantSlice, type RoomStoreState, type Participant } from '../types';
+import { type ParticipantSlice, type RoomStoreState } from '../types';
 import { loggers } from '@/lib/logger';
 
 export const createParticipantSlice: StateCreator<

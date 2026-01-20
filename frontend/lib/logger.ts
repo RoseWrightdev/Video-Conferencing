@@ -9,9 +9,11 @@ interface LogEntry {
   message: string;
   correlation_id: string;
   service: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 class Logger {
   private correlationId: string;
   private backendUrl: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
@@ -129,7 +131,7 @@ class Logger {
       }).catch(err => {
         console.error('Failed to send log to backend', err);
       });
-    } catch (e) {
+    } catch {
       // Prevent infinite loops if logging fails
     }
   }

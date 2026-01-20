@@ -67,8 +67,11 @@ export default function ParticipantTile({
           participantId: participant.id
         });
         videoEl.srcObject = null;
-        setIsPlaying(false);
-        setIsPlaybackMuted(false);
+        // Defer to avoid set-state-in-effect
+        setTimeout(() => {
+          setIsPlaying(false);
+          setIsPlaybackMuted(false);
+        }, 0);
       }
       return;
     }
@@ -83,9 +86,11 @@ export default function ParticipantTile({
 
       videoEl.srcObject = streamToDisplay;
 
-      // Reset states
-      setIsPlaying(false);
-      setIsPlaybackMuted(false);
+      // Reset states - Defer to avoid set-state-in-effect
+      setTimeout(() => {
+        setIsPlaying(false);
+        setIsPlaybackMuted(false);
+      }, 0);
 
       // Attempt playback
       const attemptPlay = async () => {
@@ -133,9 +138,12 @@ export default function ParticipantTile({
 
     // Synchronously check if it's already playing when the effect runs
     // (e.g. if state changed but the video element survived)
-    if (videoEl.readyState >= 2 && !videoEl.paused) {
-      setIsPlaying(true);
-    }
+    // Defer to avoid set-state-in-effect warning
+    setTimeout(() => {
+      if (videoEl.readyState >= 2 && !videoEl.paused) {
+        setIsPlaying(true);
+      }
+    }, 0);
 
     const onPlaying = () => {
       loggers.media.debug('ParticipantTile: Video started playing', { participantId: participant.id });

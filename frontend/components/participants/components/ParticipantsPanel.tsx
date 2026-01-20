@@ -1,6 +1,6 @@
 'use client';
 
-import { X as XIcon, Users, Hand, Monitor, Check, Ban, Clock, MoreVertical, UserX, Mic, MicOff, Crown } from 'lucide-react';
+import { X as XIcon, Users, Hand, Monitor, Check, Ban, Clock, UserX, MicOff, Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,10 +24,7 @@ interface ParticipantsPanelContentProps {
   waitingParticipants: Participant[];
   currentUserId: string | null;
   isHost: boolean;
-  unmutedParticipants: Set<string>;
-  cameraOnParticipants: Set<string>;
-  sharingScreenParticipants: Set<string>;
-  raisingHandParticipants: Set<string>;
+
   onClose: () => void;
   onApprove: (id: string) => void;
   onKick: (id: string) => void;
@@ -44,10 +41,6 @@ export function ParticipantsPanelContent({
   waitingParticipants,
   currentUserId,
   isHost,
-  unmutedParticipants,
-  cameraOnParticipants,
-  sharingScreenParticipants,
-  raisingHandParticipants,
   onClose,
   onApprove,
   onKick,
@@ -59,8 +52,8 @@ export function ParticipantsPanelContent({
     if (a.role === 'host' && b.role !== 'host') return -1;
     if (a.role !== 'host' && b.role === 'host') return 1;
 
-    const aHandRaised = raisingHandParticipants.has(a.id);
-    const bHandRaised = raisingHandParticipants.has(b.id);
+    const aHandRaised = a.isHandRaised ?? false;
+    const bHandRaised = b.isHandRaised ?? false;
     if (aHandRaised && !bHandRaised) return -1;
     if (!aHandRaised && bHandRaised) return 1;
 
@@ -319,10 +312,7 @@ export default function ParticipantsPanel({
     waitingParticipantsMap,
     currentUserId,
     isHost,
-    unmutedParticipants,
-    cameraOnParticipants,
-    sharingScreenParticipants,
-    raisingHandParticipants,
+
     toggleParticipantsPanel,
     approveParticipant,
     kickParticipant,
@@ -333,10 +323,7 @@ export default function ParticipantsPanel({
     waitingParticipantsMap: state.waitingParticipants,
     currentUserId: state.currentUserId,
     isHost: state.isHost,
-    unmutedParticipants: state.unmutedParticipants,
-    cameraOnParticipants: state.cameraOnParticipants,
-    sharingScreenParticipants: state.sharingScreenParticipants,
-    raisingHandParticipants: state.raisingHandParticipants,
+
     toggleParticipantsPanel: state.toggleParticipantsPanel,
     approveParticipant: state.approveParticipant,
     kickParticipant: state.kickParticipant,
@@ -354,10 +341,6 @@ export default function ParticipantsPanel({
       waitingParticipants={waitingParticipants}
       currentUserId={currentUserId}
       isHost={isHost}
-      unmutedParticipants={unmutedParticipants}
-      cameraOnParticipants={cameraOnParticipants}
-      sharingScreenParticipants={sharingScreenParticipants}
-      raisingHandParticipants={raisingHandParticipants}
       onClose={toggleParticipantsPanel}
       onApprove={approveParticipant}
       onKick={kickParticipant}

@@ -1,5 +1,5 @@
 import { StateCreator } from 'zustand';
-import { RoomClient } from '@/lib/RoomClient';
+import { RoomClient, RoomClientState } from '@/lib/RoomClient';
 import { type RoomSlice, type RoomStoreState } from '../types';
 import { summarizeMeeting } from '@/lib/api';
 import { createLogger } from '@/lib/logger';
@@ -17,15 +17,21 @@ export const createRoomSlice: StateCreator<
 > = (set, get) => {
 
   // Create callback to sync state from RoomClient to Zustand
-  const onRoomStateChange = (stateUpdate: any) => {
+  const onRoomStateChange = (stateUpdate: Partial<RoomClientState>) => {
     // Current state access
     const currentState = get();
+
+    // Create an accumulator for store updates that includes properties not in RoomClientState (like unread counts)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updates: any = {
+      ...stateUpdate,
+    };
 
     // INTERCEPT: Handle new Caption
     if (stateUpdate.lastCaption) {
       get().addCaption(stateUpdate.lastCaption);
       // Remove from update to avoid polluting store with non-slice property
-      delete stateUpdate.lastCaption;
+      delete updates.lastCaption;
     }
 
     // INTERCEPT: Calculate unread count for new messages
@@ -37,10 +43,10 @@ export const createRoomSlice: StateCreator<
       if (addedCount > 0 && !currentState.isChatPanelOpen) {
         // We have new messages and panel is closed -> increment unread count
         // We accumulate on top of existing unreadCount (or stateUpdate.unreadCount if it exists, theoretically)
-        stateUpdate.unreadCount = currentState.unreadCount + addedCount;
+        updates.unreadCount = currentState.unreadCount + addedCount;
       } else if (currentState.isChatPanelOpen) {
         // If panel is open, ensure unread count stays 0
-        stateUpdate.unreadCount = 0;
+        updates.unreadCount = 0;
       }
     }
 
@@ -49,7 +55,7 @@ export const createRoomSlice: StateCreator<
     // We must exclude the current user from triggers to avoid self-notification.
     if (stateUpdate.isInitialState) {
       // If this is the initial state load, we don't want to trigger notifications for existing users
-      stateUpdate.unreadParticipantsCount = 0;
+      updates.unreadParticipantsCount = 0;
     } else {
       const myId = stateUpdate.currentUserId || currentState.currentUserId;
       let addedCount = 0;
@@ -57,7 +63,7 @@ export const createRoomSlice: StateCreator<
       // 1. Check Waiting Participants (if updated)
       if (stateUpdate.waitingParticipants) {
         const currentWaiting = currentState.waitingParticipants;
-        const newWaiting = stateUpdate.waitingParticipants as Map<string, any>;
+        const newWaiting = stateUpdate.waitingParticipants;
 
         newWaiting.forEach((_, id) => {
           if (!currentWaiting.has(id) && id !== myId) {
@@ -69,7 +75,7 @@ export const createRoomSlice: StateCreator<
       // 2. Check Regular Participants (if updated)
       if (stateUpdate.participants) {
         const currentParticipants = currentState.participants;
-        const newParticipants = stateUpdate.participants as Map<string, any>;
+        const newParticipants = stateUpdate.participants;
 
         // Calculate added count for notifications
         newParticipants.forEach((_, id) => {
@@ -80,13 +86,13 @@ export const createRoomSlice: StateCreator<
       }
 
       if (addedCount > 0 && !currentState.isParticipantsPanelOpen) {
-        const currentUnread = stateUpdate.unreadParticipantsCount ?? currentState.unreadParticipantsCount ?? 0;
-        stateUpdate.unreadParticipantsCount = currentUnread + addedCount;
+        const currentUnread = updates.unreadParticipantsCount ?? currentState.unreadParticipantsCount ?? 0;
+        updates.unreadParticipantsCount = currentUnread + addedCount;
       }
     }
 
     // Direct merge for now
-    set(stateUpdate);
+    set(updates);
 
     // Also update connection state if join was successful or placed in waiting room
     if (stateUpdate.isJoined) {
@@ -101,7 +107,8 @@ export const createRoomSlice: StateCreator<
     }
   };
 
-  const onMediaTrackAdded = (userId: string, stream: MediaStream) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const onMediaTrackAdded = (_userId: string, _stream: MediaStream) => {
     // Redundant: RoomClient's onStateChange will propagate the participant with the stream attached.
     // Keeping this callback as it's required by RoomClient constructor, but no store action needed.
   };
@@ -126,8 +133,10 @@ export const createRoomSlice: StateCreator<
   activeRoomClient = roomClient;
 
   // Ensure cleanup on HMR disposal
-  if ((import.meta as any).hot) {
-    (import.meta as any).hot.dispose(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((import.meta as unknown as { hot: any }).hot) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (import.meta as unknown as { hot: any }).hot.dispose(() => {
       if (activeRoomClient) {
         logger.warn('HMR Dispose: Disconnecting RoomClient');
         activeRoomClient.disconnect();
@@ -209,7 +218,7 @@ export const createRoomSlice: StateCreator<
     },
 
     generateSummary: async () => {
-      const { roomId, targetLanguage } = get();
+      const { roomId } = get();
       if (!roomId) return;
 
       set({ isGeneratingSummary: true, summaryData: null, actionItems: [] });

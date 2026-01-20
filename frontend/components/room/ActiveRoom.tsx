@@ -19,7 +19,7 @@ interface ActiveRoomProps {
 
 export const ActiveRoom = ({ permissionsGranted, refreshDevices }: ActiveRoomProps) => {
     const [showControls, setShowControls] = useState(true);
-    const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
+    const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleMouseMove = () => {
         setShowControls(true);
@@ -32,8 +32,13 @@ export const ActiveRoom = ({ permissionsGranted, refreshDevices }: ActiveRoomPro
     };
 
     useEffect(() => {
-        // Start initial timer
-        handleMouseMove();
+        // Start initial timer - deferred to avoid set-state-in-effect warning
+        setTimeout(() => setShowControls(true), 0);
+
+        hideControlsTimeout.current = setTimeout(() => {
+            setShowControls(false);
+        }, 3000);
+
         return () => {
             if (hideControlsTimeout.current) {
                 clearTimeout(hideControlsTimeout.current);

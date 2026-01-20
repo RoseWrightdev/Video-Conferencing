@@ -50,4 +50,5 @@ globalThis.WebSocket = vi.fn(() => ({
   OPEN: 1,
   CLOSING: 2,
   CLOSED: 3,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 })) as any

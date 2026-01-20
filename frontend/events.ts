@@ -167,7 +167,7 @@ export interface WebSocketMessage {
 // Event Emitter
 // ----------------
 
-type EventHandler<T = any> = (data: T) => void;
+type EventHandler<T = unknown> = (data: T) => void;
 
 import { createLogger } from '@/lib/logger';
 
@@ -225,7 +225,7 @@ export class EventEmitter {
   /**
    * Emit an event with optional data
    */
-  emit(event: string, data?: any): void {
+  emit(event: string, data?: unknown): void {
     if (!this.events.has(event)) {
       return;
     }

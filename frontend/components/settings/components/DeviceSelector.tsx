@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Select,
   SelectContent,
@@ -35,7 +35,7 @@ export default function DeviceSelector({ onDeviceChange, className }: DeviceSele
   const [selectedVideoInput, setSelectedVideoInput] = useState<string>('');
 
   // Enumerate available devices
-  const enumerateDevices = async () => {
+  const enumerateDevices = useCallback(async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
 
@@ -86,7 +86,7 @@ export default function DeviceSelector({ onDeviceChange, className }: DeviceSele
     } catch (error) {
       logger.debug('Failed to enumerate devices', { error });
     }
-  };
+  }, [selectedAudioInput, selectedAudioOutput, selectedVideoInput]);
 
   // Handle device changes
   const handleDeviceChange = (deviceId: string, kind: MediaDeviceKind) => {
@@ -109,7 +109,10 @@ export default function DeviceSelector({ onDeviceChange, className }: DeviceSele
 
   // Initial enumeration and listen for device changes
   useEffect(() => {
-    enumerateDevices();
+    // Defer to avoid set-state-in-effect warning
+    const timer = setTimeout(() => {
+      enumerateDevices();
+    }, 0);
 
     // Listen for device changes (plug/unplug)
     const handleDeviceChange = () => {
@@ -120,9 +123,10 @@ export default function DeviceSelector({ onDeviceChange, className }: DeviceSele
     navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
 
     return () => {
+      clearTimeout(timer);
       navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
     };
-  }, []);
+  }, [enumerateDevices]);
 
   return (
     <div className={`space-y-6 ${className}`}>

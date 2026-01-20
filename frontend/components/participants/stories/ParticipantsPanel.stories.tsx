@@ -57,10 +57,7 @@ const defaultArgs = {
   waitingParticipants: [],
   currentUserId: '1',
   isHost: false,
-  unmutedParticipants: new Set<string>(),
-  cameraOnParticipants: new Set<string>(),
-  sharingScreenParticipants: new Set<string>(),
-  raisingHandParticipants: new Set<string>(),
+
   onClose: () => { },
   onApprove: () => { },
   onKick: () => { },
@@ -88,8 +85,6 @@ export const AsParticipant: Story = {
     participants: mockParticipants.slice(0, 4),
     currentUserId: '2',
     isHost: false,
-    unmutedParticipants: new Set(['1', '2', '3']),
-    cameraOnParticipants: new Set(['1', '2', '4']),
   },
 };
 
@@ -102,13 +97,12 @@ export const AsHost: Story = {
     participants: mockParticipants.slice(0, 4),
     currentUserId: '1',
     isHost: true,
-    unmutedParticipants: new Set(['1', '2', '3', '4']),
-    cameraOnParticipants: new Set(['1', '2', '3', '4']),
   },
 };
 
 /**
  * Panel with hand raises
+ * Note: State is now internal to the component store connection
  */
 export const WithHandRaises: Story = {
   args: {
@@ -116,9 +110,6 @@ export const WithHandRaises: Story = {
     participants: mockParticipants.slice(0, 6),
     currentUserId: '1',
     isHost: true,
-    unmutedParticipants: new Set(['1', '2', '3', '4', '5', '6']),
-    cameraOnParticipants: new Set(['1', '2', '3', '4', '5']),
-    raisingHandParticipants: new Set(['3', '5']),
   },
 };
 
@@ -131,9 +122,6 @@ export const WithScreenSharing: Story = {
     participants: mockParticipants.slice(0, 5),
     currentUserId: '1',
     isHost: false,
-    unmutedParticipants: new Set(['1', '2', '3', '4', '5']),
-    cameraOnParticipants: new Set(['1', '2', '3', '4', '5']),
-    sharingScreenParticipants: new Set(['3']),
   },
 };
 
@@ -146,10 +134,6 @@ export const MixedStates: Story = {
     participants: mockParticipants,
     currentUserId: '1',
     isHost: true,
-    unmutedParticipants: new Set(['1', '2', '3', '5', '7']),
-    cameraOnParticipants: new Set(['1', '2', '4', '6', '8']),
-    sharingScreenParticipants: new Set(['4']),
-    raisingHandParticipants: new Set(['3', '6', '7']),
   },
 };
 
@@ -171,9 +155,6 @@ export const ManyParticipants: Story = {
     ],
     currentUserId: '1',
     isHost: true,
-    unmutedParticipants: new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']),
-    cameraOnParticipants: new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']),
-    raisingHandParticipants: new Set(['5', '8', '12']),
   },
 };
 
@@ -186,8 +167,6 @@ export const LowActivity: Story = {
     participants: mockParticipants.slice(0, 6),
     currentUserId: '1',
     isHost: false,
-    unmutedParticipants: new Set(['1', '2']),
-    cameraOnParticipants: new Set(['1']),
   },
 };
 
@@ -200,10 +179,6 @@ export const HighActivity: Story = {
     participants: mockParticipants,
     currentUserId: '1',
     isHost: false,
-    unmutedParticipants: new Set(['1', '2', '3', '4', '5', '6', '7', '8']),
-    cameraOnParticipants: new Set(['1', '2', '3', '4', '5', '6', '7', '8']),
-    sharingScreenParticipants: new Set(['2', '5']),
-    raisingHandParticipants: new Set(['3', '4', '6', '7']),
   },
 };
 
@@ -213,17 +188,6 @@ export const HighActivity: Story = {
 export const Interactive: Story = {
   render: (args) => {
     const [participants, setParticipants] = React.useState(args.participants || []);
-    const [unmuted, setUnmuted] = React.useState<Set<string>>(args.unmutedParticipants || new Set());
-
-    const handleMute = (id: string) => {
-      const newUnmuted = new Set(unmuted);
-      if (newUnmuted.has(id)) {
-        newUnmuted.delete(id);
-      } else {
-        newUnmuted.add(id);
-      }
-      setUnmuted(newUnmuted);
-    };
 
     const handleRemove = (id: string) => {
       setParticipants(participants.filter((p: any) => p.id !== id));
@@ -234,8 +198,6 @@ export const Interactive: Story = {
         <ParticipantsPanel
           {...args}
           participants={participants}
-          unmutedParticipants={unmuted}
-          onToggleAudio={handleMute}
           onKick={handleRemove}
           onClose={() => alert('Close panel')}
         />
@@ -245,7 +207,6 @@ export const Interactive: Story = {
   args: {
     ...defaultArgs,
     participants: mockParticipants.slice(0, 6),
-    unmutedParticipants: new Set(['1', '2', '3', '4', '5', '6']),
   },
 };
 
@@ -269,8 +230,5 @@ export const InRoomContext: Story = {
     participants: mockParticipants.slice(0, 5),
     currentUserId: '1',
     isHost: true,
-    unmutedParticipants: new Set(['1', '2', '3', '4', '5']),
-    cameraOnParticipants: new Set(['1', '2', '3', '4']),
-    raisingHandParticipants: new Set(['3']),
   },
 };
