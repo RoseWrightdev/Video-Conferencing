@@ -42,6 +42,7 @@ find . \( \
     -name "*.lock" -o \
     -name ".terraform" \
 \) -prune -o -type f \( \
+    ! -name "*.bin" -a \
     ! -name "*.png" -a \
     ! -name "*.jpg" -a \
     ! -name "*.jpeg" -a \
