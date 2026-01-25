@@ -128,6 +128,7 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
     selectedDevices.camera,
     refreshDevices,
     handleError,
+    setLocalStream,
   ]);
 
   const cleanup = useCallback(() => {
@@ -166,12 +167,12 @@ export const useMediaStream = (options: MediaStreamOptions = {}) => {
       return true;
 
     } catch (error) {
-      const errorMessage = 'Media permissions denied. Please allow camera and microphone access.';
-      setState(prev => ({ ...prev, error: errorMessage }));
-      handleError(errorMessage);
+      const errorMessage = 'Media permissions denied. Please allow camera and microphone access:\n';
+      setState(prev => ({ ...prev, error: errorMessage + error }));
+      handleError(errorMessage + error);
       return false;
     }
-  }, [video, audio, refreshDevices, handleError]);
+  }, [video, audio, refreshDevices, handleError]);  
 
   const isCameraActive = streamRef.current?.getVideoTracks().some(track => track.enabled) ?? false;
   const isMicrophoneActive = streamRef.current?.getAudioTracks().some(track => track.enabled) ?? false;

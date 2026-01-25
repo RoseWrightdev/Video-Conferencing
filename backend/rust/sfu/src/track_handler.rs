@@ -370,8 +370,6 @@ pub async fn handle_new_track(
                     // Efficient enough.
 
                     // Use optimized broadcast method
-
-                    // Use optimized broadcast method
                     broadcaster.broadcast(&mut packet).await;
                 }
                 Err(e) => {

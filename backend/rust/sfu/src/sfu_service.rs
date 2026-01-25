@@ -29,7 +29,6 @@ pub struct MySfu {
     // Map: (RoomID, UserID, StreamID, TrackID) -> Broadcaster
     pub tracks: TrackMap,
     // Room Manager for efficient lookup
-    // Room Manager for efficient lookup
     pub room_manager: Arc<RoomManager>,
     // CC Client
     pub cc_client: Option<

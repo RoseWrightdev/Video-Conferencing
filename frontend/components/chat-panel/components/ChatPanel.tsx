@@ -8,11 +8,7 @@ import { useRoomStore } from "@/store/useRoomStore";
 import { useShallow } from 'zustand/react/shallow';
 import { Small, H1 } from "@/components/ui/typography";
 
-interface ChatPanelProps {
-  // empty
-}
-
-export default function ChatPanel({ }: ChatPanelProps) {
+export default function ChatPanel() {
   const { messages, closeChat } = useRoomStore(useShallow(state => ({
     messages: state.messages,
     closeChat: state.toggleChatPanel // The 'close' action in UI is just toggling it off. Or is it?

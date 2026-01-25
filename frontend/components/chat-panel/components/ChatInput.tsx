@@ -1,7 +1,7 @@
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { useState, useRef, useEffect, memo } from "react";
+import { useState, useRef, useEffect, memo, ChangeEvent, KeyboardEvent } from "react";
 import { useRoomStore } from "@/store/useRoomStore";
 import { useShallow } from 'zustand/react/shallow';
 
@@ -25,7 +25,7 @@ const ChatInput = memo(function ChatInput({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -52,7 +52,7 @@ const ChatInput = memo(function ChatInput({
         <Textarea
           ref={textareaRef}
           value={message}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMessage(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}

@@ -44,13 +44,11 @@ export function WaitingScreen({
             </span>
           </EmptyDescription>
         </EmptyHeader>
-        
         <EmptyContent>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Joined as <span className="font-medium">{username || 'Guest'}</span>
             </p>
-
             <Badge variant={isReconnecting ? "outline" : isConnected ? "default" : "destructive"} className="gap-2">
               {isReconnecting ? (
                 <>
@@ -69,7 +67,6 @@ export function WaitingScreen({
                 </>
               )}
             </Badge>
-
             <p className="text-xs text-muted-foreground">
               The host will be notified of your request. You&apos;ll be admitted to the room shortly.
             </p>

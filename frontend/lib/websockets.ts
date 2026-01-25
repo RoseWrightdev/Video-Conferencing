@@ -92,7 +92,7 @@ export class WebSocketClient {
     } else {
       // Find the key that is set to identify the message type
       const type = Object.keys(msg).find(key =>
-        (msg as any)[key] !== undefined &&
+        msg[key as keyof WebSocketMessage] !== undefined &&
         key !== 'toJSON' &&
         key !== 'constructor'
       );

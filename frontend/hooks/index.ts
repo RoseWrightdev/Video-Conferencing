@@ -6,3 +6,4 @@ export * from './useMediaStream';
 export * from './useParticipants';
 export * from './useRoom';
 export * from './useRoomUI';
+export * from './usePermissions';

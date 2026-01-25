@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
@@ -11,23 +11,15 @@ export default function Home() {
   const { data: session, status } = useSession();
   const [roomId, setRoomId] = useState('');
 
-  const generateRoomId = () => {
-    const id = Math.random().toString(36).substring(2, 15);
-    setRoomId(id);
-  };
-
-  const handleJoinRoom = (e: React.FormEvent) => {
+  const handleJoinRoom = (e: FormEvent) => {
     e.preventDefault();
-    
     if (!roomId.trim()) {
       return;
     }
-
     if (status !== 'authenticated') {
       signIn('auth0', { callbackUrl: `/${roomId.trim()}` });
       return;
     }
-
     router.push(`/${roomId.trim()}`);
   };
 
@@ -37,7 +29,7 @@ export default function Home() {
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight">Video Conference</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {status === 'authenticated' 
+            {status === 'authenticated'
               ? `Welcome, ${session?.user?.name || session?.user?.email}`
               : 'Sign in to join or create a room'
             }
@@ -57,7 +49,11 @@ export default function Home() {
                 required
                 className="flex-1"
               />
-              <Button type="button" onClick={generateRoomId} variant="outline">
+              <Button type="button" onClick={() => {
+                const id = Math.random().toString(36).substring(2, 15);
+                setRoomId(id);
+              }}
+              variant="outline">
                 Generate
               </Button>
             </div>

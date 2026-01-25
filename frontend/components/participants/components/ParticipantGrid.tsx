@@ -15,42 +15,14 @@ export interface ParticipantGridProps {
   onPinParticipant?: (participantId: string) => void;
   onLayoutChange?: (layout: GridLayout) => void;
   className?: string;
-  // Participant state maps (matches backend architecture)
   unmutedParticipants?: Set<string>;
   cameraOnParticipants?: Set<string>;
   sharingScreenParticipants?: Set<string>;
   raisingHandParticipants?: Set<string>;
   speakingParticipants?: Set<string>;
-  screenShareStream?: MediaStream | null; // Local screen share stream for display
+  screenShareStream?: MediaStream | null;
 }
 
-/**
- * Responsive grid layout for displaying multiple video participants.
- * 
- * Features:
- * - Multiple layout modes (gallery, speaker, sidebar)
- * - Responsive grid breakpoints
- * - Automatic layout based on participant count
- * - Pin functionality for spotlighting participants
- * - Screen share prioritization
- * 
- * Layout Modes:
- * - gallery: Equal-sized tiles in responsive grid
- * - speaker: Large featured participant with small thumbnails
- * - sidebar: Featured view with vertical sidebar
- * 
- * @example
- * ```tsx
- * <ParticipantGrid
- *   participants={participants}
- *   currentUserId="user-123"
- *   layout="gallery"
- *   unmutedParticipants={unmutedSet}
- *   cameraOnParticipants={cameraOnSet}
- *   onPinParticipant={(id) => console.log('Pin', id)}
- * />
- * ```
- */
 export default function ParticipantGrid({
   participants,
   currentUserId,
@@ -62,9 +34,7 @@ export default function ParticipantGrid({
   speakingParticipants = new Set(),
   screenShareStream,
 }: ParticipantGridProps) {
-  // Determine featured participant for speaker/sidebar layouts
   const getFeaturedParticipant = (): Participant | null => {
-    // Priority: pinned > screen sharing > speaking > first participant
     if (pinnedParticipantId) {
       return participants.find(p => p.id === pinnedParticipantId) || null;
     }
@@ -78,7 +48,6 @@ export default function ParticipantGrid({
     return participants[0] || null;
   };
 
-  // Get grid column classes based on participant count
   const getGridColumns = (count: number): string => {
     if (count === 1) return 'grid-cols-1';
     if (count === 2) return 'grid-cols-1 md:grid-cols-2';
@@ -102,9 +71,7 @@ export default function ParticipantGrid({
     );
   }
 
-  // Gallery layout - equal-sized grid
   if (layout === 'gallery') {
-    // Single participant - use centered aspect ratio
     if (participants.length === 1) {
       return (
         <div className={cn('w-full h-full p-8 flex items-center justify-center', className)}>

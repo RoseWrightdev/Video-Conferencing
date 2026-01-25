@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+
 import { Participant } from '@/store/types';
 import { createLogger } from '@/lib/logger';
 
@@ -18,24 +19,47 @@ export function useAudioDetection(
   enabled: boolean = true
 ): Set<string> {
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
+  const [prevEnabled, setPrevEnabled] = useState(enabled);
+
+  if (enabled !== prevEnabled) {
+    setPrevEnabled(enabled);
+    setSpeakingParticipants(new Set());
+  }
 
   // Refs to persist AudioContext resources across renders without re-creating them
   const audioContextRef = useRef<AudioContext | null>(null);
   const analysersRef = useRef<Map<string, { analyser: AnalyserNode, source: MediaStreamAudioSourceNode }>>(new Map());
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function cleanup() {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    analysersRef.current.forEach(({ source, analyser }) => {
+      source.disconnect();
+      analyser.disconnect();
+    });
+    analysersRef.current.clear();
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => { });
+      audioContextRef.current = null;
+    }
+  }
 
   useEffect(() => {
     if (!enabled) {
       // Cleanup if disabled
       cleanup();
-      setSpeakingParticipants(new Set());
       return;
     }
 
     // Initialize AudioContext if needed
     if (!audioContextRef.current) {
       try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioContextClass = window.AudioContext || (window as unknown as Window
+          & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         if (AudioContextClass) {
           audioContextRef.current = new AudioContextClass();
         }
@@ -150,22 +174,7 @@ export function useAudioDetection(
     return cleanup;
   }, []);
 
-  function cleanup() {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    analysersRef.current.forEach(({ source, analyser }) => {
-      source.disconnect();
-      analyser.disconnect();
-    });
-    analysersRef.current.clear();
 
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => { });
-      audioContextRef.current = null;
-    }
-  }
 
   return speakingParticipants;
 }
