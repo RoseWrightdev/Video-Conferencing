@@ -2,9 +2,8 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
-import { useRoom } from '@/hooks';
+import { useRoom, usePermissions } from '@/hooks';
 import { useMediaStream } from '@/hooks/useMediaStream';
-import { createLogger } from '@/lib/logger';
 import PermissionsScreen from '@/components/room/components/PermissionsScreen';
 import { WaitingScreen } from '@/components/room/WaitingScreen';
 import { LoadingScreen } from '@/components/room/LoadingScreen';
@@ -14,39 +13,21 @@ import { useRoomStore } from '@/store/useRoomStore';
 import { toast } from "sonner";
 import { ActiveRoom } from '@/components/room/ActiveRoom';
 
-const logger = createLogger('Room');
-
 export default function RoomPage() {
   const params = useParams();
-  const router = useRouter();
-  const { data: session, status } = useSession();
   const roomId = params.roomid as string;
-
-  // [AUTO-PLAY FIX] Force a user interaction before joining to unlock AudioContext
+  const router = useRouter();
+  
+  const { data: session, status } = useSession();
   const [hasJoinedLobby, setHasJoinedLobby] = useState(false);
-
-  const [permissionsGranted, setPermissionsGranted] = useState(() => {
-    // Check localStorage for previously granted permissions
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('media-permissions-granted') === 'true';
-    }
-    return false;
-  });
-
-
   const { requestPermissions, refreshDevices } = useMediaStream();
-  const {
-    isWaitingRoom,
-    roomName,
-    handleError,
-  } = useRoomStore();
-
-
-  const {
-    currentUserId,
-    connectionState,
-    isKicked,
-  } = useRoom({
+  const { isWaitingRoom, roomName, handleError } = useRoomStore();
+  const { permissionsGranted, setPermissionsGranted, handleRequestPermissions } = usePermissions({
+    requestPermissions,
+    setHasJoinedLobby,
+    handleError
+  });
+  const { connectionState, isKicked } = useRoom({
     roomId,
     username: session?.user?.name || 'Guest',
     token: session?.accessToken,
@@ -60,27 +41,6 @@ export default function RoomPage() {
       router.push('/');
     }
   }, [isKicked, connectionState.lastError, router]);
-
-  const handleRequestPermissions = async () => {
-    // If permissions already granted (or just granted), this acts as the "Join" button
-    if (permissionsGranted) {
-      setHasJoinedLobby(true);
-      return;
-    }
-
-    try {
-      await requestPermissions();
-      // Don't initialize stream yet - only when user enables audio/video
-      setPermissionsGranted(true);
-      // Store permissions grant in localStorage
-      localStorage.setItem('media-permissions-granted', 'true');
-
-      // Auto-join after granting permissions (counts as interaction)
-      setHasJoinedLobby(true);
-    } catch (error) {
-      handleError(error instanceof Error ? error.message : 'Failed to get permissions');
-    }
-  };
 
   // Show waiting screen as soon as we know we are in it, regardless of initialization
   if (isWaitingRoom) {
@@ -113,8 +73,6 @@ export default function RoomPage() {
       </div>
     );
   }
-
-
 
   // UNIFIED PRE-JOIN SCREEN (Permissions + Lobby)
   // Show if we haven't actively joined the lobby yet (and aren't waiting/initializing)
