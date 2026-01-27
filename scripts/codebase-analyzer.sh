@@ -161,6 +161,8 @@ for dir in */; do
     if [[ "$dir" != "node_modules/" && "$dir" != ".git/" && "$dir" != "designs/" && "$dir" != ".gemini/" ]]; then
         count=$(find "$dir" \( \
             -name "node_modules" -o \
+            -name "generated" -o \
+            -name "proto" -o \
             -name ".git" -o \
             -name ".next" -o \
             -name "dist" -o \
@@ -179,6 +181,7 @@ for dir in */; do
             -name "uv.lock" -o \
             -name ".terraform" \
         \) -prune -o -type f \( \
+            ! -name "*.wav" -a \    
             ! -name "*.png" -a \
             ! -name "*.jpg" -a \
             ! -name "*.jpeg" -a \
