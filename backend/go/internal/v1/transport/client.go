@@ -21,6 +21,9 @@ type wsConnection interface {
 	WriteMessage(messageType int, data []byte) error     // Write a message to the connection
 	Close() error                                        // Close the connection
 	SetWriteDeadline(t time.Time) error
+	SetReadDeadline(t time.Time) error
+	SetReadLimit(limit int64)
+	SetPongHandler(h func(appData string) error)
 }
 
 // Client represents a single user's connection to a video conference room.
@@ -45,6 +48,8 @@ type Client struct {
 
 	send         chan []byte // Buffered channel for normal messages (Chat)
 	prioritySend chan []byte // Buffered channel for critical messages (State, SDP)
+
+	pingPeriod time.Duration // Interval for sending pings
 }
 
 // --- types.ClientInterface setters and getters ---
@@ -156,6 +161,18 @@ func (c *Client) readPump() {
 		metrics.DecConnection()
 	}()
 
+	pongWait := c.pingPeriod * 10 / 9 // Allow slightly more than pingPeriod
+	if pongWait == 0 {
+		pongWait = 60 * time.Second // Fallback default
+	}
+	// strict limit
+	c.conn.SetReadLimit(512 * 1024)
+
+	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
+
 	for {
 		// Read Binary
 		messageType, data, err := c.conn.ReadMessage()
@@ -180,7 +197,9 @@ func (c *Client) readPump() {
 }
 
 func (c *Client) writePump() {
+	ticker := time.NewTicker(c.pingPeriod)
 	defer func() {
+		ticker.Stop()
 		if err := c.conn.Close(); err != nil {
 			logging.Warn(context.Background(), "Error closing connection in writePump", zap.Error(err), zap.String("clientId", string(c.ID)))
 		}
@@ -207,6 +226,11 @@ func (c *Client) writePump() {
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
 				logging.Error(context.Background(), "error writing message", zap.Error(err))
+				return
+			}
+		case <-ticker.C:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}

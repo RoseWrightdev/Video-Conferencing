@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/ratelimit"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/room"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/pkg/sfu"
@@ -22,6 +24,7 @@ import (
 
 // Hub serves as the central coordinator for all video conference rooms in the system.
 type Hub struct {
+	ctx                 context.Context
 	rooms               map[types.RoomIDType]*room.Room  // Registry of active rooms by room ID
 	mu                  sync.Mutex                       // Protects concurrent access to rooms map
 	validator           types.TokenValidator             // JWT authentication service
@@ -34,9 +37,9 @@ type Hub struct {
 }
 
 // getSFUClientFromEnv is a helper to connect to SFU based on environment variables.
-func getSFUClientFromEnv() types.SFUProvider {
+func getSFUClientFromEnv(ctx context.Context) types.SFUProvider {
 	if os.Getenv("ENABLE_SFU") != "true" {
-		logging.Warn(context.Background(), "⚠️  SFU Disabled (ENABLE_SFU != true). App running in Signaling-Only mode.")
+		logging.Warn(ctx, "⚠️  SFU Disabled (ENABLE_SFU != true). App running in Signaling-Only mode.")
 		return nil
 	}
 
@@ -45,25 +48,26 @@ func getSFUClientFromEnv() types.SFUProvider {
 		sfuAddr = "localhost:50051"
 	}
 
-	logging.Info(context.Background(), "🔌 SFU Enabled. Connecting...", zap.String("addr", sfuAddr))
+	logging.Info(ctx, "🔌 SFU Enabled. Connecting...", zap.String("addr", sfuAddr))
 	sfuClient, err := sfu.NewClient(sfuAddr)
 	if err != nil {
-		logging.Error(context.Background(), "SFU Connection Failed", zap.Error(err))
+		logging.Error(ctx, "SFU Connection Failed", zap.Error(err))
 		// Fatal error: if SFU is enabled, it must be available
-		logging.Fatal(context.Background(), "Cannot start without SFU connection", zap.Error(err))
+		logging.Fatal(ctx, "Cannot start without SFU connection", zap.Error(err))
 	}
-	logging.Info(context.Background(), "✅ SFU Connected")
+	logging.Info(ctx, "✅ SFU Connected")
 	return sfuClient
 }
 
 // NewHub creates a new Hub and configures it with its dependencies.
-func NewHub(validator types.TokenValidator, bus types.BusService, devMode bool, rateLimiter *ratelimit.RateLimiter) *Hub {
-	return NewHubWithSFU(validator, bus, devMode, getSFUClientFromEnv(), rateLimiter)
+func NewHub(ctx context.Context, validator types.TokenValidator, bus types.BusService, devMode bool, rateLimiter *ratelimit.RateLimiter) *Hub {
+	return NewHubWithSFU(ctx, validator, bus, devMode, getSFUClientFromEnv(ctx), rateLimiter)
 }
 
 // NewHubWithSFU creates a new Hub with a specific SFU provider.
-func NewHubWithSFU(validator types.TokenValidator, bus types.BusService, devMode bool, sfu types.SFUProvider, rateLimiter *ratelimit.RateLimiter) *Hub {
+func NewHubWithSFU(ctx context.Context, validator types.TokenValidator, bus types.BusService, devMode bool, sfu types.SFUProvider, rateLimiter *ratelimit.RateLimiter) *Hub {
 	return &Hub{
+		ctx:                 ctx,
 		rooms:               make(map[types.RoomIDType]*room.Room),
 		validator:           validator,
 		pendingRoomCleanups: make(map[types.RoomIDType]*time.Timer),
@@ -117,7 +121,7 @@ func (h *Hub) HandleConnection(c *gin.Context, conn wsConnection, claims *auth.C
 	roomIDStr := c.Param("roomId")
 	username := c.Query("username")
 
-	client, r := h.setupClientConnection(&clientSetupParams{
+	client, r, err := h.setupClientConnection(&clientSetupParams{
 		RoomID:   types.RoomIDType(roomIDStr),
 		UserID:   types.ClientIDType(claims.Subject),
 		Username: username,
@@ -125,6 +129,13 @@ func (h *Hub) HandleConnection(c *gin.Context, conn wsConnection, claims *auth.C
 		DevMode:  h.devMode,
 		Conn:     conn,
 	})
+	if err != nil {
+		logging.Error(c.Request.Context(), "Failed to setup client connection", zap.Error(err))
+		// We should probably close connection
+		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "Room creation failed"))
+		_ = conn.Close()
+		return
+	}
 
 	// Track metrics
 	metrics.ActiveWebSocketConnections.Inc()
@@ -181,8 +192,11 @@ func (h *Hub) removeRoom(roomID types.RoomIDType) {
 	h.mu.Unlock()
 }
 
+// MaxRooms is the hard limit on the number of active rooms
+const MaxRooms = 10000
+
 // getOrCreateRoom retrieves the Room associated with the given RoomId from the Hub.
-func (h *Hub) getOrCreateRoom(roomID types.RoomIDType) *room.Room {
+func (h *Hub) getOrCreateRoom(roomID types.RoomIDType) (*room.Room, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -193,16 +207,22 @@ func (h *Hub) getOrCreateRoom(roomID types.RoomIDType) *room.Room {
 			delete(h.pendingRoomCleanups, roomID)
 			logging.Info(context.Background(), "Cancelled pending room cleanup due to reconnection", zap.String("roomId", string(roomID)))
 		}
-		return r
+		return r, nil
 	}
 
-	logging.Info(context.Background(), "Creating new session room", zap.String("roomId", string(roomID)))
-	r := room.NewRoom(roomID, h.removeRoom, h.bus, h.sfu)
+	// Check max rooms limit
+	if len(h.rooms) >= MaxRooms {
+		logging.Warn(h.ctx, "Max rooms limit reached, rejecting creation", zap.String("roomId", string(roomID)))
+		return nil, fmt.Errorf("server at capacity: max rooms reached")
+	}
+
+	logging.Info(h.ctx, "Creating new session room", zap.String("roomId", string(roomID)))
+	r := room.NewRoom(h.ctx, roomID, h.removeRoom, h.bus, h.sfu)
 	h.rooms[roomID] = r
 
 	// Metrics: Track room creation
 	metrics.ActiveRooms.Inc()
-	return r
+	return r, nil
 }
 
 // Shutdown gracefully closes all active rooms and connections

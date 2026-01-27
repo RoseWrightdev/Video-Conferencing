@@ -76,6 +76,11 @@ func (r *Room) HandleScreenShare(_ context.Context, client types.ClientInterface
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Fix Unauthorized Screen Share
+	if client.GetRole() == types.RoleTypeWaiting {
+		return
+	}
+
 	r.toggleScreenshare(client, req.IsSharing)
 
 	msg := &pb.WebSocketMessage{
@@ -93,6 +98,11 @@ func (r *Room) HandleScreenShare(_ context.Context, client types.ClientInterface
 func (r *Room) HandleGetRecentChats(_ context.Context, client types.ClientInterface) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
+	// Fix Unauth Chat Read
+	if client.GetRole() == types.RoleTypeWaiting {
+		return
+	}
 
 	internalChats := r.getRecentChatsLocked()
 
@@ -118,7 +128,7 @@ func (r *Room) HandleGetRecentChats(_ context.Context, client types.ClientInterf
 
 // HandleDeleteChat handles a request to delete a chat message.
 // 3. Delete Chat Handler
-func (r *Room) HandleDeleteChat(_ context.Context, client types.ClientInterface, req *pb.DeleteChatRequest) {
+func (r *Room) HandleDeleteChat(ctx context.Context, client types.ClientInterface, req *pb.DeleteChatRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -132,6 +142,29 @@ func (r *Room) HandleDeleteChat(_ context.Context, client types.ClientInterface,
 	}
 
 	// Delete from memory
+	// Fix Chat IDOR
+	// 1. Find the chat to verify ownership (if not host)
+	var targetChat *types.ChatInfo
+	for e := r.chatHistory.Front(); e != nil; e = e.Next() {
+		if c, ok := e.Value.(types.ChatInfo); ok && c.ChatID == types.ChatID(req.ChatId) {
+			targetChat = &c
+			break
+		}
+	}
+
+	if targetChat == nil {
+		return // Chat not found
+	}
+
+	// 2. Permission Check
+	isHost := client.GetRole() == types.RoleTypeHost
+	isOwner := targetChat.ClientID == client.GetID()
+
+	if !isHost && !isOwner {
+		logging.Warn(ctx, "Unauthorized chat delete attempt", zap.String("clientId", string(client.GetID())), zap.String("chatId", req.ChatId))
+		return
+	}
+
 	r.deleteChatLocked(types.ChatInfo{ChatID: types.ChatID(req.ChatId)})
 
 	// Broadcast Deletion
@@ -193,6 +226,12 @@ func (r *Room) HandleAdminAction(ctx context.Context, client types.ClientInterfa
 	// Execute action (business logic + I/O glue)
 	switch action {
 	case AdminActionKick:
+		// Fix Host-on-Host Kick
+		if target.GetRole() == types.RoleTypeHost {
+			logging.Warn(ctx, "Host attempted to kick another host", zap.String("src", string(client.GetID())), zap.String("dst", string(target.GetID())))
+			return
+		}
+
 		if shouldKickClient(target) {
 			target.SendProto(buildKickMessage()) // I/O
 			target.Disconnect()                  // I/O - triggers readPump exit

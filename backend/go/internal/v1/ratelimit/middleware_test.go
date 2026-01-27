@@ -19,7 +19,8 @@ func TestStandardMiddleware(t *testing.T) {
 	}
 
 	// Create rate limiter
-	rl, err := NewRateLimiter(cfg, nil)
+	mockValidator := &MockValidator{}
+	rl, err := NewRateLimiter(cfg, nil, mockValidator)
 	assert.NoError(t, err)
 
 	// Get standard middleware

@@ -10,7 +10,7 @@ import (
 
 func TestHandleClientConnect_DeleteSessionError(t *testing.T) {
 	mockSFU := &MockSFUProvider{failDelete: true}
-	r := NewRoom("test-room", nil, nil, mockSFU)
+	r := NewRoom(context.Background(), "test-room", nil, nil, mockSFU)
 
 	client1 := newMockClient("user1", "Alice", types.RoleTypeParticipant)
 	r.clients[client1.GetID()] = client1
@@ -27,7 +27,7 @@ func TestHandleClientConnect_DeleteSessionError(t *testing.T) {
 func TestDisconnectClientLocked_DeleteSessionError(t *testing.T) {
 	ctx := context.Background()
 	mockSFU := &MockSFUProvider{failDelete: true}
-	r := NewRoom("test-room", nil, nil, mockSFU)
+	r := NewRoom(context.Background(), "test-room", nil, nil, mockSFU)
 
 	client := newMockClient("user1", "Alice", types.RoleTypeParticipant)
 	r.clients[client.GetID()] = client
@@ -42,7 +42,7 @@ func TestDisconnectClientLocked_DeleteSessionError(t *testing.T) {
 func TestAddParticipantLocked_RedisError(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{failSetAdd: true}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	client := newMockClient("user1", "Alice", types.RoleTypeWaiting)
 
@@ -56,7 +56,7 @@ func TestAddParticipantLocked_RedisError(t *testing.T) {
 func TestDisconnectClientLocked_RedisError(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{failSetRem: true}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	client := newMockClient("user1", "Alice", types.RoleTypeParticipant)
 	r.clients[client.GetID()] = client
@@ -68,7 +68,7 @@ func TestDisconnectClientLocked_RedisError(t *testing.T) {
 }
 
 func TestHandleClientConnect_Reconnection(t *testing.T) {
-	r := NewRoom("test-room", nil, nil, nil)
+	r := NewRoom(context.Background(), "test-room", nil, nil, nil)
 	r.ownerID = "owner"
 
 	tests := []struct {

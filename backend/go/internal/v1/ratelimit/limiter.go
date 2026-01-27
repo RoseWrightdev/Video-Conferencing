@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/logging"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/metrics"
+	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/ulule/limiter/v3"
@@ -31,10 +31,11 @@ type RateLimiter struct {
 	wsUser      *limiter.Limiter
 	store       limiter.Store
 	redisClient *redis.Client
+	validator   types.TokenValidator
 }
 
 // NewRateLimiter creates a new RateLimiter instance
-func NewRateLimiter(cfg *config.Config, redisClient *redis.Client) (*RateLimiter, error) {
+func NewRateLimiter(cfg *config.Config, redisClient *redis.Client, validator types.TokenValidator) (*RateLimiter, error) {
 	// Parse rates
 	apiGlobalRate, err := limiter.NewRateFromFormatted(cfg.RateLimitAPIGlobal)
 	if err != nil {
@@ -93,6 +94,7 @@ func NewRateLimiter(cfg *config.Config, redisClient *redis.Client) (*RateLimiter
 		wsUser:      limiter.New(store, wsUserRate),
 		store:       store,
 		redisClient: redisClient,
+		validator:   validator,
 	}, nil
 }
 
@@ -155,15 +157,27 @@ func (rl *RateLimiter) GlobalMiddleware() gin.HandlerFunc {
 
 			// But creating a custom middleware is flexible.
 
-			claims, exists := c.Get("claims")
-			if exists {
-				// Authenticated
-				userClaims := claims.(*auth.CustomClaims)
-				key = userClaims.Subject
+			// JWT Forgery Fix:
+			// We must cryptographically verify tokens before trusting claims.
+			// ParseUnverified allowed attackers to forge tokens and exhaust quotas.
+			// Now using validator.ValidateToken() for signature verification.
+
+			// Remove "Bearer " prefix
+			tokenString := authHeader
+			if len(tokenString) > 7 && tokenString[:7] == "Bearer " {
+				tokenString = tokenString[7:]
+			}
+
+			// Cryptographically verify the token
+			claims, err := rl.validator.ValidateToken(tokenString)
+
+			if err == nil && claims.Subject != "" {
+				// Successfully verified user with valid signature
+				key = claims.Subject
 				limiterInstance = rl.apiGlobal
 				limitType = "user"
 			} else {
-				// Unauthenticated
+				// Invalid/unverified token, fall back to IP limit
 				key = c.ClientIP()
 				limiterInstance = rl.apiPublic
 				limitType = "ip"
@@ -227,14 +241,19 @@ func (rl *RateLimiter) MiddlewareForEndpoint(endpointType string) gin.HandlerFun
 
 		var key string
 
-		claims, exists := c.Get("claims")
-		if exists {
-			userClaims := claims.(*auth.CustomClaims)
-			key = userClaims.Subject
+		// JWT Forgery Fix: Use cryptographic verification
+		authHeader := c.GetHeader("Authorization")
+		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			tokenString := authHeader[7:]
+			claims, err := rl.validator.ValidateToken(tokenString)
+			if err == nil && claims.Subject != "" {
+				key = claims.Subject
+			} else {
+				key = c.ClientIP()
+			}
 		} else {
 			key = c.ClientIP()
 		}
-
 		ctx := c.Request.Context()
 		context, err := limiterInstance.Get(ctx, key)
 		if err != nil {

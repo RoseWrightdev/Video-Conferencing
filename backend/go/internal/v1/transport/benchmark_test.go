@@ -102,8 +102,8 @@ func (m *MockBus) SetMembers(_ context.Context, _ string) ([]string, error) { re
 // 1. Hub Room Access/Creation Benchmark
 // Measures overhead of Hub mutex when getting/creating rooms
 func BenchmarkHub_GetOrCreateRoom(b *testing.B) {
-	limiter, _ := ratelimit.NewRateLimiter(nil, nil)
-	hub := NewHub(&MockValidator{}, &MockBus{}, true, limiter)
+	limiter, _ := ratelimit.NewRateLimiter(nil, nil, &MockValidator{})
+	hub := NewHub(context.Background(), &MockValidator{}, &MockBus{}, true, limiter)
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -119,7 +119,7 @@ func BenchmarkHub_GetOrCreateRoom(b *testing.B) {
 // 2. Room Connection Benchmark
 // Measures how fast we can add users to a room (Lock contention on Room)
 func BenchmarkRoom_HandleClientConnect(b *testing.B) {
-	r := room.NewRoom(types.RoomIDType("bench_room"), nil, nil, nil)
+	r := room.NewRoom(context.Background(), types.RoomIDType("bench_room"), nil, nil, nil)
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -139,7 +139,7 @@ func BenchmarkRoom_Broadcast(b *testing.B) {
 
 	for _, count := range counts {
 		b.Run(fmt.Sprintf("clients=%d", count), func(b *testing.B) {
-			r := room.NewRoom(types.RoomIDType("bench_room"), nil, nil, nil)
+			r := room.NewRoom(context.Background(), types.RoomIDType("bench_room"), nil, nil, nil)
 
 			// Pre-fill room
 			for i := 0; i < count; i++ {

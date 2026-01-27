@@ -56,7 +56,10 @@ func main() {
 	// Ensure buffered logs are flushed
 	defer func() { _ = logging.GetLogger().Sync() }()
 
-	ctx := context.Background()
+	// Establish the root context that listens for termination signals
+	// This context will be cancelled when SIGINT or SIGTERM is received.
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
 	if envLoaded {
 		logging.Info(ctx, "Loaded environment from .env file")
@@ -97,7 +100,7 @@ func main() {
 	if !skipAuth {
 		// Create the Auth0 token validator.
 		var err error
-		authValidator, err = auth.NewValidator(context.Background(), auth0Domain, auth0Audience)
+		authValidator, err = auth.NewValidator(ctx, auth0Domain, auth0Audience)
 		if err != nil {
 			logging.Error(ctx, "Failed to create auth validator", zap.Error(err))
 			return
@@ -130,7 +133,7 @@ func main() {
 	if busService != nil {
 		redisClient = busService.Client()
 	}
-	rateLimiter, err := ratelimit.NewRateLimiter(cfg, redisClient)
+	rateLimiter, err := ratelimit.NewRateLimiter(cfg, redisClient, authValidator)
 	if err != nil {
 		logging.Error(ctx, "Failed to initialize rate limiter", zap.Error(err))
 		os.Exit(1)
@@ -175,11 +178,17 @@ func main() {
 		validator = &auth.MockValidator{}
 	}
 
-	hub := transport.NewHub(validator, busService, developmentMode, rateLimiter)
+	hub := transport.NewHub(ctx, validator, busService, developmentMode, rateLimiter)
 
 	// --- Set up Server ---
 	router := gin.New() // Use New() to avoid default logger
 	router.Use(gin.Recovery())
+
+	// Rate Limit Spoofing
+	// Don't trust X-Forwarded-For by default to prevent spoofing
+	// unless running behind a known proxy (configured via env).
+	// For now, we disable it to force using direct IP (or rely on platform LB).
+	_ = router.SetTrustedProxies(nil)
 
 	// OpenTelemetry Middleware
 	router.Use(otelgin.Middleware("backend-go"))
@@ -289,22 +298,19 @@ func main() {
 		logging.Info(ctx, "API server starting", zap.String("port", cfg.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logging.Error(ctx, "Failed to run server", zap.Error(err))
-			if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
-				logging.Error(ctx, "Failed to send SIGTERM", zap.Error(err))
-			}
+			// Cancelling context via cancel function will trigger the shutdown block below
+			cancel()
 		}
 	}()
 
-	// Wait for an interrupt signal to gracefully shut down the server
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	// Wait for context cancellation (which happens on signal or server error)
+	<-ctx.Done()
 	logging.Info(ctx, "Shutting down server...")
 
 	// The context is used to inform the server it has 30 seconds to finish
 	// the requests it is currently handling
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
 
 	// Close all active rooms and WebSocket connections gracefully
 	if err := hub.Shutdown(shutdownCtx); err != nil {

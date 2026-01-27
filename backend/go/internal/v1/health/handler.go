@@ -3,6 +3,7 @@ package health
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/bus"
@@ -28,10 +29,16 @@ type DefaultSFUChecker struct{}
 
 // Check verifies gRPC connectivity to Rust SFU using health check protocol
 func (c *DefaultSFUChecker) Check(ctx context.Context, addr string) string {
-	// Create gRPC connection with timeout
+	// Configure TLS for SFU health check
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	// Create gRPC connection with TLS
+	creds := credentials.NewTLS(tlsConfig)
 	conn, err := grpc.NewClient(
 		addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(creds),
 	)
 	if err != nil {
 		logging.Error(ctx, "Failed to connect to Rust SFU for health check", zap.Error(err), zap.String("addr", addr))

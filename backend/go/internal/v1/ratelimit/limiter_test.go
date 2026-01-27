@@ -5,11 +5,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/auth"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/config"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +34,23 @@ func newTestLimiter(t *testing.T) (*RateLimiter, *miniredis.Miniredis) {
 		RateLimitWsUser:      "5-M",
 	}
 
-	rl, err := NewRateLimiter(cfg, rc)
+	// Create mock validator that accepts all tokens
+	mockValidator := &MockValidator{
+		ValidateTokenFunc: func(tokenString string) (*auth.CustomClaims, error) {
+			// Parse the token to extract claims for testing
+			token, _, err := jwt.NewParser().ParseUnverified(tokenString, &auth.CustomClaims{})
+			if err != nil {
+				return nil, err
+			}
+			claims, ok := token.Claims.(*auth.CustomClaims)
+			if !ok {
+				return nil, err
+			}
+			return claims, nil
+		},
+	}
+
+	rl, err := NewRateLimiter(cfg, rc, mockValidator)
 	require.NoError(t, err)
 
 	return rl, mr
@@ -47,7 +65,8 @@ func TestNewRateLimiter_Memory(t *testing.T) {
 		RateLimitWsIP:        "5-M",
 		RateLimitWsUser:      "5-M",
 	}
-	rl, err := NewRateLimiter(cfg, nil)
+	mockValidator := &MockValidator{}
+	rl, err := NewRateLimiter(cfg, nil, mockValidator)
 	assert.NoError(t, err)
 	assert.NotNil(t, rl)
 	// Verify it falls back to memory (no redis client)
@@ -85,15 +104,16 @@ func TestGlobalMiddleware_User(t *testing.T) {
 	rl, mr := newTestLimiter(t)
 	defer mr.Close()
 
-	r := gin.New()
-	// Mock auth middleware to inject claims
-	r.Use(func(c *gin.Context) {
-		claims := &auth.CustomClaims{}
-		claims.Subject = "user1"
-		c.Set("claims", claims)
-		c.Request.Header.Set("Authorization", "Bearer token")
-		c.Next()
+	// Create a valid JWT token for testing
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &auth.CustomClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "user1",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
+		},
 	})
+	tokenString, _ := token.SignedString([]byte("test-secret"))
+
+	r := gin.New()
 	r.Use(rl.GlobalMiddleware())
 	r.GET("/test-user", func(c *gin.Context) {
 		c.Status(http.StatusOK)
@@ -102,6 +122,7 @@ func TestGlobalMiddleware_User(t *testing.T) {
 	// Global user limit is 10
 	for i := 0; i < 10; i++ {
 		req, _ := http.NewRequest("GET", "/test-user", nil)
+		req.Header.Set("Authorization", "Bearer "+tokenString)
 		resp := httptest.NewRecorder()
 		r.ServeHTTP(resp, req)
 		assert.Equal(t, http.StatusOK, resp.Code)
@@ -110,6 +131,7 @@ func TestGlobalMiddleware_User(t *testing.T) {
 
 	// 11th should fail
 	req, _ := http.NewRequest("GET", "/test-user", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
 	resp := httptest.NewRecorder()
 	r.ServeHTTP(resp, req)
 	assert.Equal(t, http.StatusTooManyRequests, resp.Code)
@@ -191,4 +213,72 @@ func TestRedisFailure(t *testing.T) {
 	r.ServeHTTP(resp, req)
 
 	assert.Equal(t, http.StatusOK, resp.Code)
+}
+
+// TestGlobalMiddleware_AuthBypass_Reproduction verifies that the rate limiter
+// logic flaw (ToCToU) is fixed. It ensures that the rate limiter does NOT
+// rely on context "claims" (which might not be set if RL runs first) but checks the token itself.
+func TestGlobalMiddleware_AuthBypass_Reproduction(t *testing.T) {
+	// Setup: Strict IP limit (1/min), Generous User limit (100/min)
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	cfg := &config.Config{
+		RateLimitAPIGlobal:   "100-M", // Generous User Limit
+		RateLimitAPIPublic:   "1-M",   // Strict IP Limit
+		RateLimitAPIRooms:    "10-M",
+		RateLimitAPIMessages: "10-M",
+		RateLimitWsIP:        "10-M",
+		RateLimitWsUser:      "10-M",
+	}
+	mockValidator := &MockValidator{
+		ValidateTokenFunc: func(tokenString string) (*auth.CustomClaims, error) {
+			token, _, err := jwt.NewParser().ParseUnverified(tokenString, &auth.CustomClaims{})
+			if err != nil {
+				return nil, err
+			}
+			claims, ok := token.Claims.(*auth.CustomClaims)
+			if !ok {
+				return nil, err
+			}
+			return claims, nil
+		},
+	}
+	rl, err := NewRateLimiter(cfg, rc, mockValidator)
+	require.NoError(t, err)
+
+	// Create valid token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &auth.CustomClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "user-123",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
+		},
+		Name: "Test User",
+	})
+	tokenString, err := token.SignedString([]byte("test")) // Secret doesn't matter for reproduction if we just peek
+	require.NoError(t, err)
+
+	r := gin.New()
+	r.Use(rl.GlobalMiddleware()) // RL runs before Auth (which isn't even here)
+	r.GET("/test-bypass", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	// Request 1: Should pass (consumes the 1 IP limit allowed if fallback happens, or 1 User limit)
+	req1, _ := http.NewRequest("GET", "/test-bypass", nil)
+	req1.Header.Set("Authorization", "Bearer "+tokenString)
+	resp1 := httptest.NewRecorder()
+	r.ServeHTTP(resp1, req1)
+	assert.Equal(t, http.StatusOK, resp1.Code, "Request 1 should pass")
+
+	// Request 2:
+	// IF BUG EXISTS: Falls back to IP limit (1/min) -> 2nd request fails with 429
+	// IF AUTH FIX WORKS: Uses User limit (100/min) -> 2nd request passes
+	req2, _ := http.NewRequest("GET", "/test-bypass", nil)
+	req2.Header.Set("Authorization", "Bearer "+tokenString)
+	resp2 := httptest.NewRecorder()
+	r.ServeHTTP(resp2, req2)
+	assert.Equal(t, http.StatusOK, resp2.Code, "Request 2 should pass (User limit), but failed (IP limit fallback)")
 }

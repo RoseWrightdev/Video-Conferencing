@@ -62,7 +62,7 @@ func TestNewHub(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
 
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	assert.NotNil(t, hub)
 	assert.NotNil(t, hub.rooms)
@@ -75,10 +75,11 @@ func TestNewHub(t *testing.T) {
 func TestGetOrCreateRoom_NewRoom(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	roomID := types.RoomIDType("new-room")
-	r := hub.getOrCreateRoom(roomID)
+	r, err := hub.getOrCreateRoom(roomID)
+	assert.NoError(t, err)
 
 	assert.NotNil(t, r)
 	assert.Equal(t, roomID, r.GetID())
@@ -89,15 +90,15 @@ func TestGetOrCreateRoom_NewRoom(t *testing.T) {
 func TestGetOrCreateRoom_ExistingRoom(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	roomID := types.RoomIDType("existing-room")
 
 	// Create room first time
-	room1 := hub.getOrCreateRoom(roomID)
+	room1, _ := hub.getOrCreateRoom(roomID)
 
 	// Get same room second time
-	room2 := hub.getOrCreateRoom(roomID)
+	room2, _ := hub.getOrCreateRoom(roomID)
 
 	assert.Equal(t, room1, room2)
 	assert.Equal(t, 1, len(hub.rooms))
@@ -106,11 +107,11 @@ func TestGetOrCreateRoom_ExistingRoom(t *testing.T) {
 func TestRemoveRoom(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 	hub.cleanupGracePeriod = 100 * time.Millisecond
 
 	roomID := types.RoomIDType("test-room")
-	_ = hub.getOrCreateRoom(roomID)
+	_, _ = hub.getOrCreateRoom(roomID)
 
 	// Room should exist
 	assert.Contains(t, hub.rooms, roomID)
@@ -132,11 +133,11 @@ func TestRemoveRoom(t *testing.T) {
 func TestRemoveRoom_CancelOnReconnect(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 	hub.cleanupGracePeriod = 200 * time.Millisecond
 
 	roomID := types.RoomIDType("test-room")
-	r := hub.getOrCreateRoom(roomID)
+	r, _ := hub.getOrCreateRoom(roomID)
 
 	// Trigger removal
 	hub.removeRoom(roomID)
@@ -144,7 +145,7 @@ func TestRemoveRoom_CancelOnReconnect(t *testing.T) {
 
 	// Client reconnects before cleanup
 	time.Sleep(50 * time.Millisecond)
-	room2 := hub.getOrCreateRoom(roomID)
+	room2, _ := hub.getOrCreateRoom(roomID)
 
 	// Should cancel cleanup
 	assert.Equal(t, r, room2)
@@ -161,11 +162,11 @@ func TestRemoveRoom_NonEmptyRoom(t *testing.T) {
 	ctx := context.Background()
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 	hub.cleanupGracePeriod = 100 * time.Millisecond
 
 	roomID := types.RoomIDType("test-room")
-	r := hub.getOrCreateRoom(roomID)
+	r, _ := hub.getOrCreateRoom(roomID)
 
 	// Add a participant
 	client := &hubMockClient{id: "user1"}
@@ -185,7 +186,7 @@ func TestRemoveRoom_NonEmptyRoom(t *testing.T) {
 func TestConcurrentRoomCreation(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	// Create multiple rooms concurrently
 	roomIDs := []types.RoomIDType{"room1", "room2", "room3", "room4", "room5"}
@@ -193,7 +194,8 @@ func TestConcurrentRoomCreation(t *testing.T) {
 	done := make(chan bool, len(roomIDs))
 	for _, id := range roomIDs {
 		go func(rID types.RoomIDType) {
-			r := hub.getOrCreateRoom(rID)
+			r, err := hub.getOrCreateRoom(rID)
+			assert.NoError(t, err)
 			assert.NotNil(t, r)
 			done <- true
 		}(id)
@@ -213,7 +215,7 @@ func TestConcurrentRoomCreation(t *testing.T) {
 
 func TestHubDevMode(t *testing.T) {
 	validator := &MockTokenValidator{}
-	hub := NewHub(validator, nil, true, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, nil, true, newMockRateLimiter())
 
 	assert.True(t, hub.devMode)
 }
@@ -221,11 +223,11 @@ func TestHubDevMode(t *testing.T) {
 func TestMultipleCleanupTimers(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 	hub.cleanupGracePeriod = 200 * time.Millisecond
 
 	roomID := types.RoomIDType("test-room")
-	hub.getOrCreateRoom(roomID)
+	_, _ = hub.getOrCreateRoom(roomID)
 
 	// Trigger removal multiple times
 	hub.removeRoom(roomID)
@@ -248,10 +250,10 @@ func TestRoomIsolation(t *testing.T) {
 	ctx := context.Background()
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
-	room1 := hub.getOrCreateRoom("room1")
-	room2 := hub.getOrCreateRoom("room2")
+	room1, _ := hub.getOrCreateRoom("room1")
+	room2, _ := hub.getOrCreateRoom("room2")
 
 	client1 := &hubMockClient{id: "user1"}
 	client2 := &hubMockClient{id: "user2"}
@@ -269,7 +271,7 @@ func TestRoomIsolation(t *testing.T) {
 func TestCleanupGracePeriod(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	// Default grace period should be set
 	assert.Greater(t, hub.cleanupGracePeriod, time.Duration(0))
@@ -279,11 +281,11 @@ func TestShutdown(t *testing.T) {
 	ctx := context.Background()
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
-	// Create some rooms
-	room1 := hub.getOrCreateRoom("room1")
-	room2 := hub.getOrCreateRoom("room2")
+	// Create rooms
+	room1, _ := hub.getOrCreateRoom("room1")
+	room2, _ := hub.getOrCreateRoom("room2")
 
 	// Add clients
 	client1 := &hubMockClient{id: "user1"}

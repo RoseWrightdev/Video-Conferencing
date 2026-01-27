@@ -41,7 +41,7 @@ func TestRoom_Leaks_Subscribe(t *testing.T) {
 
 	// Create a room - this triggers subscribeToRedis which calls BlockingBus.Subscribe
 	// passing context.Background()
-	r := NewRoom("leak-room", nil, blockingBus, nil)
+	r := NewRoom(context.Background(), "leak-room", nil, blockingBus, nil)
 
 	// Close the room and wait for cleanup
 	if err := r.Shutdown(context.Background()); err != nil {
@@ -77,7 +77,7 @@ func TestRoom_Leaks_SFUSession(t *testing.T) {
 	mockBus := &MockBusService{}
 	blockingSFU := &BlockingSFU{MockSFUProvider: &MockSFUProvider{}}
 
-	r := NewRoom("sfu-leak-room", nil, mockBus, blockingSFU)
+	r := NewRoom(context.Background(), "sfu-leak-room", nil, mockBus, blockingSFU)
 	client := NewMockClient("user1", "User", types.RoleTypeParticipant)
 
 	// This calls CreateSFUSession -> triggers `go func()` that reads from stream

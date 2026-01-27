@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"sync"
 
@@ -62,10 +63,11 @@ func (h *Hub) extractToken(c *gin.Context) (*tokenExtractionResult, error) {
 
 // validateOrigin checks if the request origin is in the allowed list.
 func validateOrigin(r *http.Request, allowedOrigins []string) error {
+	// Reject empty origins
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		logging.GetLogger().Debug("No origin header - allowing non-browser client")
-		return nil // Allow non-browser clients (e.g., for testing)
+		logging.GetLogger().Debug("No origin header")
+		return fmt.Errorf("no origin header provided")
 	}
 
 	originURL, err := url.Parse(origin)
@@ -81,13 +83,20 @@ func validateOrigin(r *http.Request, allowedOrigins []string) error {
 		}
 		// Check if the scheme and host match
 		if originURL.Scheme == allowedURL.Scheme && originURL.Host == allowedURL.Host {
-			logging.GetLogger().Debug("Origin validated", zap.String("origin", origin))
+			// Redact IP in log if present
+			safeOrigin := origin
+			if hostname := originURL.Hostname(); hostname != "" {
+				// Simple check if it looks like an IP (or just always use RedactIP logic on hostname if we want)
+				// For now, logging the origin is usually fine if it's whitelisted, but strictly:
+				safeOrigin = strings.Replace(origin, hostname, logging.RedactIP(hostname), 1)
+			}
+			logging.GetLogger().Debug("Origin validated", zap.String("origin", safeOrigin))
 			return nil
 		}
 	}
 
-	logging.Warn(context.Background(), "Origin not in allowed list", zap.String("origin", origin), zap.Strings("allowedOrigins", allowedOrigins))
-	return fmt.Errorf("origin not allowed: %s", origin)
+	logging.Warn(context.Background(), "Origin not in allowed list", zap.String("origin", logging.RedactIP(originURL.Hostname()))) // Redact hostname
+	return fmt.Errorf("origin not allowed")
 }
 
 // authenticateUser validates the token and extracts claims.
@@ -112,21 +121,21 @@ type clientSetupParams struct {
 }
 
 // setupClientConnection creates or retrieves a room and initializes a client.
-func (h *Hub) setupClientConnection(params *clientSetupParams) (*Client, *room.Room) {
-	r := h.getOrCreateRoom(params.RoomID)
+func (h *Hub) setupClientConnection(params *clientSetupParams) (*Client, *room.Room, error) {
+	r, err := h.getOrCreateRoom(params.RoomID)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// Determine display name
 	displayName := params.Username // Use frontend-provided username first
 	if displayName == "" {
-		// Fallback to JWT claims if username param not provided
-		displayName = params.Claims.Subject // Fallback to subject if name is not in token
+		// Fix PII Leak (Display Names)
+		// Do NOT fall back to Claims.Subject or Email as they are sensitive/PII
 		if params.Claims.Name != "" {
 			displayName = params.Claims.Name
-		} else if params.Claims.Email != "" {
-			// Use email prefix as display name
-			if parts := strings.Split(params.Claims.Email, "@"); len(parts) > 0 {
-				displayName = parts[0]
-			}
+		} else {
+			displayName = "Guest"
 		}
 	}
 
@@ -139,6 +148,7 @@ func (h *Hub) setupClientConnection(params *clientSetupParams) (*Client, *room.R
 		DisplayName:      types.DisplayNameType(displayName),
 		Role:             types.RoleTypeHost, // Default role
 		rateLimitEnabled: !params.DevMode,
+		pingPeriod:       30 * time.Second,
 	}
 
 	// In Dev Mode, override ID to be unique based on username if provided.
@@ -153,7 +163,7 @@ func (h *Hub) setupClientConnection(params *clientSetupParams) (*Client, *room.R
 		zap.String("clientId", string(params.UserID)),
 		zap.String("roomId", string(params.RoomID)))
 
-	return client, r
+	return client, r, nil
 }
 
 // upgradeWebSocket handles the WebSocket upgrade process.

@@ -15,12 +15,20 @@ import (
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 )
 
+const (
+	// MaxParticipants is the maximum allowed users in a room
+	MaxParticipants = 100
+)
+
 // Room represents a video conferencing room.
 type Room struct {
-	ID                   types.RoomIDType
-	mu                   sync.RWMutex
-	chatHistory          *list.List
-	maxChatHistoryLength int
+	ID                      types.RoomIDType
+	mu                      sync.RWMutex
+	chatHistory             *list.List
+	maxChatHistoryLength    int
+	maxChatHistoryBytes     int
+	currentChatHistoryBytes int
+	participantCount        int
 
 	ownerID types.ClientIDType
 
@@ -37,6 +45,8 @@ type Room struct {
 	wg     sync.WaitGroup
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	publishChan chan struct{} // Semaphore for broadcast
 }
 
 // GetID returns the room ID.
@@ -74,11 +84,12 @@ func (r *Room) Shutdown(ctx context.Context) error {
 }
 
 // NewRoom creates a new Room instance with the given ID and dependencies.
-func NewRoom(id types.RoomIDType, onEmptyCallback func(types.RoomIDType), busService types.BusService, sfuClient types.SFUProvider) *Room {
+func NewRoom(ctx context.Context, id types.RoomIDType, onEmptyCallback func(types.RoomIDType), busService types.BusService, sfuClient types.SFUProvider) *Room {
 	room := &Room{
 		ID:                   id,
 		chatHistory:          list.New(),
 		maxChatHistoryLength: 100,
+		maxChatHistoryBytes:  1024 * 1024, // 1MB limit (Task 15)
 
 		clients: make(map[types.ClientIDType]types.ClientInterface),
 
@@ -86,11 +97,12 @@ func NewRoom(id types.RoomIDType, onEmptyCallback func(types.RoomIDType), busSer
 		clientDrawOrderQueue:  list.New(),
 		handDrawOrderQueue:    list.New(),
 
-		onEmpty: onEmptyCallback,
-		bus:     busService,
-		sfu:     sfuClient,
+		onEmpty:     onEmptyCallback,
+		bus:         busService,
+		sfu:         sfuClient,
+		publishChan: make(chan struct{}, 100), // Limit concurrent publishes
 	}
-	room.ctx, room.cancel = context.WithCancel(context.Background())
+	room.ctx, room.cancel = context.WithCancel(ctx)
 
 	if busService != nil {
 		room.subscribeToRedis()
@@ -318,12 +330,7 @@ func (r *Room) HandleClientDisconnect(client types.ClientInterface) {
 	r.disconnectClientLocked(ctx, client)
 	logging.Info(ctx, "Client disconnected", zap.String("room", string(r.ID)), zap.String("ClientId", string(client.GetID())))
 
-	totalParticipants := 0
-	for _, c := range r.clients {
-		if c.GetRole() == types.RoleTypeHost || c.GetRole() == types.RoleTypeParticipant {
-			totalParticipants++
-		}
-	}
+	totalParticipants := r.participantCount
 
 	if totalParticipants > 0 {
 		metrics.RoomParticipants.WithLabelValues(string(r.ID)).Set(float64(totalParticipants))
@@ -405,9 +412,9 @@ func (r *Room) sendRoomStateToClient(client types.ClientInterface) {
 	})
 }
 
-// broadcastLocalLocked sends a message to all local non-waiting clients.
+// broadcastRawLocked sends raw bytes to all local non-waiting clients.
 // It does NOT publish to Redis.
-func (r *Room) broadcastLocalLocked(msg *pb.WebSocketMessage) {
+func (r *Room) broadcastRawLocked(data []byte) {
 	var recipients []types.ClientInterface
 	for _, client := range r.clients {
 		if client.GetRole() != types.RoleTypeWaiting {
@@ -416,18 +423,38 @@ func (r *Room) broadcastLocalLocked(msg *pb.WebSocketMessage) {
 	}
 
 	for _, client := range recipients {
-		client.SendProto(msg)
+		client.SendRaw(data)
 	}
+}
+
+// broadcastLocalLocked sends a message to all local non-waiting clients.
+// It does NOT publish to Redis.
+func (r *Room) broadcastLocalLocked(msg *pb.WebSocketMessage) {
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		logging.Error(r.ctx, "Failed to marshal broadcast message", zap.String("room", string(r.ID)), zap.Error(err))
+		return
+	}
+	r.broadcastRawLocked(data)
 }
 
 func (r *Room) broadcastLocked(msg *pb.WebSocketMessage) {
 	r.broadcastLocalLocked(msg)
 
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
-		r.publishToRedis(context.Background(), msg)
-	}()
+	// Fix Goroutine Leak in Broadcast
+	select {
+	case r.publishChan <- struct{}{}:
+		r.wg.Add(1)
+		go func() {
+			defer func() {
+				<-r.publishChan
+				r.wg.Done()
+			}()
+			r.publishToRedis(context.Background(), msg)
+		}()
+	default:
+		logging.Warn(r.ctx, "Dropping Redis publish - queue full", zap.String("roomId", string(r.ID)))
+	}
 }
 
 // Broadcast sends a message to everyone.
@@ -442,36 +469,28 @@ func (r *Room) Broadcast(msg *pb.WebSocketMessage) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Use existing slice logic, but call SendRaw
-	var targets []types.ClientInterface
-	for _, client := range r.clients {
-		if client.GetRole() != types.RoleTypeWaiting {
-			targets = append(targets, client)
-		}
-	}
+	r.broadcastRawLocked(data)
 
-	for _, client := range targets {
-		client.SendRaw(data)
+	// Fix Goroutine Leak in Broadcast
+	select {
+	case r.publishChan <- struct{}{}:
+		r.wg.Add(1)
+		go func() {
+			defer func() {
+				<-r.publishChan
+				r.wg.Done()
+			}()
+			r.publishToRedis(context.Background(), msg)
+		}()
+	default:
+		logging.Warn(r.ctx, "Dropping Redis publish - queue full", zap.String("roomId", string(r.ID)))
 	}
-
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
-		r.publishToRedis(context.Background(), msg)
-	}()
 }
 
 func (r *Room) broadcastRoomStateLocked(ctx context.Context) {
 	roomState := r.BuildRoomStateProto(ctx)
 
-	var recipients []types.ClientInterface
-	for _, c := range r.clients {
-		if c.GetRole() != types.RoleTypeWaiting {
-			recipients = append(recipients, c)
-		}
-	}
-
-	logging.Info(ctx, "Broadcasting RoomState", zap.String("room", string(r.ID)), zap.Int("recipients", len(recipients)))
+	logging.Info(ctx, "Broadcasting RoomState", zap.String("room", string(r.ID)))
 
 	msg := &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_RoomState{
@@ -479,9 +498,13 @@ func (r *Room) broadcastRoomStateLocked(ctx context.Context) {
 		},
 	}
 
-	for _, client := range recipients {
-		client.SendProto(msg)
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		logging.Error(ctx, "Failed to marshal RoomState broadcast", zap.String("room", string(r.ID)), zap.Error(err))
+		return
 	}
+
+	r.broadcastRawLocked(data)
 }
 
 // BroadcastRoomState sends the full room state to all clients.

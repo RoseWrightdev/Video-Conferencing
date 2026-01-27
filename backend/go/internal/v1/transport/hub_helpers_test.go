@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -16,7 +17,7 @@ import (
 func TestExtractToken_FromHeader(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -37,7 +38,7 @@ func TestExtractToken_FromHeader(t *testing.T) {
 func TestExtractToken_FromQuery_Rejected(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -56,7 +57,7 @@ func TestExtractToken_FromQuery_Rejected(t *testing.T) {
 func TestExtractToken_Missing(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -93,14 +94,14 @@ func TestValidateOrigin_Blocked(t *testing.T) {
 	assert.Contains(t, err.Error(), "origin not allowed")
 }
 
-func TestValidateOrigin_EmptyAllowed(t *testing.T) {
+func TestValidateOrigin_EmptyOrigin_Rejected(t *testing.T) {
 	req := httptest.NewRequest("GET", "/ws", nil)
 	// No Origin header
 
 	allowedOrigins := []string{"http://localhost:3000"}
 
 	err := validateOrigin(req, allowedOrigins)
-	assert.NoError(t, err) // Empty origin allows non-browser clients
+	assert.Error(t, err) // Strict: Origin header is required
 }
 
 func TestValidateOrigin_InvalidURL(t *testing.T) {
@@ -130,7 +131,7 @@ func TestValidateOrigin_SchemeAndHostMatchRequired(t *testing.T) {
 func TestAuthenticateUser_Valid(t *testing.T) {
 	validator := &MockTokenValidator{shouldFail: false}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	claims, err := hub.authenticateUser("valid-token")
 
@@ -142,7 +143,7 @@ func TestAuthenticateUser_Valid(t *testing.T) {
 func TestAuthenticateUser_Invalid(t *testing.T) {
 	validator := &MockTokenValidator{shouldFail: true}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	claims, err := hub.authenticateUser("invalid-token")
 
@@ -156,7 +157,7 @@ func TestAuthenticateUser_Invalid(t *testing.T) {
 func TestSetupClientConnection_WithUsername(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	mockConn := &MockConnection{}
 	claims := &auth.CustomClaims{
@@ -167,7 +168,7 @@ func TestSetupClientConnection_WithUsername(t *testing.T) {
 		Email: "test@example.com",
 	}
 
-	client, r := hub.setupClientConnection(&clientSetupParams{
+	client, r, _ := hub.setupClientConnection(&clientSetupParams{
 		RoomID:   "test-room",
 		UserID:   "user-123",
 		Username: "custom-username",
@@ -186,7 +187,7 @@ func TestSetupClientConnection_WithUsername(t *testing.T) {
 func TestSetupClientConnection_WithoutUsername(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	mockConn := &MockConnection{}
 	claims := &auth.CustomClaims{
@@ -197,7 +198,7 @@ func TestSetupClientConnection_WithoutUsername(t *testing.T) {
 		Email: "test@example.com",
 	}
 
-	client, r := hub.setupClientConnection(&clientSetupParams{
+	client, r, err := hub.setupClientConnection(&clientSetupParams{
 		RoomID:   "test-room",
 		UserID:   "user-123",
 		Username: "",
@@ -206,15 +207,16 @@ func TestSetupClientConnection_WithoutUsername(t *testing.T) {
 		Conn:     mockConn,
 	})
 
+	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.NotNil(t, r)
 	assert.Equal(t, types.DisplayNameType("JWT Name"), client.DisplayName)
 }
 
-func TestSetupClientConnection_FallbackToEmail(t *testing.T) {
+func TestSetupClientConnection_NoFallbackToEmail(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	mockConn := &MockConnection{}
 	claims := &auth.CustomClaims{
@@ -225,7 +227,7 @@ func TestSetupClientConnection_FallbackToEmail(t *testing.T) {
 		Email: "alice@example.com",
 	}
 
-	client, r := hub.setupClientConnection(&clientSetupParams{
+	client, r, err := hub.setupClientConnection(&clientSetupParams{
 		RoomID:   "test-room",
 		UserID:   "user-123",
 		Username: "",
@@ -234,15 +236,17 @@ func TestSetupClientConnection_FallbackToEmail(t *testing.T) {
 		Conn:     mockConn,
 	})
 
+	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.NotNil(t, r)
-	assert.Equal(t, types.DisplayNameType("alice"), client.DisplayName)
+	// Fix PII Leak - Should default to Guest, NOT use email prefix
+	assert.Equal(t, types.DisplayNameType("Guest"), client.DisplayName)
 }
 
 func TestSetupClientConnection_DevModeOverride(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
-	hub := NewHub(validator, mockBus, true, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, true, newMockRateLimiter())
 
 	mockConn := &MockConnection{}
 	claims := &auth.CustomClaims{
@@ -252,7 +256,7 @@ func TestSetupClientConnection_DevModeOverride(t *testing.T) {
 		Name: "Dev User",
 	}
 
-	client, r := hub.setupClientConnection(&clientSetupParams{
+	client, r, err := hub.setupClientConnection(&clientSetupParams{
 		RoomID:   "test-room",
 		UserID:   "dev-user-123",
 		Username: "unique-dev-username",
@@ -261,6 +265,7 @@ func TestSetupClientConnection_DevModeOverride(t *testing.T) {
 		Conn:     mockConn,
 	})
 
+	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.NotNil(t, r)
 	assert.Equal(t, types.ClientIDType("unique-dev-username"), client.ID)

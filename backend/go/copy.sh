@@ -19,13 +19,24 @@ fi
 
 echo "Combining files from '$SRC' into '$OUTPUT'..."
 
-# 2. Combine all Go files (excluding tests and comments) into one file
+# 2. Combine all Go files (excluding tests and generated code) into one file
 > "$OUTPUT"  # Clear/create output file
-find "$SRC" -maxdepth 1 -name "*.go" ! -name "*_test.go" -print0 | sort -z | while IFS= read -r -d '' file; do
-    echo "// File: $file" >> "$OUTPUT"
-    # Exclude comments by filtering out lines starting with // or /*
-    grep -v '^\s*//' "$file" | grep -v '^\s*/\*' | grep -v '\*/' >> "$OUTPUT"
-    echo "" >> "$OUTPUT"
+
+# Use find to recursively look for .go files
+# Exclude:
+# - *_test.go files
+# - directories named 'gen'
+# - directories named 'vendor'
+find "$SRC" \
+    -type d \( -name "gen" -o -name "vendor" \) -prune -o \
+    -type f -name "*.go" -not -name "*_test.go" -print0 | \
+    sort -z | while IFS= read -r -d '' file; do
+    
+    echo "--------------------------------------------------------------------------------" >> "$OUTPUT"
+    echo "FILE: $file" >> "$OUTPUT"
+    echo "--------------------------------------------------------------------------------" >> "$OUTPUT"
+    cat "$file" >> "$OUTPUT"
+    echo -e "\n\n" >> "$OUTPUT"
 done
 
 echo "Success! Combined files written to '$OUTPUT'"

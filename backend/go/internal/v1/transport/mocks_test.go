@@ -74,14 +74,23 @@ func (m *MockSFUProvider) ListenEvents(_ context.Context, _ string, _ string) (p
 
 // MockConnection implements wsConnection
 type MockConnection struct {
-	ReadMessageFunc  func() (int, []byte, error)
-	WriteMessageFunc func(int, []byte) error
-	CloseFunc        func() error
+	ReadMessageFunc     func() (int, []byte, error)
+	WriteMessageFunc    func(int, []byte) error
+	CloseFunc           func() error
+	SetReadDeadlineFunc func(time.Time) error
+
+	SetReadLimitFunc func(int64)
+
+	readLimit int64
 }
 
 func (m *MockConnection) ReadMessage() (int, []byte, error) {
 	if m.ReadMessageFunc != nil {
-		return m.ReadMessageFunc()
+		msgType, data, err := m.ReadMessageFunc()
+		if err == nil && m.readLimit > 0 && int64(len(data)) > m.readLimit {
+			return 0, nil, context.DeadlineExceeded // simulate read limit error
+		}
+		return msgType, data, err
 	}
 	return 0, nil, nil
 }
@@ -102,4 +111,21 @@ func (m *MockConnection) Close() error {
 
 func (m *MockConnection) SetWriteDeadline(_ time.Time) error {
 	return nil
+}
+
+func (m *MockConnection) SetReadDeadline(t time.Time) error {
+	if m.SetReadDeadlineFunc != nil {
+		return m.SetReadDeadlineFunc(t)
+	}
+	return nil
+}
+
+func (m *MockConnection) SetReadLimit(limit int64) {
+	m.readLimit = limit
+	if m.SetReadLimitFunc != nil {
+		m.SetReadLimitFunc(limit)
+	}
+}
+
+func (m *MockConnection) SetPongHandler(h func(appData string) error) {
 }

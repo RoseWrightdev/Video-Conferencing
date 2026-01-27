@@ -1,20 +1,21 @@
 package room
 
 import (
-	"fmt"
+	"html"
 	"time"
 
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/proto"
 	"github.com/RoseWrightdev/Video-Conferencing/backend/go/internal/v1/types"
+	"github.com/google/uuid"
 )
 
 // buildChatEvent creates a ChatEvent from a ChatRequest and client info.
 func buildChatEvent(client types.ClientInterface, req *pb.ChatRequest) *pb.ChatEvent {
 	return &pb.ChatEvent{
-		Id:         fmt.Sprintf("%d", time.Now().UnixNano()),
+		Id:         uuid.NewString(),
 		SenderId:   string(client.GetID()),
 		SenderName: string(client.GetDisplayName()),
-		Content:    req.Content,
+		Content:    html.EscapeString(req.Content),
 		Timestamp:  time.Now().UnixMilli(),
 		IsPrivate:  req.TargetId != "",
 	}

@@ -13,7 +13,7 @@ import (
 func TestHandleToggleMedia_Audio(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := newMockClient("user1", "User", types.RoleTypeParticipant)
 
 	r.AddParticipant(ctx, client)
@@ -37,7 +37,7 @@ func TestHandleToggleMedia_Audio(t *testing.T) {
 func TestHandleToggleMedia_Video(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := newMockClient("user1", "User", types.RoleTypeParticipant)
 
 	r.AddParticipant(ctx, client)
@@ -61,7 +61,7 @@ func TestHandleToggleMedia_Video(t *testing.T) {
 func TestHandleToggleHand(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := newMockClient("user1", "User", types.RoleTypeParticipant)
 
 	r.AddParticipant(ctx, client)
@@ -84,7 +84,7 @@ func TestHandleToggleHand(t *testing.T) {
 func TestHandleChat(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	participant := newMockClient("user1", "User", types.RoleTypeParticipant)
@@ -114,7 +114,7 @@ func TestHandleChat(t *testing.T) {
 func TestHandleScreenShare(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := newMockClient("user1", "User", types.RoleTypeParticipant)
 
 	r.AddParticipant(ctx, client)
@@ -137,7 +137,7 @@ func TestHandleScreenShare(t *testing.T) {
 func TestHandleGetRecentChats(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := newMockClient("user1", "User", types.RoleTypeParticipant)
 
 	r.AddParticipant(ctx, client)
@@ -167,7 +167,7 @@ func TestHandleGetRecentChats(t *testing.T) {
 func TestHandleDeleteChat(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	r.AddHost(ctx, host)
@@ -192,7 +192,7 @@ func TestHandleDeleteChat(t *testing.T) {
 func TestHandleDeleteChat_UnauthorizedUser(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	waiting := newMockClient("waiting1", "Waiting", types.RoleTypeWaiting)
 	r.AddWaiting(waiting)
@@ -217,7 +217,7 @@ func TestHandleDeleteChat_UnauthorizedUser(t *testing.T) {
 func TestHandleRequestScreenSharePermission(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	participant := newMockClient("user1", "User", types.RoleTypeParticipant)
@@ -236,7 +236,7 @@ func TestHandleRequestScreenSharePermission(t *testing.T) {
 func TestHandleAdminAction_Kick(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	participant := newMockClient("user1", "User", types.RoleTypeParticipant)
@@ -259,7 +259,7 @@ func TestHandleAdminAction_Kick(t *testing.T) {
 func TestHandleAdminAction_Approve(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	waiting := newMockClient("waiting1", "Waiting User", types.RoleTypeWaiting)
@@ -289,7 +289,7 @@ func TestHandleAdminAction_Approve(t *testing.T) {
 func TestHandleAdminAction_Mute(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	participant := newMockClient("user1", "User", types.RoleTypeParticipant)
@@ -314,7 +314,7 @@ func TestHandleAdminAction_Mute(t *testing.T) {
 func TestHandleAdminAction_Unmute(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	participant := newMockClient("user1", "User", types.RoleTypeParticipant)
@@ -335,7 +335,7 @@ func TestHandleAdminAction_Unmute(t *testing.T) {
 func TestHandleAdminAction_UnauthorizedUser(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	participant := newMockClient("user1", "User", types.RoleTypeParticipant)
@@ -360,7 +360,7 @@ func TestHandleAdminAction_UnauthorizedUser(t *testing.T) {
 func TestHandleChatPrivateMessage(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	user1 := newMockClient("user1", "User 1", types.RoleTypeParticipant)
 	user2 := newMockClient("user2", "User 2", types.RoleTypeParticipant)
@@ -384,7 +384,7 @@ func TestHandleChatPrivateMessage(t *testing.T) {
 func TestMultipleHandRaises(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Add multiple participants
 	users := make([]*MockClient, 5)
@@ -422,7 +422,7 @@ func TestMultipleHandRaises(t *testing.T) {
 func TestHandleAdminAction_TransferOwnership(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	participant := newMockClient("user1", "User", types.RoleTypeParticipant)

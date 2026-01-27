@@ -5,6 +5,8 @@ backend/go/session
 .DS_Store
 temp
 backend/rust/sfu/target
+temp_go_build
+temp_go_cache
 
 # Node
 node_modules/

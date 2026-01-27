@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 
+	"crypto/tls"
+
 	pb "github.com/RoseWrightdev/Video-Conferencing/backend/go/gen/stream_processor/proto"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 // Client wraps the gRPC client for the Stream Processor (Captioning Service)
@@ -19,7 +21,11 @@ type Client struct {
 // NewClient creates a new client connection to the Stream Processor
 func NewClient(addr string) (*Client, error) {
 	// 1. Dial the service
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Fix Insecure gRPC - Enforce TLS 1.2+ and verify certs
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial stream processor: %w", err)
 	}

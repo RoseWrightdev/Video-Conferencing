@@ -125,3 +125,18 @@ func RedactEmail(email string) string {
 	}
 	return "***"
 }
+
+// RedactIP masks the last octave of an IPv4 address or the last chunk of IPv6
+// Fix PII Leaks
+func RedactIP(ip string) string {
+	if ip == "" {
+		return ""
+	}
+	// Simple redaction (last part)
+	// IPv4: 1.2.3.4 -> 1.2.3.xxx
+	// IPv6: ... -> ...:xxxx
+	if len(ip) > 0 {
+		return "REDACTED_IP" // For strict PII compliance, or implement partial masking
+	}
+	return ""
+}

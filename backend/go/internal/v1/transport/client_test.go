@@ -301,6 +301,7 @@ func TestClientWritePump(t *testing.T) {
 		Role:        types.RoleTypeParticipant,
 		conn:        mockConn,
 		send:        make(chan []byte, 256),
+		pingPeriod:  10 * time.Second,
 	}
 
 	// Start write pump
@@ -436,5 +437,105 @@ func TestClientSendRaw(t *testing.T) {
 		assert.Equal(t, data, received)
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Raw message not sent")
+	}
+}
+
+func TestClientZombieConnection(t *testing.T) {
+	mockConn := &MockConnection{}
+	pingReceived := make(chan bool, 5)
+	readDeadlineSet := make(chan bool, 5)
+
+	mockConn.WriteMessageFunc = func(msgType int, data []byte) error {
+		if msgType == websocket.PingMessage {
+			select {
+			case pingReceived <- true:
+			default:
+			}
+		}
+		return nil
+	}
+
+	mockConn.SetReadDeadlineFunc = func(ti time.Time) error {
+		select {
+		case readDeadlineSet <- true:
+		default:
+		}
+		return nil
+	}
+
+	client := &Client{
+		conn:         mockConn,
+		send:         make(chan []byte, 10),
+		prioritySend: make(chan []byte, 10),
+		pingPeriod:   100 * time.Millisecond,
+		mu:           sync.RWMutex{},
+	}
+
+	// Start pumps
+	go client.readPump()
+	go client.writePump()
+
+	// 1. Assert Ping is sent (Zombie detection depends on Ping)
+	select {
+	case <-pingReceived:
+		// Pass
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("Zombie Connection Fix Failed: Ping not sent within period")
+	}
+
+	// 2. Assert ReadDeadline is set (to detect timeout if no Pong)
+	select {
+	case <-readDeadlineSet:
+		// Pass
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("Zombie Connection Fix Failed: SetReadDeadline not called")
+	}
+
+	// Clean up
+	client.Disconnect()
+}
+
+func TestClientReadLimit(t *testing.T) {
+	mockConn := &MockConnection{}
+	closeCalled := make(chan bool, 5)
+
+	mockConn.CloseFunc = func() error {
+		select {
+		case closeCalled <- true:
+		default:
+		}
+		return nil
+	}
+
+	// Prepare huge payload (1MB) > 512KB limit
+	hugePayload := make([]byte, 1024*1024)
+
+	msgSent := false
+	mockConn.ReadMessageFunc = func() (int, []byte, error) {
+		if !msgSent {
+			msgSent = true
+			return websocket.BinaryMessage, hugePayload, nil
+		}
+		// Block subsequent reads to prevent tight loop if not closed immediately
+		time.Sleep(1 * time.Second)
+		return 0, nil, nil
+	}
+
+	client := &Client{
+		conn:       mockConn,
+		send:       make(chan []byte, 10),
+		pingPeriod: 30 * time.Second,
+		mu:         sync.RWMutex{},
+	}
+	// Need a MockRoom to avoid panic in HandleClientDisconnect
+	client.room = &MockRoom{}
+
+	go client.readPump()
+
+	select {
+	case <-closeCalled:
+		// Passed
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Connection not closed on oversize message")
 	}
 }

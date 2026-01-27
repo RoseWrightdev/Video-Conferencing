@@ -21,7 +21,7 @@ func newMockRateLimiter() *ratelimit.RateLimiter {
 		RateLimitWsIP:        "100-M",
 		RateLimitWsUser:      "10-M",
 	}
-	rl, _ := ratelimit.NewRateLimiter(cfg, nil)
+	rl, _ := ratelimit.NewRateLimiter(cfg, nil, &MockTokenValidator{})
 	return rl
 }
 
@@ -31,7 +31,7 @@ func TestNewHub_WithDevMode(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
 
-	hub := NewHub(validator, mockBus, true, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, true, newMockRateLimiter())
 
 	assert.NotNil(t, hub)
 	assert.True(t, hub.devMode, "devMode should be enabled")
@@ -41,7 +41,7 @@ func TestNewHub_WithDevMode(t *testing.T) {
 func TestNewHub_WithoutBus(t *testing.T) {
 	validator := &MockTokenValidator{}
 
-	hub := NewHub(validator, nil, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, nil, false, newMockRateLimiter())
 
 	assert.NotNil(t, hub)
 	assert.Nil(t, hub.bus, "bus should be nil")
@@ -51,7 +51,7 @@ func TestNewHub_InitializesEmptyMaps(t *testing.T) {
 	validator := &MockTokenValidator{}
 	mockBus := &MockBusService{}
 
-	hub := NewHub(validator, mockBus, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, mockBus, false, newMockRateLimiter())
 
 	assert.NotNil(t, hub.rooms)
 	assert.Equal(t, 0, len(hub.rooms), "rooms map should be empty initially")
@@ -63,7 +63,7 @@ func TestNewHub_InitializesEmptyMaps(t *testing.T) {
 
 func TestHandleClientConnect_FirstUserBecomesOwner(t *testing.T) {
 	mockBus := &MockBusService{}
-	r := room.NewRoom("test-room", nil, mockBus, nil)
+	r := room.NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// First user connects
 	client1 := &hubMockClient{id: "user1"}
@@ -78,7 +78,7 @@ func TestHandleClientConnect_FirstUserBecomesOwner(t *testing.T) {
 
 func TestHandleClientConnect_OwnerReconnects(t *testing.T) {
 	mockBus := &MockBusService{}
-	r := room.NewRoom("test-room", nil, mockBus, nil)
+	r := room.NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// First user becomes owner
 	client1 := &hubMockClient{id: "user1"}
@@ -99,7 +99,7 @@ func TestHandleClientConnect_OwnerReconnects(t *testing.T) {
 func TestHandleClientConnect_NonOwnerReconnectsAsParticipant(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := room.NewRoom("test-room", nil, mockBus, nil)
+	r := room.NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Setup: owner first
 	owner := &hubMockClient{id: "owner"}
@@ -123,7 +123,7 @@ func TestHandleClientConnect_NonOwnerReconnectsAsParticipant(t *testing.T) {
 func TestHandleClientConnect_DuplicateConnectionRemovesOld(t *testing.T) {
 	mockBus := &MockBusService{}
 	mockSFU := &MockSFUProvider{}
-	r := room.NewRoom("test-room", nil, mockBus, mockSFU)
+	r := room.NewRoom(context.Background(), "test-room", nil, mockBus, mockSFU)
 
 	// First connection
 	client1 := &hubMockClient{id: "user1"}
@@ -139,7 +139,7 @@ func TestHandleClientConnect_DuplicateConnectionRemovesOld(t *testing.T) {
 
 func TestHandleClientConnect_SubsequentUserGoesToWaiting(t *testing.T) {
 	mockBus := &MockBusService{}
-	r := room.NewRoom("test-room", nil, mockBus, nil)
+	r := room.NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// First user becomes host
 	h := &hubMockClient{id: "host"}
@@ -161,7 +161,7 @@ func TestDisconnectClientLocked_SFUDeleteError(t *testing.T) {
 	// Use MockSFUProvider from mocks_test.go (it doesn't fail by default)
 	mockSFU := &MockSFUProvider{}
 
-	r := room.NewRoom("test-room", nil, mockBus, mockSFU)
+	r := room.NewRoom(context.Background(), "test-room", nil, mockBus, mockSFU)
 	client := &hubMockClient{id: "user1"}
 	r.AddHost(ctx, client)
 
@@ -175,7 +175,7 @@ func TestDisconnectClientLocked_SFUDeleteError(t *testing.T) {
 func TestBuildRoomStateProto_WithMixedRoles(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := room.NewRoom("test-room", nil, mockBus, nil)
+	r := room.NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Add clients with various roles and states
 	// Use actual Clients if we want to test state mapping, but hubMockClient is simpler.

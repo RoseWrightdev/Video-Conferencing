@@ -196,21 +196,6 @@ func TestCheckRedis_Healthy(t *testing.T) {
 	assert.Equal(t, "healthy", status)
 }
 
-func TestCheckRedis_Unhealthy(t *testing.T) {
-	t.Skip("Skipping: bus.NewService validates connection immediately, cannot test unhealthy path")
-	// Create bus service with invalid address
-	busService, err := bus.NewService("invalid:9999", "")
-	require.NoError(t, err) // NewService doesn't fail immediately
-	defer func() { _ = busService.Close() }()
-
-	handler := &Handler{
-		redisService: busService,
-	}
-
-	status := handler.checkRedis(context.Background())
-	assert.Equal(t, "unhealthy", status)
-}
-
 func TestCheckRedis_Nil(t *testing.T) {
 	handler := &Handler{
 		redisService: nil,

@@ -14,7 +14,7 @@ import (
 )
 
 func TestSubscribeToRedis_NoBus(_ *testing.T) {
-	r := NewRoom("test-room", nil, nil, nil)
+	r := NewRoom(context.Background(), "test-room", nil, nil, nil)
 
 	// Should not panic
 	r.subscribeToRedis()
@@ -22,7 +22,7 @@ func TestSubscribeToRedis_NoBus(_ *testing.T) {
 
 func TestSubscribeToRedis_WithBus(t *testing.T) {
 	mockBus := &MockBusService{}
-	_ = NewRoom("test-room", nil, mockBus, nil)
+	_ = NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Subscribe should have been called in NewRoom
 	assert.Equal(t, 1, mockBus.subscribeCalls)
@@ -31,7 +31,7 @@ func TestSubscribeToRedis_WithBus(t *testing.T) {
 func TestHandleRedisMessage(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	r.addHost(ctx, host)
@@ -68,7 +68,7 @@ func TestHandleRedisMessage(t *testing.T) {
 func TestHandleRedisMessage_NoPublishLoop(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	r.addHost(ctx, host)
@@ -107,7 +107,7 @@ func TestHandleRedisMessage_NoPublishLoop(t *testing.T) {
 
 func TestHandleRedisMessage_EmptyPayload(_ *testing.T) {
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Empty payload should not panic
 	payload := bus.PubSubPayload{
@@ -121,7 +121,7 @@ func TestHandleRedisMessage_EmptyPayload(_ *testing.T) {
 
 func TestHandleRedisMessage_InvalidProto(_ *testing.T) {
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Invalid proto should not panic
 	payload := bus.PubSubPayload{
@@ -135,7 +135,7 @@ func TestHandleRedisMessage_InvalidProto(_ *testing.T) {
 
 func TestPublishToRedis_NoBus(_ *testing.T) {
 	ctx := context.Background()
-	r := NewRoom("test-room", nil, nil, nil)
+	r := NewRoom(context.Background(), "test-room", nil, nil, nil)
 
 	msg := &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_ChatEvent{
@@ -153,7 +153,7 @@ func TestPublishToRedis_NoBus(_ *testing.T) {
 func TestPublishToRedis_WithBus(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	msg := &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_ChatEvent{
@@ -172,7 +172,7 @@ func TestPublishToRedis_WithBus(t *testing.T) {
 func TestPublishToRedis_Error(_ *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{failPublish: true}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	msg := &pb.WebSocketMessage{
 		Payload: &pb.WebSocketMessage_ChatEvent{
@@ -190,7 +190,7 @@ func TestPublishToRedis_Error(_ *testing.T) {
 func TestBroadcast_FullChannel(_ *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Create a mock client with a small send buffer
 	client := newMockClient("user1", "User", types.RoleTypeHost)
@@ -216,7 +216,7 @@ func TestBroadcast_FullChannel(_ *testing.T) {
 }
 
 func TestAddChat_NilHistory(t *testing.T) {
-	r := NewRoom("test-room", nil, nil, nil)
+	r := NewRoom(context.Background(), "test-room", nil, nil, nil)
 	r.chatHistory = nil
 
 	chat := types.ChatInfo{
@@ -231,7 +231,7 @@ func TestAddChat_NilHistory(t *testing.T) {
 }
 
 func TestDeleteChat_NilHistory(_ *testing.T) {
-	r := NewRoom("test-room", nil, nil, nil)
+	r := NewRoom(context.Background(), "test-room", nil, nil, nil)
 	r.chatHistory = nil
 
 	// Should not panic
@@ -239,7 +239,7 @@ func TestDeleteChat_NilHistory(_ *testing.T) {
 }
 
 func TestGetRecentChats_EmptyHistory(t *testing.T) {
-	r := NewRoom("test-room", nil, nil, nil)
+	r := NewRoom(context.Background(), "test-room", nil, nil, nil)
 	r.chatHistory = nil
 
 	chats := r.getRecentChats()
@@ -247,7 +247,7 @@ func TestGetRecentChats_EmptyHistory(t *testing.T) {
 }
 
 func TestAddChat_NonChatInfoValue(t *testing.T) {
-	r := NewRoom("test-room", nil, nil, nil)
+	r := NewRoom(context.Background(), "test-room", nil, nil, nil)
 
 	// Add a chat normally
 	r.addChat(types.ChatInfo{
@@ -264,7 +264,7 @@ func TestAddChat_NonChatInfoValue(t *testing.T) {
 }
 
 func TestDeleteChat_NotFound(t *testing.T) {
-	r := NewRoom("test-room", nil, nil, nil)
+	r := NewRoom(context.Background(), "test-room", nil, nil, nil)
 
 	r.addChat(types.ChatInfo{
 		ChatID:      "chat1",
@@ -281,7 +281,7 @@ func TestDeleteChat_NotFound(t *testing.T) {
 func TestDisconnectClient_NoDrawOrderElement(_ *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	client := newMockClient("user1", "User", types.RoleTypeParticipant)
 	// MockClient doesn't have drawOrderElement field in the same way,
@@ -296,7 +296,7 @@ func TestDisconnectClient_NoDrawOrderElement(_ *testing.T) {
 func TestHandleClientDisconnect_WithMetrics(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := newMockClient("host1", "Host", types.RoleTypeHost)
 	participant := newMockClient("user1", "User", types.RoleTypeParticipant)

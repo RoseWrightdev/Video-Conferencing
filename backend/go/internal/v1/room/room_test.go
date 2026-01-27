@@ -14,7 +14,7 @@ import (
 
 func TestNewRoom(t *testing.T) {
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	assert.Equal(t, types.RoomIDType("test-room"), room.ID)
 	assert.NotNil(t, room.clients)
@@ -25,7 +25,7 @@ func TestNewRoom(t *testing.T) {
 func TestIsRoomEmpty(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Initially empty
 	assert.True(t, room.IsRoomEmpty())
@@ -48,7 +48,7 @@ func TestIsRoomEmpty(t *testing.T) {
 
 func TestHandleClientConnect_FirstUser(t *testing.T) {
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "First User", types.RoleTypeWaiting)
 
 	room.HandleClientConnect(client)
@@ -61,7 +61,7 @@ func TestHandleClientConnect_FirstUser(t *testing.T) {
 func TestHandleClientConnect_SubsequentUsers(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Add first user as host
 	host := NewMockClient("host1", "Host", types.RoleTypeHost)
@@ -79,7 +79,7 @@ func TestHandleClientConnect_SubsequentUsers(t *testing.T) {
 func TestHandleClientConnect_DuplicateConnection(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Add first client as host
 	oldClient := NewMockClient("user1", "Old Client", types.RoleTypeHost)
@@ -105,7 +105,7 @@ func TestHandleClientDisconnect(t *testing.T) {
 		roomCleanupCalled = true
 	}
 
-	room := NewRoom("test-room", onEmptyCallback, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", onEmptyCallback, mockBus, nil)
 	client := NewMockClient("user1", "User", types.RoleTypeParticipant)
 
 	room.addParticipantLocked(ctx, client)
@@ -126,7 +126,7 @@ func TestHandleClientDisconnect(t *testing.T) {
 func TestBroadcast(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Add host and participant
 	host := NewMockClient("host1", "Host", types.RoleTypeHost)
@@ -159,7 +159,7 @@ func TestBroadcast(t *testing.T) {
 func TestBroadcastRoomState(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := NewMockClient("host1", "Host", types.RoleTypeHost)
 	room.addHostLocked(ctx, host)
@@ -176,7 +176,7 @@ func TestBroadcastRoomState(t *testing.T) {
 
 func TestSendRoomStateToClient(t *testing.T) {
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := NewMockClient("host1", "Host", types.RoleTypeHost)
 	room.addHostLocked(context.Background(), host)
@@ -191,7 +191,7 @@ func TestSendRoomStateToClient(t *testing.T) {
 func TestRouter(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	client := NewMockClient("user1", "User", types.RoleTypeHost)
 	room.addHostLocked(ctx, client)
@@ -260,7 +260,7 @@ func TestRouter(t *testing.T) {
 
 func TestConcurrentClientOperations(t *testing.T) {
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	var wg sync.WaitGroup
 	numClients := 10
@@ -284,7 +284,7 @@ func TestConcurrentClientOperations(t *testing.T) {
 
 func TestWaitingRoomOrdering(t *testing.T) {
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	// Add multiple users to waiting
 	user1 := NewMockClient("user1", "User 1", types.RoleTypeWaiting)
@@ -306,7 +306,7 @@ func TestWaitingRoomOrdering(t *testing.T) {
 func TestCloseRoom(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	r := NewRoom("test-room", nil, mockBus, nil)
+	r := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := NewMockClient("host1", "Host", types.RoleTypeHost)
 	participant := NewMockClient("user1", "User", types.RoleTypeParticipant)

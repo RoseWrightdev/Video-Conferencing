@@ -13,7 +13,7 @@ func TestRouter_AllBranches(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
 	mockSFU := &MockSFUProvider{}
-	room := NewRoom("test-room", nil, mockBus, mockSFU)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, mockSFU)
 
 	client := &MockClient{
 		ID:          "user1",
@@ -164,7 +164,7 @@ func TestRouter_AllBranches(t *testing.T) {
 func TestRouter_WaitingUserJoinIgnored(t *testing.T) {
 	ctx := context.Background()
 	mockSFU := &MockSFUProvider{}
-	room := NewRoom("test-room", nil, nil, mockSFU)
+	room := NewRoom(context.Background(), "test-room", nil, nil, mockSFU)
 
 	client := &MockClient{
 		ID:   "user1",

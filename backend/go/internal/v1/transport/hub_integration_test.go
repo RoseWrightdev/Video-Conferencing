@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +17,7 @@ func TestServeWs_Unauthorized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	validator := &MockTokenValidator{shouldFail: true}
-	hub := NewHub(validator, nil, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, nil, false, newMockRateLimiter())
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -32,7 +33,7 @@ func TestServeWs_NoToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	validator := &MockTokenValidator{}
-	hub := NewHub(validator, nil, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, nil, false, newMockRateLimiter())
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -48,7 +49,7 @@ func TestServeWs_InvalidOrigin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	validator := &MockTokenValidator{}
-	hub := NewHub(validator, nil, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, nil, false, newMockRateLimiter())
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -66,7 +67,7 @@ func TestHandleConnection(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	validator := &MockTokenValidator{}
-	hub := NewHub(validator, nil, false, newMockRateLimiter())
+	hub := NewHub(context.Background(), validator, nil, false, newMockRateLimiter())
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

@@ -78,7 +78,13 @@ func NewValidator(ctx context.Context, domain, audience string, regOpts ...jwk.R
 		return nil, fmt.Errorf("failed to fetch initial JWKS: %w", err)
 	}
 
-	keyFunc := func(token *jwt.Token) (interface{}, error) {
+	keyFunc := func(token *jwt.Token) (any, error) {
+		// Fix JWT Algorithm Confusion
+		// Ensure the signing method is RSA
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
 		kid, ok := token.Header["kid"].(string)
 		if !ok {
 			return nil, errors.New("kid header not found")
@@ -180,7 +186,7 @@ func (m *MockValidator) ValidateToken(tokenString string) (*CustomClaims, error)
 					email = e
 				}
 				// Debug: log what we found
-				logging.Info(context.Background(), "MockValidator parsed JWT", zap.String("subject", subject), zap.String("name", name), zap.String("email", email))
+				logging.Info(context.Background(), "MockValidator parsed JWT", zap.String("subject", subject), zap.String("name", name), zap.String("email", logging.RedactEmail(email)))
 			}
 		}
 	}

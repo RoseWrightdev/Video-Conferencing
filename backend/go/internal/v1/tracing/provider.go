@@ -2,7 +2,9 @@ package tracing
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"os"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -11,15 +13,26 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 // InitTracer initializes the OpenTelemetry tracer provider
 func InitTracer(ctx context.Context, serviceName string, collectorAddr string) (*sdktrace.TracerProvider, error) {
-	// Create gRPC client for collector
-	conn, err := grpc.DialContext(ctx, collectorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	// Configure TLS for gRPC collector connection
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	// Allow insecure skip verify for development if explicitly enabled
+	if os.Getenv("OTEL_INSECURE_SKIP_VERIFY") == "true" {
+		tlsConfig.InsecureSkipVerify = true
+	}
+
+	// Create gRPC client for collector with TLS
+	creds := credentials.NewTLS(tlsConfig)
+	conn, err := grpc.NewClient(collectorAddr, grpc.WithTransportCredentials(creds))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
+		return nil, fmt.Errorf("failed to create gRPC client to collector: %w", err)
 	}
 
 	// Create OTLP exporter

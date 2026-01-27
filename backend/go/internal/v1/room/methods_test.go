@@ -13,7 +13,7 @@ import (
 func TestAddParticipant(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeWaiting)
 
 	// Add participant
@@ -33,7 +33,7 @@ func TestAddParticipant(t *testing.T) {
 func TestAddParticipant_RedisError(_ *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{failSetAdd: true}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeWaiting)
 
 	// Should not panic, just log error
@@ -43,7 +43,7 @@ func TestAddParticipant_RedisError(_ *testing.T) {
 func TestDeleteParticipant(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeParticipant)
 
 	// Add then delete
@@ -58,7 +58,7 @@ func TestDeleteParticipant(t *testing.T) {
 func TestAddHost(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeWaiting)
 
 	// Add host
@@ -75,7 +75,7 @@ func TestAddHost(t *testing.T) {
 func TestDeleteHost(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeHost)
 
 	// Add then delete
@@ -88,7 +88,7 @@ func TestDeleteHost(t *testing.T) {
 
 func TestAddWaiting(t *testing.T) {
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeParticipant)
 
 	// Add to waiting
@@ -104,7 +104,7 @@ func TestAddWaiting(t *testing.T) {
 
 func TestDeleteWaiting(t *testing.T) {
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeWaiting)
 
 	// Add then delete
@@ -116,7 +116,7 @@ func TestDeleteWaiting(t *testing.T) {
 }
 
 func TestToggleScreenshare(t *testing.T) {
-	room := NewRoom("test-room", nil, nil, nil)
+	room := NewRoom(context.Background(), "test-room", nil, nil, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeParticipant)
 
 	// Enable screenshare
@@ -135,7 +135,7 @@ func TestToggleScreenshare(t *testing.T) {
 }
 
 func TestRaiseHand(t *testing.T) {
-	room := NewRoom("test-room", nil, nil, nil)
+	room := NewRoom(context.Background(), "test-room", nil, nil, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeParticipant)
 
 	// Raise hand
@@ -165,7 +165,7 @@ func TestRaiseHand(t *testing.T) {
 }
 
 func TestAddChat(t *testing.T) {
-	room := NewRoom("test-room", nil, nil, nil)
+	room := NewRoom(context.Background(), "test-room", nil, nil, nil)
 
 	chat := types.ChatInfo{
 		ClientInfo: types.ClientInfo{
@@ -187,7 +187,7 @@ func TestAddChat(t *testing.T) {
 }
 
 func TestGetRecentChats(t *testing.T) {
-	room := NewRoom("test-room", nil, nil, nil)
+	room := NewRoom(context.Background(), "test-room", nil, nil, nil)
 
 	// Add multiple chats
 	for i := 0; i < 60; i++ {
@@ -204,7 +204,7 @@ func TestGetRecentChats(t *testing.T) {
 }
 
 func TestDeleteChat(t *testing.T) {
-	room := NewRoom("test-room", nil, nil, nil)
+	room := NewRoom(context.Background(), "test-room", nil, nil, nil)
 
 	chat := types.ChatInfo{
 		ChatID:      "chat1",
@@ -221,7 +221,7 @@ func TestDeleteChat(t *testing.T) {
 func TestDisconnectClient(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeParticipant)
 
 	// Add client as participant
@@ -239,7 +239,7 @@ func TestDisconnectClient(t *testing.T) {
 func TestBuildRoomStateProto(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 
 	host := NewMockClient("host1", "Host User", types.RoleTypeHost)
 	participant := NewMockClient("user1", "Participant User", types.RoleTypeParticipant)
@@ -280,7 +280,7 @@ func TestBuildRoomStateProto(t *testing.T) {
 }
 
 func TestChatHistoryLimit(t *testing.T) {
-	room := NewRoom("test-room", nil, nil, nil)
+	room := NewRoom(context.Background(), "test-room", nil, nil, nil)
 	room.maxChatHistoryLength = 10
 
 	// Add more than the limit
@@ -299,7 +299,7 @@ func TestChatHistoryLimit(t *testing.T) {
 func TestRoleTransitions(t *testing.T) {
 	ctx := context.Background()
 	mockBus := &MockBusService{}
-	room := NewRoom("test-room", nil, mockBus, nil)
+	room := NewRoom(context.Background(), "test-room", nil, mockBus, nil)
 	client := NewMockClient("user1", "Test User", types.RoleTypeWaiting)
 
 	// Start as waiting
