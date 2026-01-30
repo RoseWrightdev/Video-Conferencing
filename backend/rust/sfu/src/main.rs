@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing with validated RUST_LOG
     logging::init(&cfg.rust_log);
 
-    info!("✅ Environment configuration validated successfully");
+    info!("Environment configuration validated successfully");
     info!(
         grpc_port = cfg.grpc_port,
         rust_log = cfg.rust_log,
@@ -36,36 +36,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     register_metrics();
 
     // Start Metrics Server
-    let metrics_handle = tokio::spawn(async {
+    let metrics_port = cfg.metrics_port;
+    let metrics_handle = tokio::spawn(async move {
         let metrics_route = warp::path("metrics").and(warp::get()).map(|| {
-            use prometheus::Encoder;
-            let encoder = prometheus::TextEncoder::new();
-            let mut buffer = vec![];
-            let metric_families = prometheus::gather();
-            encoder.encode(&metric_families, &mut buffer).unwrap();
-            String::from_utf8(buffer).unwrap()
+            match generate_metrics_output() {
+                Ok(output) => output,
+                Err(e) => {
+                    tracing::error!("Failed to generate metrics: {}", e);
+                    String::from("Internal Server Error")
+                }
+            }
         });
 
-        info!("Metrics server listening on 0.0.0.0:3030");
-        warp::serve(metrics_route).run(([0, 0, 0, 0], 3030)).await;
+        info!("Metrics server listening on 0.0.0.0:{}", metrics_port);
+        warp::serve(metrics_route).run(([0, 0, 0, 0], metrics_port)).await;
     });
 
     let addr = format!("0.0.0.0:{}", cfg.grpc_port).parse()?;
 
     // Initialize CC Client (Lazy)
-    let cc_client = match tonic::transport::Endpoint::new(cfg.cc_service_addr.clone()) {
-        Ok(e) => {
-            let channel = e.connect_lazy();
-            Some(
-                sfu::pb::stream_processor::captioning_service_client::CaptioningServiceClient::new(
-                    channel,
-                ),
-            )
-        }
-        Err(e) => {
-            tracing::warn!("Failed to create CC endpoint: {}", e);
-            None
-        }
+    let cc_client = match tonic::transport::Endpoint::new(
+        cfg.cc_service_addr.clone()) {
+            Ok(e) => {
+                let channel = e.connect_lazy();
+                Some(
+                    pb::stream_processor::captioning_service_client::CaptioningServiceClient::new(
+                        channel,
+                    ),
+                )
+            }
+            Err(e) => {
+                tracing::warn!("Failed to create CC endpoint: {}", e);
+                None
+            }
     };
 
     let sfu = MySfu {
@@ -108,4 +111,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     server_result?;
     Ok(())
+}
+
+fn generate_metrics_output() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    use prometheus::Encoder;
+    let encoder = prometheus::TextEncoder::new();
+    let mut buffer = vec![];
+    let metric_families = prometheus::gather();
+    encoder.encode(&metric_families, &mut buffer)?;
+    let output = String::from_utf8(buffer)?;
+    Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_metrics_output() {
+        // Register a dummy metric to ensure output is not empty
+        let counter = prometheus::register_counter!("test_counter", "Test counter").unwrap();
+        counter.inc();
+
+        let output = generate_metrics_output().expect("Found error in metrics generation");
+        assert!(output.contains("test_counter"));
+        assert!(output.contains("TYPE test_counter counter"));
+    }
 }

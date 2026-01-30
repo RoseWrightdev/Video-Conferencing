@@ -1,5 +1,6 @@
 use super::*;
 use crate::broadcaster::TrackBroadcaster;
+use crate::id_types::{RoomId, StreamId, UserId};
 use crate::pb::sfu::sfu_service_server::SfuService;
 use crate::pb::sfu::{CreateSessionRequest, ListenRequest};
 use crate::room_manager::RoomManager;
@@ -171,10 +172,10 @@ async fn test_subscribe_logic() {
         cc_client: None,
     };
 
-    let room_id = "room1".to_string();
-    let user_a = "userA".to_string();
-    let stream_id = "stream1".to_string();
-    let track_id = "track1".to_string();
+    let room_id = RoomId::from("room1");
+    let user_a = UserId::from("userA");
+    let stream_id = StreamId::from("stream1");
+    let track_id = crate::id_types::TrackId::from("track1");
 
     // Create a broadcaster for User A
     let api = MediaSetup::create_webrtc_api();
@@ -205,9 +206,12 @@ async fn test_subscribe_logic() {
             .await
             .unwrap(),
     );
+    let user_b = UserId::from("userB");
+    
+    // Create peer using constructor to ensure fields are correct
     let peer_b = Peer {
         pc: pc_b,
-        user_id: "userB".to_string(),
+        user_id: user_b.clone(),
         room_id: room_id.clone(),
         event_tx: Arc::new(Mutex::new(None)),
         track_mapping: Arc::new(DashMap::new()),
@@ -215,7 +219,7 @@ async fn test_subscribe_logic() {
     };
 
     // Peer B subscribes to existing tracks
-    MediaSetup::subscribe_to_existing_tracks(&peer_b, "userB", &room_id, &sfu.tracks).await;
+    MediaSetup::subscribe_to_existing_tracks(&peer_b, user_b.as_ref(), room_id.as_ref(), &sfu.tracks).await;
 
     // Verify B has a mapping for A's stream
     assert!(peer_b.track_mapping.contains_key(&stream_id));

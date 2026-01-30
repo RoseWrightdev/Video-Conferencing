@@ -11,9 +11,18 @@ use webrtc::rtp_transceiver::rtp_codec::{
     RTCRtpCodecCapability, RTCRtpHeaderExtensionCapability, RTPCodecType,
 };
 
+/// Helper struct for configuring WebRTC media engines and APIs.
+/// Provides static methods to create the API, configuration, and setup initial state.
 pub struct MediaSetup;
 
 impl MediaSetup {
+    /// Creates a properly configured WebRTC API instance.
+    ///
+    /// Registers supported codecs:
+    /// - Audio: Opus (48kHz, 2 channels)
+    /// - Video: VP8, H.264
+    ///
+    /// Also registers standard RTP header extensions.
     pub fn create_webrtc_api() -> webrtc::api::API {
         let mut media_engine = MediaEngine::default();
 
@@ -117,6 +126,9 @@ impl MediaSetup {
             .build()
     }
 
+    /// Returns the standard RTCConfiguration for this SFU.
+    /// Reads `STUN_URL` from the environment or uses a Google STUN server default.
+    /// Uses `MaxBundle` policy for efficiency.
     pub fn get_rtc_config() -> RTCConfiguration {
         let stun_url =
             env::var("STUN_URL").unwrap_or_else(|_| "stun:stun.l.google.com:19302".to_string());
@@ -131,14 +143,14 @@ impl MediaSetup {
         }
     }
 
+    /// Iterates through all active tracks in the room and subscribes the new peer to them using `RTCPeerConnection::add_track`.
+    ///
+    /// This ensures that when a new user joins, they immediately receive streams from users already in the room.
     pub async fn subscribe_to_existing_tracks(
         peer: &crate::peer_manager::Peer,
         user_id: &str,
         room_id: &str,
-        tracks: &dashmap::DashMap<
-            (String, String, String, String),
-            std::sync::Arc<crate::broadcaster::TrackBroadcaster>,
-        >,
+        tracks: &crate::types::TrackMap,
     ) {
         use std::sync::Arc;
         use tracing::info;
@@ -150,17 +162,17 @@ impl MediaSetup {
             let (t_room, t_user, t_stream, t_track) = track_entry.key();
 
             // Filter: Must be same room, different user
-            if t_room == room_id && t_user != user_id {
+            // Compare strong types (RoomId, UserId) with &str arguments
+            if t_room.as_ref() == room_id && t_user.as_ref() != user_id {
                 let broadcaster = track_entry.value();
-                // t_stream, t_track, t_user are already &String here
-
+                
                 let local_track = Arc::new(TrackLocalStaticRTP::new(
                     broadcaster.capability.clone(),
-                    t_track.clone(),
-                    t_stream.clone(),
+                    t_track.to_string(),
+                    t_stream.to_string(),
                 ));
-
-                if let Ok(rtp_sender) = peer
+            
+               if let Ok(rtp_sender) = peer
                     .pc
                     .add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>)
                     .await
@@ -194,7 +206,7 @@ impl MediaSetup {
                         pt, ssrc
                     );
                     broadcaster
-                        .add_writer(local_track, t_track.clone(), ssrc, pt)
+                        .add_writer(local_track, t_track.to_string(), ssrc, pt)
                         .await;
 
                     // delayed Keyframe Request
@@ -211,6 +223,8 @@ impl MediaSetup {
         }
     }
 
+    /// Adds Receive-Only transceivers for Audio and Video to the PeerConnection.
+    /// This prepares the PC to accept incoming media from the client.
     pub async fn configure_media_engine(
         pc: &webrtc::peer_connection::RTCPeerConnection,
     ) -> Result<(), tonic::Status> {
@@ -239,5 +253,18 @@ impl MediaSetup {
         .map_err(|e| tonic::Status::internal(format!("Failed to add audio transceiver: {}", e)))?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rtc_config_defaults() {
+        // Ensure STUN server is configured by default
+        let config = MediaSetup::get_rtc_config();
+        assert!(!config.ice_servers.is_empty());
+        assert_eq!(config.ice_servers[0].urls[0], "stun:stun.l.google.com:19302");
     }
 }

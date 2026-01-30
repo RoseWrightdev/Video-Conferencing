@@ -1,31 +1,31 @@
+use crate::id_types::{RoomId, UserId};
 use crate::pb::sfu::SfuEvent;
+use crate::types::SharedEventSender;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use webrtc::peer_connection::RTCPeerConnection;
 
-// Peer wraps the WebRTC Connection
+/// Represents a connected peer
 pub struct Peer {
     pub pc: Arc<RTCPeerConnection>,
-    pub user_id: String,
-    pub room_id: String,
-    // Channel to send events (TrackAdded, Renegotiation) to Go -> Frontend
-    pub event_tx: crate::types::SharedEventSender,
-    // Map from StreamID (in this peer's PC) to Source UserID
-    pub track_mapping: Arc<DashMap<String, String>>,
-    // Ensure only one negotiation happens at a time per peer
+    pub user_id: UserId,
+    pub room_id: RoomId,
+    pub event_tx: SharedEventSender,
     pub signaling_lock: Arc<Mutex<()>>,
+    /// Maps StreamID -> SourceUserID for tracks this peer is subscribed to
+    pub track_mapping: crate::types::PeerTrackMapping,
 }
 
 impl Peer {
-    pub fn new(pc: Arc<RTCPeerConnection>, user_id: String, room_id: String) -> Self {
-        Self {
+    pub fn new(pc: Arc<RTCPeerConnection>, user_id: UserId, room_id: RoomId) -> Self {
+        Peer {
             pc,
             user_id,
             room_id,
             event_tx: Arc::new(Mutex::new(None)),
-            track_mapping: Arc::new(DashMap::new()),
             signaling_lock: Arc::new(Mutex::new(())),
+            track_mapping: Arc::new(DashMap::new()),
         }
     }
 
@@ -59,5 +59,29 @@ impl Peer {
                 })
             },
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use webrtc::api::APIBuilder;
+    use webrtc::peer_connection::configuration::RTCConfiguration;
+
+    #[tokio::test]
+    async fn test_peer_creation() {
+        let api = APIBuilder::new().build();
+        let pc = api.new_peer_connection(RTCConfiguration::default()).await.unwrap();
+        let pc = Arc::new(pc);
+        
+        let user_id = UserId::from("u1");
+        let room_id = RoomId::from("r1");
+
+        let peer = Peer::new(pc.clone(), user_id.clone(), room_id.clone());
+
+        assert_eq!(peer.user_id, user_id);
+        assert_eq!(peer.room_id, room_id);
+        // Ensure maps are initialized
+        assert!(peer.track_mapping.is_empty());
     }
 }

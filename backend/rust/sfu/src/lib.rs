@@ -12,6 +12,7 @@ pub mod pb {
 
 pub mod broadcaster;
 pub mod health;
+pub mod id_types;
 pub mod media_setup;
 pub mod metrics;
 pub mod peer_manager;

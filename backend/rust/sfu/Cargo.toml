@@ -54,3 +54,8 @@ harness = false
 [[bin]]
 name = "sfu_load_sim"
 path = "src/sfu_load_sim.rs"
+
+[[bench]]
+name = "id_benchmark"
+harness = false
+

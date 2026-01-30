@@ -1,63 +1,132 @@
+use crate::id_types::{RoomId, UserId};
 use dashmap::DashMap;
-use std::sync::Arc;
+use tracing::info;
 
-#[derive(Clone, Default)]
 pub struct RoomManager {
-    // Map RoomID -> Vec<UserID>
-    pub rooms: Arc<DashMap<String, Vec<String>>>,
+    // Map RoomID -> List of UserIDs
+    rooms: DashMap<RoomId, Vec<UserId>>,
 }
 
 impl RoomManager {
     pub fn new() -> Self {
-        Self {
-            rooms: Arc::new(DashMap::new()),
+        RoomManager {
+            rooms: DashMap::new(),
         }
     }
+}
 
-    /// Adds a user to a room. Returns true if a NEW room was created.
-    pub fn add_user(&self, room_id: String, user_id: String) -> bool {
-        let mut room_created = false;
-        let mut users = self.rooms.entry(room_id).or_insert_with(|| {
-            room_created = true;
-            Vec::new()
-        });
-        if !users.contains(&user_id) {
-            users.push(user_id);
+impl Default for RoomManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RoomManager {
+    pub fn add_user(&self, room_id: RoomId, user_id: UserId) -> bool {
+        let mut new_room = false;
+        self.rooms
+            .entry(room_id.clone())
+            .and_modify(|users| {
+                if !users.contains(&user_id) {
+                    users.push(user_id.clone());
+                }
+            })
+            .or_insert_with(|| {
+                new_room = true;
+                vec![user_id]
+            });
+
+        if new_room {
+            info!(room = %room_id, "New room created");
         }
-        room_created
+        new_room
     }
 
-    /// Removes a user from a room. Returns true if the room became empty and was removed.
-    pub fn remove_user(&self, room_id: &str, user_id: &str) -> bool {
-        let mut room_removed = false;
+    pub fn remove_user(&self, room_id: &RoomId, user_id: &UserId) -> bool {
+        let mut room_empty = false;
         if let Some(mut users) = self.rooms.get_mut(room_id) {
-            if let Some(pos) = users.iter().position(|u| u == user_id) {
-                users.remove(pos);
-            }
+            users.retain(|u| u != user_id);
             if users.is_empty() {
-                // Determine we should remove it.
-                // We can't remove while holding the refmut.
-                // We'll return true to signal caller (or handle clean up separately).
-                // Actually DashMap supports remove_if or we can just drop the ref and remove.
-                // But simply updating the metric based on "is_empty" is enough for now,
-                // assuming we treat "empty room" as "inactive".
-                // Let's actually remove it to be clean.
-                room_removed = true;
+                room_empty = true;
             }
         }
 
-        if room_removed {
+        if room_empty {
             self.rooms.remove(room_id);
+            info!(room = %room_id, "Room empty, removed");
+            true
+        } else {
+            false
         }
-        room_removed
     }
 
-    /// Returns a list of UserIDs in a room.
-    pub fn get_users(&self, room_id: &str) -> Vec<String> {
-        if let Some(users) = self.rooms.get(room_id) {
-            users.clone()
-        } else {
-            Vec::new()
-        }
+    pub fn get_users(&self, room_id: &RoomId) -> Vec<UserId> {
+        self.rooms
+            .get(room_id)
+            .map(|users| users.value().clone())
+            .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add_and_get_users() {
+        let manager = RoomManager::new();
+        let room_id = RoomId::from("room1");
+        let user_1 = UserId::from("user1");
+        let user_2 = UserId::from("user2");
+
+        // Add first user
+        assert!(manager.add_user(room_id.clone(), user_1.clone()));
+        let users = manager.get_users(&room_id);
+        assert_eq!(users.len(), 1);
+        assert!(users.contains(&user_1));
+
+        // Add second user
+        assert!(!manager.add_user(room_id.clone(), user_2.clone())); // Should return false as room exists
+        let users = manager.get_users(&room_id);
+        assert_eq!(users.len(), 2);
+        assert!(users.contains(&user_2));
+
+        // Add duplicate user (should handle gracefully, though not strictly de-duped by Vec in implementation yet?
+        // Checking implementation: uses `!users.contains(&user_id)` check.
+        manager.add_user(room_id.clone(), user_1.clone());
+        let users = manager.get_users(&room_id);
+        assert_eq!(users.len(), 2);
+    }
+
+    #[test]
+    fn test_remove_user() {
+        let manager = RoomManager::new();
+        let room_id = RoomId::from("room1");
+        let user_1 = UserId::from("user1");
+
+        manager.add_user(room_id.clone(), user_1.clone());
+        assert!(!manager.get_users(&room_id).is_empty());
+
+        // Remove user
+        let room_removed = manager.remove_user(&room_id, &user_1);
+        assert!(room_removed); // Room should be removed as it's empty
+        assert!(manager.get_users(&room_id).is_empty());
+
+        // Remove non-existent user
+        assert!(!manager.remove_user(&room_id, &user_1));
+    }
+
+    #[test]
+    fn test_multiple_rooms() {
+        let manager = RoomManager::new();
+        let room_1 = RoomId::from("room1");
+        let room_2 = RoomId::from("room2");
+        let user = UserId::from("user1");
+
+        manager.add_user(room_1.clone(), user.clone());
+        manager.add_user(room_2.clone(), user.clone());
+
+        assert_eq!(manager.get_users(&room_1).len(), 1);
+        assert_eq!(manager.get_users(&room_2).len(), 1);
     }
 }

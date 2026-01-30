@@ -8,6 +8,7 @@ use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
+use crate::id_types::{RoomId, UserId};
 use crate::media_setup::MediaSetup;
 use crate::metrics::{SFU_ACTIVE_PEERS, SFU_ACTIVE_ROOMS};
 use crate::pb;
@@ -22,15 +23,18 @@ use crate::track_handler;
 use crate::types::{PeerMap, TrackMap}; // Used in code as pb::signaling
 
 // The Server State
+/// Implementation of the SFU Service state.
+/// Holds references to all active peers, tracks, and the room manager.
 #[derive(Clone)]
 pub struct MySfu {
-    // Thread-safe map: (RoomID, UserID) -> Peer
+    /// Thread-safe map of active peers, keyed by `(RoomId, UserId)`.
     pub peers: PeerMap,
-    // Map: (RoomID, UserID, StreamID, TrackID) -> Broadcaster
+    /// Thread-safe map of active broadcasters, keyed by `(RoomId, UserId, StreamId, TrackId)`.
     pub tracks: TrackMap,
-    // Room Manager for efficient lookup
+    /// Manages room membership logic (which users are in which room).
     pub room_manager: Arc<RoomManager>,
-    // CC Client
+    /// gRPC client for the Captioning/Stream Processor service.
+    /// Used to forward audio chunks for transcription.
     pub cc_client: Option<
         crate::pb::stream_processor::captioning_service_client::CaptioningServiceClient<
             tonic::transport::Channel,
@@ -39,19 +43,28 @@ pub struct MySfu {
 }
 
 impl MySfu {
+    /// Internal logic for creating a new SFU session.
+    ///
+    /// 1. Initializes a new `RTCPeerConnection`.
+    /// 2. Configures the media engine and transceivers.
+    /// 3. Registers event handlers (ICE, connection state, on_track).
+    /// 4. Subscribes the new peer to existing tracks in the room.
+    /// 5. Generates and sets a local SDP offer.
+    /// 6. Returns the SDP offer to the client.
     pub async fn create_session_internal(
         &self,
         request: Request<CreateSessionRequest>,
     ) -> Result<Response<CreateSessionResponse>, Status> {
         let req = request.into_inner();
-        let room_id = req.room_id.clone();
-        let user_id = req.user_id.clone();
-
-        if room_id.is_empty() || user_id.is_empty() {
-            return Err(Status::invalid_argument(
+        
+        if req.room_id.is_empty() || req.user_id.is_empty() {
+             return Err(Status::invalid_argument(
                 "room_id and user_id must not be empty",
             ));
         }
+
+        let room_id = RoomId::from(req.room_id);
+        let user_id = UserId::from(req.user_id);
 
         info!(room = %room_id, user = %user_id, "CreateSession called");
 
@@ -91,19 +104,19 @@ impl MySfu {
         let peer_pc = peer.pc.clone();
 
         // 5. Initial Sync: Subscribe to EXISTING tracks from other peers
-        MediaSetup::subscribe_to_existing_tracks(&peer, &user_id, &room_id, &self.tracks).await;
+        MediaSetup::subscribe_to_existing_tracks(&peer, user_id.as_ref(), room_id.as_ref(), &self.tracks).await;
 
         // Setup OnTrack Handler: Where THIS client sends media to us
         track_handler::attach_track_handler(
             &peer_pc,
-            user_id.clone(),
-            room_id.clone(),
-            track_handler::TrackHandlerContext {
+            Arc::new(track_handler::TrackHandlerContext {
                 peers: self.peers.clone(),
                 tracks: self.tracks.clone(),
                 room_manager: self.room_manager.clone(),
                 cc_client: self.cc_client.clone(),
-            },
+                user_id: user_id.clone(),
+                room_id: room_id.clone(),
+            }),
         );
 
         // 6. Save to Map
@@ -151,18 +164,25 @@ impl MySfu {
         Ok(Response::new(CreateSessionResponse { sdp_offer: sdp }))
     }
 
+    /// Internal logic for establishing a server-side event stream.
+    ///
+    /// The client connects to this endpoint to receive asynchronous events from the SFU,
+    /// such as `TrackAddedEvent`, negotiation requests, or captions.
     pub async fn listen_events_internal(
         &self,
         request: Request<ListenRequest>,
     ) -> Result<Response<ReceiverStream<Result<SfuEvent, Status>>>, Status> {
         let req = request.into_inner();
-        let session_key = (req.room_id.clone(), req.user_id.clone());
-
+        
         if req.room_id.is_empty() || req.user_id.is_empty() {
-            return Err(Status::invalid_argument(
+             return Err(Status::invalid_argument(
                 "room_id and user_id must not be empty",
             ));
         }
+
+        let session_key = (RoomId::from(req.room_id.clone()), UserId::from(req.user_id.clone()));
+        // Note: we need req.room_id (String) for comparisons if tracks keys are strong types?
+        // Wait, tracks keys ARE strong types. So we need strong types for comparisons.
 
         info!(?session_key, "ListenEvents called");
 
@@ -180,9 +200,9 @@ impl MySfu {
 
                 let mut track_kind = "video".to_string();
                 // Find the broadcaster to get the correct kind
-                for track_entry in self.tracks.iter() {
+                    for track_entry in self.tracks.iter() {
                     let (t_room, t_user, t_stream, _t_track) = track_entry.key();
-                    if t_room == &req.room_id && t_user == source_user_id && t_stream == stream_id {
+                    if t_room.as_ref() == req.room_id && t_user == source_user_id && t_stream == stream_id {
                         track_kind = track_entry.value().kind.clone();
                         break;
                     }
@@ -191,8 +211,8 @@ impl MySfu {
                 let event = SfuEvent {
                     payload: Some(pb::sfu::sfu_event::Payload::TrackEvent(
                         pb::signaling::TrackAddedEvent {
-                            user_id: source_user_id.clone(),
-                            stream_id: stream_id.clone(),
+                            user_id: source_user_id.to_string(),
+                            stream_id: stream_id.to_string(),
                             track_kind,
                         },
                     )),
@@ -245,55 +265,7 @@ impl SfuService for MySfu {
         &self,
         request: Request<ListenRequest>,
     ) -> Result<Response<Self::ListenEventsStream>, Status> {
-        let req = request.into_inner();
-        let session_key = (req.room_id.clone(), req.user_id.clone());
-
-        if req.room_id.is_empty() || req.user_id.is_empty() {
-            return Err(Status::invalid_argument(
-                "room_id and user_id must not be empty",
-            ));
-        }
-
-        info!(?session_key, "ListenEvents called");
-
-        let (tx, rx) = mpsc::channel(100);
-
-        if let Some(peer) = self.peers.get(&session_key) {
-            let mut event_tx = peer.event_tx.lock().await;
-            *event_tx = Some(tx.clone());
-
-            // Send initial mappings for existing tracks that THIS peer is subscribed to
-            let mapping = peer.track_mapping.clone();
-            for mapping_entry in mapping.iter() {
-                let stream_id = mapping_entry.key();
-                let source_user_id = mapping_entry.value();
-
-                let mut track_kind = "video".to_string();
-                // Find the broadcaster to get the correct kind
-                for track_entry in self.tracks.iter() {
-                    let (t_room, t_user, t_stream, _t_track) = track_entry.key();
-                    if t_room == &req.room_id && t_user == source_user_id && t_stream == stream_id {
-                        track_kind = track_entry.value().kind.clone();
-                        break;
-                    }
-                }
-
-                let event = SfuEvent {
-                    payload: Some(pb::sfu::sfu_event::Payload::TrackEvent(
-                        pb::signaling::TrackAddedEvent {
-                            user_id: source_user_id.clone(),
-                            stream_id: stream_id.clone(),
-                            track_kind,
-                        },
-                    )),
-                };
-                let _ = tx.send(Ok(event)).await;
-            }
-        } else {
-            return Err(Status::not_found("Session not found"));
-        }
-
-        Ok(Response::new(ReceiverStream::new(rx)))
+        self.listen_events_internal(request).await
     }
 
     type ListenEventsStream = ReceiverStream<Result<SfuEvent, Status>>;
@@ -303,7 +275,7 @@ impl SfuService for MySfu {
         request: Request<SignalMessage>,
     ) -> Result<Response<SignalResponse>, Status> {
         let req = request.into_inner();
-        let session_key = (req.room_id.clone(), req.user_id.clone());
+        let session_key = (RoomId::from(req.room_id.clone()), UserId::from(req.user_id.clone()));
 
         let peer = match self.peers.get(&session_key) {
             Some(p) => p,
@@ -394,7 +366,7 @@ impl SfuService for MySfu {
         request: Request<DeleteSessionRequest>,
     ) -> Result<Response<DeleteSessionResponse>, Status> {
         let req = request.into_inner();
-        let session_key = (req.room_id.clone(), req.user_id.clone());
+        let session_key = (RoomId::from(req.room_id.clone()), UserId::from(req.user_id.clone()));
         if let Some((_, peer)) = self.peers.remove(&session_key) {
             info!(?session_key, "Deleting session and closing PeerConnection");
             let _ = peer.pc.close().await;
@@ -404,7 +376,8 @@ impl SfuService for MySfu {
             for entry in self.tracks.iter() {
                 let (t_room, t_user, _, _) = entry.key();
 
-                if t_room == &req.room_id && t_user == &req.user_id {
+                // Comparison with request strings
+                if t_room.as_ref() == req.room_id && t_user.as_ref() == req.user_id {
                     tracks_to_remove.push(entry.key().clone());
                 }
             }
@@ -416,7 +389,7 @@ impl SfuService for MySfu {
 
             // Remove from RoomManager & Update Metrics
             SFU_ACTIVE_PEERS.dec();
-            if self.room_manager.remove_user(&req.room_id, &req.user_id) {
+            if self.room_manager.remove_user(&session_key.0, &session_key.1) {
                 SFU_ACTIVE_ROOMS.dec();
             }
         }

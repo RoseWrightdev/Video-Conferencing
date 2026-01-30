@@ -7,6 +7,7 @@ use webrtc::rtp::packet::Packet;
 
 // Import from the sfu library
 use sfu::broadcaster::{BroadcasterWriter, TrackBroadcaster};
+use sfu::id_types::{RoomId, UserId};
 use sfu::media_setup::MediaSetup;
 
 // 1. Benchmark Packet Cloning (Hot Path Simulation)
@@ -128,24 +129,24 @@ fn bench_room_manager(c: &mut Criterion) {
     group.bench_function("add_user", |b| {
         let room_manager = sfu::room_manager::RoomManager::new();
         // pre-fill some data to make it realistic
-        room_manager.add_user("room_initial".to_string(), "user_initial".to_string());
+        room_manager.add_user(RoomId::from("room_initial"), UserId::from("user_initial"));
 
         let mut i = 0;
         b.iter(|| {
             i += 1;
             // cyclic user ids to avoid infinite memory growth during bench loop if it runs long
-            let user_id = format!("user_{}", i % 10000);
-            room_manager.add_user("bench_room".to_string(), user_id);
+            let user_id = UserId::from(format!("user_{}", i % 10000));
+            room_manager.add_user(RoomId::from("bench_room"), user_id);
         })
     });
 
     // Benchmark 2: Getting users from a room (Read heavy)
     group.bench_function("get_users", |b| {
         let room_manager = sfu::room_manager::RoomManager::new();
-        let room_id = "read_room".to_string();
+        let room_id = RoomId::from("read_room");
         // Fill room with 100 users
         for i in 0..100 {
-            room_manager.add_user(room_id.clone(), format!("user_{}", i));
+            room_manager.add_user(room_id.clone(), UserId::from(format!("user_{}", i)));
         }
 
         b.iter(|| {

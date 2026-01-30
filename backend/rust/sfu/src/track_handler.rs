@@ -8,7 +8,7 @@ use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndicat
 use webrtc::rtp::packet::Packet;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
-use webrtc::track::track_local::TrackLocal;
+
 use webrtc::track::track_remote::TrackRemote;
 
 use crate::broadcaster::TrackBroadcaster;
@@ -29,10 +29,10 @@ pub trait RemoteTrackSource: Send + Sync {
 #[async_trait]
 impl RemoteTrackSource for TrackRemote {
     fn id(&self) -> String {
-        self.id().to_owned()
+        self.id()
     }
     fn stream_id(&self) -> String {
-        self.stream_id().to_owned()
+        self.stream_id()
     }
     fn kind(&self) -> String {
         self.kind().to_string()
@@ -51,207 +51,250 @@ impl RemoteTrackSource for TrackRemote {
     }
 }
 
-/// Context for track handling operations
+use crate::id_types::{RoomId, UserId};
+
+/// Context required for handling new tracks.
+/// Contains references to global SFU state and user-specific session info.
 pub struct TrackHandlerContext {
+    /// Reference to the global peer map.
     pub peers: crate::types::PeerMap,
+    /// Reference to the global track broadcaster map.
     pub tracks: crate::types::TrackMap,
+    /// Reference to the room manager.
     pub room_manager: Arc<crate::room_manager::RoomManager>,
+    /// Optional gRPC client for the captioning service.
     pub cc_client: Option<
         crate::pb::stream_processor::captioning_service_client::CaptioningServiceClient<
             tonic::transport::Channel,
         >,
     >,
+    /// The UserId of the peer sending the track.
+    pub user_id: UserId,
+    /// The RoomId the peer belongs to.
+    pub room_id: RoomId,
 }
 
-pub fn attach_track_handler(
-    pc: &Arc<RTCPeerConnection>,
-    user_id: String,
-    room_id: String,
-    context: TrackHandlerContext,
-) {
-    let peers_clone = context.peers.clone();
-    let tracks_map = context.tracks.clone();
-    let user_id_clone = user_id.clone();
-    let room_id_clone = room_id.clone();
+/// Attaches the `on_track` event handler to a `RTCPeerConnection`.
+///
+/// This function sets up the callback that triggers when the remote peer adds a new track
+/// (e.g., enables their camera or microphone). It spawns an async task to handle the new track.
+pub fn attach_track_handler(pc: &Arc<RTCPeerConnection>, context: Arc<TrackHandlerContext>) {
+    let context_clone = context.clone();
     let pc_for_ontrack = pc.clone();
-    let room_manager_clone = context.room_manager.clone();
-    let cc_client_clone = context.cc_client.clone();
 
     pc.on_track(Box::new(
         move |track: Arc<TrackRemote>, _receiver, _transceiver| {
-            let user_id = user_id_clone.clone();
-            let room_id = room_id_clone.clone();
-            let peers = peers_clone.clone();
-            let tracks_map = tracks_map.clone();
+            let context = context_clone.clone();
             let pc_capture = pc_for_ontrack.clone();
-            let room_manager = room_manager_clone.clone();
-            let cc_client = cc_client_clone.clone();
 
             Box::pin(async move {
-                handle_new_track(
-                    track,
-                    user_id,
-                    room_id,
-                    TrackHandlerContext {
-                        peers,
-                        tracks: tracks_map,
-                        room_manager,
-                        cc_client,
-                    },
-                    pc_capture,
-                )
-                .await;
+                handle_new_track(track, context, pc_capture).await;
             })
         },
     ));
 }
 
-pub async fn handle_new_track(
+/// Creates a new `TrackBroadcaster` for the incoming track and registers it in the global track map.
+fn setup_broadcaster(
     track: Arc<dyn RemoteTrackSource>,
-    user_id: String,
-    room_id: String,
-    context: TrackHandlerContext,
+    context: &Arc<TrackHandlerContext>,
     pc_capture: Arc<RTCPeerConnection>,
-) {
+) -> Arc<TrackBroadcaster> {
     let track_kind = track.kind();
     let track_ssrc = track.ssrc();
-
-    info!(user_id = %user_id, kind = %track.kind(), "Received track from user");
-
-    // 1. Create Broadcaster
     let capability = track.codec_capability();
     let broadcaster = Arc::new(TrackBroadcaster::new(
         track_kind.clone(),
-        capability,
+        capability.clone(),
         pc_capture,
         track_ssrc,
     ));
 
     let track_key = (
-        room_id.clone(),
-        user_id.clone(),
-        track.stream_id(),
-        track.id(),
+        context.room_id.clone(),
+        context.user_id.clone(),
+        crate::id_types::StreamId::from(track.stream_id().as_str()),
+        crate::id_types::TrackId::from(track.id().as_str()),
     );
     info!(?track_key, "[SFU] Created broadcaster for track");
     context.tracks.insert(track_key, broadcaster.clone());
+    broadcaster
+}
 
-    // 2. Notify Existing Peers & Add Writer to them
-    // OPTIMIZED: Use RoomManager to find peers in the room (O(room_participants))
-    let users_in_room = context.room_manager.get_users(&room_id);
+/// Sets up a subscription for a peer to receive a specific track.
+///
+/// 1. Adds the track to the peer's `RTCPeerConnection`.
+/// 2. Spawns an RTCP read loop to handle PLI (Picture Loss Indication) requests.
+/// 3. Adds the peer as a writer to the broadcaster.
+/// 4. Sends a renegotiation event (TrackAdded) to the peer.
+fn setup_subscriber(
+    track: Arc<dyn RemoteTrackSource>,
+    other_peer: &crate::peer_manager::Peer,
+    broadcaster: Arc<TrackBroadcaster>,
+    source_user_id: crate::id_types::UserId,
+) {
+    use webrtc::track::track_local::TrackLocal;
+
+    info!(target_user = %other_peer.user_id, "[SFU] Forwarding new track");
+
+    let track_id_clone = track.id();
+    let track_stream_id_clone = track.stream_id();
+    let track_kind_clone = track.kind();
+    let capability_clone = track.codec_capability();
+
+    let other_peer_pc = other_peer.pc.clone();
+    let other_peer_signaling_lock = other_peer.signaling_lock.clone();
+    let other_peer_event_tx = other_peer.event_tx.clone();
+    let other_peer_track_mapping = other_peer.track_mapping.clone();
+    let other_peer_user_id = other_peer.user_id.clone();
+    let track_for_pt = track.clone();
+
+    // Clone broadcaster for the task
+    let broadcaster_clone = broadcaster;
+
+    tokio::spawn(async move {
+        let local_track = Arc::new(TrackLocalStaticRTP::new(
+            capability_clone,
+            track_id_clone.clone(),
+            track_stream_id_clone.clone(),
+        ));
+
+        let rtp_sender = match other_peer_pc
+            .add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>)
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                error!(peer = %other_peer_user_id, error = %e, "Error adding track to peer");
+                return;
+            }
+        };
+
+        let sender_clone = rtp_sender.clone();
+        let broadcaster_to_move = broadcaster_clone.clone();
+        tokio::spawn(async move {
+            let mut rtcp_buf = vec![0u8; 1500];
+            while let Ok((packets, _)) = sender_clone.read(&mut rtcp_buf).await {
+                for packet in packets {
+                    if packet.as_any().is::<PictureLossIndication>() {
+                        broadcaster_to_move.request_keyframe().await;
+                    }
+                }
+            }
+        });
+
+        let params = rtp_sender.get_parameters().await;
+        let ssrc = params.encodings.first().map(|e| e.ssrc).unwrap_or(0);
+        let pt = if let Some(codec) = params.rtp_parameters.codecs.first() {
+            codec.payload_type
+        } else {
+            // Fallback to incoming PT if we can't find a negotiated one (better than 0)
+            let incoming_pt = track_for_pt.payload_type();
+            warn!(incoming_pt = %incoming_pt, "[SFU] Outgoing codecs empty, falling back to incoming PT");
+            incoming_pt
+        };
+        info!(outgoing_pt = %pt, ssrc = %ssrc, "[SFU] on_track forwarding: Resolved Outgoing PT");
+        let track_id_for_writer = local_track.id().to_owned();
+        broadcaster_clone
+            .add_writer(local_track, track_id_for_writer, ssrc, pt)
+            .await;
+
+        // Delayed Keyframe Request - Burst Mode to ensure delivery after DTLS
+        broadcaster_clone.clone().schedule_pli_retry();
+        other_peer_track_mapping.insert(
+            crate::id_types::StreamId::from(track_stream_id_clone.clone()),
+            source_user_id.clone(),
+        );
+
+        // Use unified renegotiation helper
+        perform_renegotiation(
+            other_peer_pc.clone(),
+            other_peer_event_tx.clone(),
+            other_peer_user_id.clone(),
+            other_peer_signaling_lock.clone(),
+            Some(pb::signaling::TrackAddedEvent {
+                user_id: source_user_id.to_string(),
+                stream_id: track_stream_id_clone,
+                track_kind: track_kind_clone,
+            }),
+        )
+        .await;
+    });
+}
+
+/// Checks if an RTP packet payload contains a video keyframe.
+/// Supports VP8 and H.264 codecs.
+fn detect_keyframe(payload: &[u8], mime_type: &str) -> bool {
+    if payload.is_empty() {
+        return false;
+    }
+
+    if mime_type.contains("vp8") {
+        // VP8: Key frame if bit 0 of first byte is 0 (P-bit)
+        // Ref: RFC 7741 Section 4.2
+        (payload[0] & 0x01) == 0
+    } else if mime_type.contains("h264") {
+        // H.264: Check NAL unit type
+        // Ref: RFC 6184 Section 5.3
+        let nal_type = payload[0] & 0x1F;
+        if nal_type == 5 {
+            // IDR (Instantaneous Decoding Refresh)
+            true
+        } else if nal_type == 28 && payload.len() > 1 {
+            // FU-A (Fragmentation Unit A)
+            let s_bit = (payload[1] & 0x80) != 0;
+            let inner_type = payload[1] & 0x1F;
+            s_bit && inner_type == 5
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+/// Iterates through all other peers in the room and subscribes them to the new track.
+async fn broadcast_track_to_peers(
+    track: Arc<dyn RemoteTrackSource>,
+    broadcaster: Arc<TrackBroadcaster>,
+    context: &Arc<TrackHandlerContext>,
+) {
+    let users_in_room = context.room_manager.get_users(&context.room_id);
     info!(count = %users_in_room.len(), "[SFU] Notifying peers in room about new track");
 
     for other_user_id in users_in_room {
-        if other_user_id == user_id {
+        if other_user_id == context.user_id {
             continue;
         }
 
-        let session_key = (room_id.clone(), other_user_id.clone());
+        let session_key = (context.room_id.clone(), other_user_id.clone());
         if let Some(peer_entry) = context.peers.get(&session_key) {
-            let other_peer = peer_entry.value();
-            info!(target_user = %other_peer.user_id, "[SFU] Forwarding new track");
-
-            let broadcaster_clone = broadcaster.clone();
-            let track_id_clone = track.id();
-            let track_stream_id_clone = track.stream_id();
-            let track_kind_clone = track.kind();
-            let capability_clone = track.codec_capability();
-            let source_user_id = user_id.clone();
-
-            let other_peer_pc = other_peer.pc.clone();
-            let other_peer_signaling_lock = other_peer.signaling_lock.clone();
-            let other_peer_event_tx = other_peer.event_tx.clone();
-            let other_peer_track_mapping = other_peer.track_mapping.clone();
-            let other_peer_user_id = other_peer.user_id.clone();
-            let track_for_pt = track.clone();
-
-            tokio::spawn(async move {
-                let local_track = Arc::new(TrackLocalStaticRTP::new(
-                    capability_clone,
-                    track_id_clone.clone(),
-                    track_stream_id_clone.clone(),
-                ));
-
-                let rtp_sender = match other_peer_pc
-                    .add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>)
-                    .await
-                {
-                    Ok(s) => s,
-                    Err(e) => {
-                        error!(peer = %other_peer_user_id, error = %e, "Error adding track to peer");
-                        return;
-                    }
-                };
-
-                let sender_clone = rtp_sender.clone();
-                let broadcaster_to_move = broadcaster_clone.clone();
-                tokio::spawn(async move {
-                    let mut rtcp_buf = vec![0u8; 1500];
-                    while let Ok((packets, _)) = sender_clone.read(&mut rtcp_buf).await {
-                        for packet in packets {
-                            if packet.as_any().is::<PictureLossIndication>() {
-                                broadcaster_to_move.request_keyframe().await;
-                            }
-                        }
-                    }
-                });
-
-                let params = rtp_sender.get_parameters().await;
-                let ssrc = params.encodings.first().map(|e| e.ssrc).unwrap_or(0);
-                let pt = if let Some(codec) = params.rtp_parameters.codecs.first() {
-                    codec.payload_type
-                } else {
-                    // Fallback to incoming PT if we can't find a negotiated one (better than 0)
-                    let incoming_pt = track_for_pt.payload_type();
-                    warn!(incoming_pt = %incoming_pt, "[SFU] Outgoing codecs empty, falling back to incoming PT");
-                    incoming_pt
-                };
-                info!(outgoing_pt = %pt, ssrc = %ssrc, "[SFU] on_track forwarding: Resolved Outgoing PT");
-                let track_id_for_writer = local_track.id().to_owned();
-                broadcaster_clone
-                    .add_writer(local_track, track_id_for_writer, ssrc, pt)
-                    .await;
-
-                // Delayed Keyframe Request - Burst Mode to ensure delivery after DTLS
-                broadcaster_clone.clone().schedule_pli_retry();
-                other_peer_track_mapping
-                    .insert(track_stream_id_clone.clone(), source_user_id.clone());
-
-                // Use unified renegotiation helper
-                perform_renegotiation(
-                    other_peer_pc.clone(),
-                    other_peer_event_tx.clone(),
-                    other_peer_user_id.clone(),
-                    other_peer_signaling_lock.clone(),
-                    Some(pb::signaling::TrackAddedEvent {
-                        user_id: source_user_id,
-                        stream_id: track_stream_id_clone,
-                        track_kind: track_kind_clone,
-                    }),
-                )
-                .await;
-            });
+            setup_subscriber(
+                track.clone(),
+                peer_entry.value(),
+                broadcaster.clone(),
+                context.user_id.clone(),
+            );
         }
     }
+}
 
-    // 3. Start Forwarding Loop
-    // Read from `track` (Remote), Write to `broadcaster` (Locals)
-    let _media_ssrc = track.ssrc();
-    let track_id_log = track.id();
-    let mime_type = track.codec_capability().mime_type.to_lowercase();
-
-    // Setup CC Forwarding if Audio
+/// Configures a gRPC stream to the captioning service if the track is audio.
+/// Returns a channel to forward audio chunks to.
+fn setup_captioning_stream(
+    track_kind: &str,
+    context: &Arc<TrackHandlerContext>,
+) -> tokio::sync::mpsc::Sender<crate::pb::stream_processor::AudioChunk> {
     let (cc_tx, cc_rx) = tokio::sync::mpsc::channel::<crate::pb::stream_processor::AudioChunk>(500);
-    let mut _join_handle_cc: Option<tokio::task::JoinHandle<()>> = None;
-    if track.kind() == "audio" {
-        if let Some(mut client) = context.cc_client {
-            let session_id = format!("{}:{}", room_id, user_id);
-            // Clone for closure
-            let peers_cc = context.peers.clone();
-            let room_id_cc = room_id.clone();
-            let user_id_cc = user_id.clone();
 
-            let _join_handle_cc = Some(tokio::spawn(async move {
+    if track_kind == "audio" {
+        if let Some(mut client) = context.cc_client.clone() {
+            let session_id = format!("{}:{}", context.room_id, context.user_id);
+            let peers = context.peers.clone();
+            let room_id = context.room_id.clone();
+            let user_id = context.user_id.clone();
+
+            tokio::spawn(async move {
                 let outbound = tokio_stream::wrappers::ReceiverStream::new(cc_rx);
                 let request = tonic::Request::new(outbound);
 
@@ -260,7 +303,6 @@ pub async fn handle_new_track(
                     Ok(response) => {
                         let mut inbound = response.into_inner();
                         while let Ok(Some(event)) = inbound.message().await {
-                            // Construct SfuEvent with Signaling Caption
                             let sfu_event = crate::pb::sfu::SfuEvent {
                                 payload: Some(crate::pb::sfu::sfu_event::Payload::Caption(
                                     crate::pb::signaling::CaptionEvent {
@@ -272,16 +314,9 @@ pub async fn handle_new_track(
                                 )),
                             };
 
-                            // Find peer and send (Use producer's channel to send to Go)
-                            let target_key = (room_id_cc.clone(), user_id_cc.clone());
-                            let event_tx_opt = if let Some(peer) = peers_cc.get(&target_key) {
-                                Some(peer.event_tx.clone())
-                            } else {
-                                None
-                            };
-
-                            if let Some(event_tx) = event_tx_opt {
-                                let mut tx_lock = event_tx.lock().await;
+                            let target_key = (room_id.clone(), user_id.clone());
+                            if let Some(peer) = peers.get(&target_key) {
+                                let mut tx_lock = peer.event_tx.lock().await;
                                 if let Some(tx) = tx_lock.as_mut() {
                                     let _ = tx.send(Ok(sfu_event)).await;
                                 }
@@ -293,9 +328,31 @@ pub async fn handle_new_track(
                         error!("[CC] RPC Error for {}: {}", session_id, e);
                     }
                 }
-            }));
+            });
         }
     }
+    cc_tx
+}
+
+/// Spawns the main loop for reading RTP packets from the remote track.
+///
+/// Responsibilities:
+/// 1. Reads RTP packets from the source track.
+/// 2. Detects keyframes and updates the broadcaster status.
+/// 3. Forwards audio packets to the captioning service (if configured).
+/// 4. Broadcasts packets to all subscribed peers via the `TrackBroadcaster`.
+fn spawn_rtp_loop(
+    track: Arc<dyn RemoteTrackSource>,
+    broadcaster: Arc<TrackBroadcaster>,
+    cc_tx: tokio::sync::mpsc::Sender<crate::pb::stream_processor::AudioChunk>,
+    context: &Arc<TrackHandlerContext>,
+) {
+    let track_id_log = track.id();
+    let mime_type = track.codec_capability().mime_type.to_lowercase();
+    let room_id = context.room_id.clone();
+    let user_id = context.user_id.clone();
+
+    let is_audio = mime_type.starts_with("audio");
 
     tokio::spawn(async move {
         let mut packet_count = 0;
@@ -308,31 +365,7 @@ pub async fn handle_new_track(
                         info!(track = %track_id_log, "[SFU] First packet received");
                     }
 
-                    // Keyframe Detection
-                    let is_keyframe = if !packet.payload.is_empty() {
-                        if mime_type.contains("vp8") {
-                            // VP8: S-bit is 0 for start of partition? No, Key frame is bit 0 of first byte == 0
-                            // (payload[0] & 0x01) == 0
-                            (packet.payload[0] & 0x01) == 0
-                        } else if mime_type.contains("h264") {
-                            let nal_type = packet.payload[0] & 0x1F;
-                            if nal_type == 5 {
-                                true // IDR
-                            } else if nal_type == 28 && packet.payload.len() > 1 {
-                                // FU-A
-                                let s_bit = (packet.payload[1] & 0x80) != 0;
-                                let inner_type = packet.payload[1] & 0x1F;
-                                s_bit && inner_type == 5
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    };
-
+                    let is_keyframe = detect_keyframe(&packet.payload, &mime_type);
                     if is_keyframe {
                         broadcaster.mark_keyframe_received();
                         if packet_count % 100 == 0 || packet_count < 50 {
@@ -341,48 +374,55 @@ pub async fn handle_new_track(
                     }
 
                     if packet_count % 100 == 0 {
-                        trace!(
-                            count = %packet_count,
-                            track = %track_id_log,
-                            "[SFU] Forwarded packets"
-                        );
+                        trace!(count = %packet_count, track = %track_id_log, "[SFU] Forwarded packets");
                     }
 
-                    // Forward to CC
-                    if mime_type.starts_with("audio") {
+                    if is_audio {
                         let chunk = crate::pb::stream_processor::AudioChunk {
                             session_id: format!("{}:{}", room_id, user_id),
                             audio_data: packet.payload.to_vec(),
-                            target_language: "".to_string(), // Default; TODO: Pass from signaling
+                            target_language: "".to_string(),
                         };
                         let _ = cc_tx.try_send(chunk);
                     }
-                    // Reset tx reference? No, we need it every loop.
-                    // Wait, `cc_tx` is moved into this closure? Yes.
-                    // But `if track.kind() == "audio"` check wasn't done inside loop?
-                    // I did the check outside and created `cc_tx`.
-                    // But `cc_tx` is always created.
-                    // I should only send if it's audio.
-                    // Actually, I can just check if join_handle_cc is Some?
-                    // Or just relying on the receiver being dropped if not spawned?
-                    // If join_handle_cc is None, the receiver is dropped.
-                    // Sending to a closed channel returns error, which we ignore.
-                    // Efficient enough.
 
-                    // Use optimized broadcast method
                     broadcaster.broadcast(&mut packet).await;
                 }
                 Err(e) => {
-                    warn!(
-                        track = %track_id_log,
-                        error = %e,
-                        "[SFU] Track loop finished: Error. (Note: 'DataChannel not opened' usually means Transport Closed)"
-                    );
+                    warn!(track = %track_id_log, error = %e, "[SFU] Track loop finished: Error.");
                     break;
                 }
             }
         }
     });
+}
+
+/// Orchestrates the handling of a new incoming track.
+///
+/// 1. Creates a `TrackBroadcaster`.
+/// 2. Notifies existing peers in the room to subscribe to this track.
+/// 3. Sets up audio captioning/transcription.
+/// 4. Starts the RTP forwarding loop.
+pub async fn handle_new_track(
+    track: Arc<dyn RemoteTrackSource>,
+    context: Arc<TrackHandlerContext>,
+    pc_capture: Arc<RTCPeerConnection>,
+) {
+    let track_kind = track.kind();
+
+    info!(user_id = %context.user_id, kind = %track_kind, "Received track from user");
+
+    // 1. Create Broadcaster
+    let broadcaster = setup_broadcaster(track.clone(), &context, pc_capture);
+
+    // 2. Notify Existing Peers & Add Writer to them
+    broadcast_track_to_peers(track.clone(), broadcaster.clone(), &context).await;
+
+    // 3. Setup CC Forwarding if Audio
+    let cc_tx = setup_captioning_stream(&track_kind, &context);
+
+    // 4. Start Forwarding Loop
+    spawn_rtp_loop(track, broadcaster, cc_tx, &context);
 }
 
 #[cfg(test)]
@@ -413,14 +453,14 @@ mod tests {
         // 3. Attach Handler
         attach_track_handler(
             &pc_receiver,
-            user_id.clone(),
-            room_id.clone(),
-            TrackHandlerContext {
+            Arc::new(TrackHandlerContext {
                 peers: peers.clone(),
                 tracks: tracks.clone(),
                 room_manager: room_manager.clone(),
                 cc_client: None,
-            },
+                user_id: crate::id_types::UserId::from(user_id.clone()),
+                room_id: crate::id_types::RoomId::from(room_id.clone()),
+            }),
         );
 
         // 4. Add Track to Sender
@@ -480,7 +520,9 @@ mod tests {
         let mut found = false;
         for entry in tracks.iter() {
             let (r, u, s, _) = entry.key();
-            if r == &room_id && u == &user_id && s == "stream_id" {
+            // Compare strong types with string reference by converting or using AsRef?
+            // RoomId implements AsRef<str>
+            if r.as_ref() == room_id && u.as_ref() == user_id && s.as_ref() == "stream_id" {
                 found = true;
                 break;
             }
@@ -565,32 +607,26 @@ mod tests {
         let room_id = "mock_room".to_string();
         let user_id = "mock_user".to_string();
 
-        // Spawn handler
-        // We do this in a spawn to let it run concurrently, but we can also just let it run until we close channel?
-        // Actually `handle_new_track` spawns the forwarding loop and returns.
-        // Wait, `handle_new_track` signature is `pub async fn`.
-        // In `handle_new_track`, it spawns `tokio::spawn(async move { loop { ... } })` at the end.
-        // So calling it awaits the setup, but returns while the loop runs.
         handle_new_track(
             mock_track.clone(),
-            user_id.clone(),
-            room_id.clone(),
-            TrackHandlerContext {
+            Arc::new(TrackHandlerContext {
                 peers: peers.clone(),
                 tracks: tracks.clone(),
                 room_manager: room_manager.clone(),
                 cc_client: None,
-            },
+                user_id: crate::id_types::UserId::from(user_id.clone()),
+                room_id: crate::id_types::RoomId::from(room_id.clone()),
+            }),
             pc_capture.clone(),
         )
         .await;
 
         // Verify Broadcaster Created
         let track_key = (
-            room_id.clone(),
-            user_id.clone(),
-            "mock_stream_id".to_string(),
-            "mock_track_id".to_string(),
+            crate::id_types::RoomId::from(room_id),
+            crate::id_types::UserId::from(user_id),
+            crate::id_types::StreamId::from("mock_stream_id"),
+            crate::id_types::TrackId::from("mock_track_id"),
         );
         assert!(tracks.contains_key(&track_key));
         let broadcaster = tracks.get(&track_key).unwrap().value().clone();

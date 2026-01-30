@@ -8,17 +8,40 @@ use crate::pb::{
     self,
     sfu::{sfu_event::Payload as EventPayload, SfuEvent},
 };
+use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
+/// Initiates a renegotiation sequence with the peer.
+///
+/// 1. Sends an optional `TrackAddedEvent` via signaling to notify the client of a new track.
+/// 2. Creates a new SDP Offer reflecting the changes (e.g., added transceivers).
+/// 3. Gathers ICE candidates (if not complete).
+/// 4. Sends the new SDP Offer to the client to update the session.
 pub async fn perform_renegotiation(
     peer_pc: Arc<RTCPeerConnection>,
     event_tx: crate::types::SharedEventSender,
-    user_id: String,
+    user_id: crate::id_types::UserId,
     signaling_lock: Arc<Mutex<()>>,
     track_mapping_event: Option<pb::signaling::TrackAddedEvent>,
 ) {
     let _guard = signaling_lock.lock().await;
 
     // A. Add track mapping if provided
+    send_track_added_event(&event_tx, &user_id, track_mapping_event).await;
+
+    // B. Create Offer
+    if let Some(_) = create_and_gather_offer(&peer_pc, &user_id).await {
+        // C. Send Offer
+        let local_desc = peer_pc.local_description().await.unwrap_or_default();
+        send_renegotiation_offer(&event_tx, &user_id, local_desc).await;
+    }
+}
+
+/// Sends a `TrackAddedEvent` protobuf message to the client.
+async fn send_track_added_event(
+    event_tx: &crate::types::SharedEventSender,
+    user_id: &crate::id_types::UserId,
+    track_mapping_event: Option<pb::signaling::TrackAddedEvent>,
+) {
     if let Some(event) = track_mapping_event {
         let mut tx_lock = event_tx.lock().await;
         if let Some(tx) = tx_lock.as_mut() {
@@ -30,21 +53,26 @@ pub async fn perform_renegotiation(
             info!(user_id = %user_id, "[SFU] TrackAdded event sent to channel");
         }
     }
+}
 
-    // B. Create Offer
+/// Creates a local SDP offer, sets it as the local description, and waits for ICE gathering to complete (or timeout).
+async fn create_and_gather_offer(
+    peer_pc: &Arc<RTCPeerConnection>,
+    user_id: &crate::id_types::UserId,
+) -> Option<RTCSessionDescription> {
     let offer = match peer_pc.create_offer(None).await {
         Ok(o) => o,
         Err(e) => {
             error!(user_id = %user_id, error = %e, "Failed to create offer");
-            return;
+            return None;
         }
     };
 
     let mut gather_complete = peer_pc.gathering_complete_promise().await;
 
-    if let Err(e) = peer_pc.set_local_description(offer).await {
+    if let Err(e) = peer_pc.set_local_description(offer.clone()).await {
         error!(user_id = %user_id, error = %e, "Failed to set local desc");
-        return;
+        return None;
     }
 
     if peer_pc.ice_gathering_state() != RTCIceGatheringState::Complete {
@@ -55,9 +83,15 @@ pub async fn perform_renegotiation(
         )
         .await;
     }
+    Some(offer)
+}
 
-    // C. Send Offer
-    let local_desc = peer_pc.local_description().await.unwrap_or_default();
+/// Sends the generated SDP Offer to the client via the signaling channel.
+async fn send_renegotiation_offer(
+    event_tx: &crate::types::SharedEventSender,
+    user_id: &crate::id_types::UserId,
+    local_desc: RTCSessionDescription,
+) {
     info!(user_id = %user_id, sdp_length = %local_desc.sdp.len(), "[SFU] Sending Renegotiation Offer");
 
     let mut tx_lock = event_tx.lock().await;
@@ -91,7 +125,7 @@ mod tests {
         let signaling_lock = Arc::new(Mutex::new(()));
 
         // Should run without panic
-        perform_renegotiation(pc, event_tx, "user1".to_string(), signaling_lock, None).await;
+        perform_renegotiation(pc, event_tx, crate::id_types::UserId::from("user1"), signaling_lock, None).await;
     }
 
     #[tokio::test]
@@ -115,7 +149,7 @@ mod tests {
         perform_renegotiation(
             pc,
             event_tx,
-            "user1".to_string(),
+            crate::id_types::UserId::from("user1"),
             signaling_lock,
             track_event,
         )
@@ -139,6 +173,6 @@ mod tests {
         let signaling_lock = Arc::new(Mutex::new(()));
 
         // Should just warn and return, no panic
-        perform_renegotiation(pc, event_tx, "user1".to_string(), signaling_lock, None).await;
+        perform_renegotiation(pc, event_tx, crate::id_types::UserId::from("user1"), signaling_lock, None).await;
     }
 }

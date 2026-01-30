@@ -10,18 +10,31 @@ use crate::metrics::{
     SFU_KEYFRAMES_REQUESTED_TOTAL, SFU_PACKETS_DROPPED_TOTAL, SFU_PACKETS_FORWARDED_TOTAL,
 };
 
+/// Represents a single subscriber to a broadcast track.
+/// Holds the channel to the writer task and the negotiated SSRC/PayloadType.
 pub struct BroadcasterWriter {
+    /// Channel to send packets to the dedicated writer task.
     pub tx: mpsc::Sender<webrtc::rtp::packet::Packet>,
+    /// The SSRC to use for rewriting packets for this subscriber.
     pub ssrc: u32,
+    /// The Payload Type to use for rewriting packets.
     pub payload_type: u8,
 }
 
+/// Manages the fan-out of a single source track to multiple subscribers (writers).
+/// Handles RTP packet forwarding, SSRC/PT rewriting, and Keyframe requests (PLI).
 pub struct TrackBroadcaster {
+    /// Thread-safe list of active writers (subscribers).
     pub writers: crate::types::SharedBroadcasterWriters,
+    /// Kind of the track ("video" or "audio").
     pub kind: String,
+    /// Codec capabilities of the source track.
     pub capability: RTCRtpCodecCapability,
+    /// The PeerConnection of the source (publisher). Used to send RTCP PLI.
     pub source_pc: Arc<RTCPeerConnection>,
+    /// The SSRC of the source track. Using for RTCP PLI targeting.
     pub source_ssrc: u32,
+    /// Timestamp of the last received keyframe (used for throttling PLI requests).
     pub last_keyframe_ts: Arc<std::sync::atomic::AtomicI64>,
 }
 
@@ -42,6 +55,16 @@ impl TrackBroadcaster {
         }
     }
 
+    /// Adds a new subscriber (writer) to this broadcaster.
+    ///
+    /// Spawns a dedicated task that listens on a channel and writes RTP packets to the `TrackLocalWriter` (the subscriber's track).
+    /// Handles channel buffering and writes errors (e.g., peer disconnect).
+    ///
+    /// # Arguments
+    /// * `writer` - The local track writer for the subscriber.
+    /// * `track_id` - ID of the track for logging.
+    /// * `ssrc` - The SSRC to use for the subscriber.
+    /// * `payload_type` - The Payload Type to use for the subscriber.
     pub async fn add_writer(
         &self,
         writer: Arc<dyn TrackLocalWriter + Send + Sync>,
@@ -98,6 +121,8 @@ impl TrackBroadcaster {
             .store(now, std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// Sends a Picture Loss Indication (PLI) to the source to request a new keyframe.
+    /// Only applicable for video tracks.
     pub async fn request_keyframe(&self) {
         if self.kind != "video" {
             return;
@@ -138,8 +163,10 @@ impl TrackBroadcaster {
         });
     }
 
-    /// Optimized broadcast: non-blocking send to all writer tasks.
-    /// If a writer's channel is full, the packet is dropped for that peer only.
+    /// Broadcasts a single RTP packet to all active subscribers.
+    ///
+    /// - Rewrites SSRC and Payload Type for each subscriber.
+    /// - Uses non-blocking channel sends (`try_send`). If a subscriber is lagging (channel full), the packet is dropped for that subscriber to protect global performance.
     pub async fn broadcast(&self, packet: &mut webrtc::rtp::packet::Packet) {
         let writers = self.writers.read().await;
         if writers.is_empty() {

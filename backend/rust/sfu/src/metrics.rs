@@ -50,3 +50,16 @@ pub fn register_metrics() {
     let _ = SFU_WEBRTC_CONNECTIONS_TOTAL.get();
     let _ = SFU_WEBRTC_CONNECTION_FAILURES_TOTAL.get();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metrics_initialization() {
+        // Just verify that accessing them doesn't panic
+        register_metrics();
+        SFU_ACTIVE_ROOMS.inc();
+        assert_eq!(SFU_ACTIVE_ROOMS.get(), 1);
+    }
+}

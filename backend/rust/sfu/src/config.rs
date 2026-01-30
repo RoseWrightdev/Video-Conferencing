@@ -2,16 +2,27 @@ use std::env;
 use std::num::ParseIntError;
 
 #[derive(Debug, Clone)]
+/// Application configuration loaded from environment variables.
 pub struct Config {
+    /// Port for the gRPC service to listen on.
     pub grpc_port: u16,
+    /// Port for the HTTP metrics server (Prometheus).
+    pub metrics_port: u16,
+    /// Logging level (e.g., "info", "debug").
     pub rust_log: String,
+    /// Address of the captioning service
     pub cc_service_addr: String,
 }
 
 #[derive(Debug)]
+/// Errors that can occur during configuration loading.
 pub enum ConfigError {
+    /// A required environment variable exists but could not be read (rare) or is missing (if checked differently).
+    /// Actually currently used for Missing.
     MissingVariable(String),
+    /// A port value could not be parsed as a 16-bit integer.
     InvalidPort(String, ParseIntError),
+    /// A port value was 0, which is logically invalid for this application.
     PortOutOfRange(u16),
 }
 
@@ -22,8 +33,8 @@ impl std::fmt::Display for ConfigError {
             ConfigError::InvalidPort(val, err) => {
                 write!(
                     f,
-                    "GRPC_PORT must be a valid port number (got '{}': {})",
-                    val, err
+                    "{} must be a valid port number (got '{}': {})",
+                    val, val, err
                 )
             }
             ConfigError::PortOutOfRange(port) => {
@@ -44,7 +55,7 @@ pub fn validate_env() -> Result<Config, ConfigError> {
 
     let grpc_port: u16 = grpc_port_str
         .parse()
-        .map_err(|e| ConfigError::InvalidPort(grpc_port_str.clone(), e))?;
+        .map_err(|e| ConfigError::InvalidPort("GRPC_PORT".to_string(), e))?;
 
     if grpc_port == 0 {
         return Err(ConfigError::PortOutOfRange(grpc_port));
@@ -62,8 +73,15 @@ pub fn validate_env() -> Result<Config, ConfigError> {
         "http://localhost:50051".to_string()
     });
 
+    // Optional: METRICS_PORT (defaults to 3030)
+    let metrics_port: u16 = env::var("METRICS_PORT")
+        .unwrap_or_else(|_| "3030".to_string())
+        .parse()
+        .map_err(|e| ConfigError::InvalidPort("METRICS_PORT".to_string(), e))?;
+
     let config = Config {
         grpc_port,
+        metrics_port,
         rust_log,
         cc_service_addr,
     };
@@ -125,6 +143,31 @@ mod tests {
         let config = validate_env().expect("Expected valid configuration");
         assert_eq!(config.grpc_port, 50051);
         assert_eq!(config.rust_log, "debug");
+    }
+
+    #[test]
+    fn test_validate_env_metrics_port() {
+        let mut guard = EnvGuard::new();
+        guard.set("GRPC_PORT", "50051");
+        guard.set("METRICS_PORT", "9090");
+
+        let config = validate_env().expect("Expected valid configuration");
+        assert_eq!(config.metrics_port, 9090);
+    }
+
+    #[test]
+    fn test_validate_env_invalid_metrics_port() {
+        let mut guard = EnvGuard::new();
+        guard.set("GRPC_PORT", "50051");
+        guard.set("METRICS_PORT", "not-a-number");
+
+        let result = validate_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidPort(_, _)));
+        assert!(err
+            .to_string()
+            .contains("METRICS_PORT must be a valid port number"));
     }
 
     #[test]
