@@ -1,7 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use dashmap::DashMap;
 use sfu::id_types::UserId; // Need to expose sfu crate or id_types.
-use std::sync::Arc;
 
 fn bench_clone_string(c: &mut Criterion) {
     let s = "some-long-user-id-string-1234567890".to_string();

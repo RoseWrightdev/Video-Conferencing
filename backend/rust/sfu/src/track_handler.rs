@@ -170,18 +170,8 @@ fn setup_subscriber(
             }
         };
 
-        let sender_clone = rtp_sender.clone();
-        let broadcaster_to_move = broadcaster_clone.clone();
-        tokio::spawn(async move {
-            let mut rtcp_buf = vec![0u8; 1500];
-            while let Ok((packets, _)) = sender_clone.read(&mut rtcp_buf).await {
-                for packet in packets {
-                    if packet.as_any().is::<PictureLossIndication>() {
-                        broadcaster_to_move.request_keyframe().await;
-                    }
-                }
-            }
-        });
+        // 2. Spawn PLI Monitor Logic (extracted)
+        spawn_pli_monitor(rtp_sender.clone(), broadcaster_clone.clone());
 
         let params = rtp_sender.get_parameters().await;
         let ssrc = params.encodings.first().map(|e| e.ssrc).unwrap_or(0);
@@ -251,6 +241,23 @@ fn detect_keyframe(payload: &[u8], mime_type: &str) -> bool {
     } else {
         false
     }
+}
+
+/// Spawns a task to monitor RTCP Packets (PLI) from a sender and request keyframes.
+fn spawn_pli_monitor(
+    rtp_sender: Arc<webrtc::rtp_transceiver::rtp_sender::RTCRtpSender>,
+    broadcaster: Arc<TrackBroadcaster>,
+) {
+    tokio::spawn(async move {
+        let mut rtcp_buf = vec![0u8; 1500];
+        while let Ok((packets, _)) = rtp_sender.read(&mut rtcp_buf).await {
+            for packet in packets {
+                if packet.as_any().is::<PictureLossIndication>() {
+                    broadcaster.request_keyframe().await;
+                }
+            }
+        }
+    });
 }
 
 /// Iterates through all other peers in the room and subscribes them to the new track.
@@ -334,6 +341,17 @@ fn setup_captioning_stream(
     cc_tx
 }
 
+/// Context used for processing RTP packets loop.
+struct RtpPacketContext {
+    pub track_id: String,
+    pub mime_type: String,
+    pub broadcaster: Arc<TrackBroadcaster>,
+    pub cc_tx: tokio::sync::mpsc::Sender<crate::pb::stream_processor::AudioChunk>,
+    pub is_audio: bool,
+    pub room_id: crate::id_types::RoomId,
+    pub user_id: crate::id_types::UserId,
+}
+
 /// Spawns the main loop for reading RTP packets from the remote track.
 ///
 /// Responsibilities:
@@ -357,36 +375,23 @@ fn spawn_rtp_loop(
     tokio::spawn(async move {
         let mut packet_count = 0;
         info!(track = %track_id_log, "[SFU] Starting read_rtp loop");
+
+        // Initialize the context once
+        let packet_context = RtpPacketContext {
+            track_id: track_id_log.clone(),
+            mime_type: mime_type.clone(),
+            broadcaster: broadcaster.clone(),
+            cc_tx: cc_tx.clone(),
+            is_audio,
+            room_id,
+            user_id,
+        };
+
         loop {
             match track.read_rtp().await {
                 Ok((mut packet, _)) => {
                     packet_count += 1;
-                    if packet_count == 1 {
-                        info!(track = %track_id_log, "[SFU] First packet received");
-                    }
-
-                    let is_keyframe = detect_keyframe(&packet.payload, &mime_type);
-                    if is_keyframe {
-                        broadcaster.mark_keyframe_received();
-                        if packet_count % 100 == 0 || packet_count < 50 {
-                            debug!(track = %track_id_log, "[SFU] Keyframe received");
-                        }
-                    }
-
-                    if packet_count % 100 == 0 {
-                        trace!(count = %packet_count, track = %track_id_log, "[SFU] Forwarded packets");
-                    }
-
-                    if is_audio {
-                        let chunk = crate::pb::stream_processor::AudioChunk {
-                            session_id: format!("{}:{}", room_id, user_id),
-                            audio_data: packet.payload.to_vec(),
-                            target_language: "".to_string(),
-                        };
-                        let _ = cc_tx.try_send(chunk);
-                    }
-
-                    broadcaster.broadcast(&mut packet).await;
+                    process_rtp_packet(&mut packet, packet_count, &packet_context).await;
                 }
                 Err(e) => {
                     warn!(track = %track_id_log, error = %e, "[SFU] Track loop finished: Error.");
@@ -395,6 +400,37 @@ fn spawn_rtp_loop(
             }
         }
     });
+}
+
+/// Processes a single RTP packet: Logging, Keyframe Detection, CC forwarding, and Broadcasting.
+async fn process_rtp_packet(packet: &mut Packet, packet_count: u64, ctx: &RtpPacketContext) {
+    if packet_count == 1 {
+        info!(track = %ctx.track_id, "[SFU] First packet received");
+    }
+
+    let is_keyframe = detect_keyframe(&packet.payload, &ctx.mime_type);
+    if is_keyframe {
+        ctx.broadcaster.mark_keyframe_received();
+        if packet_count.is_multiple_of(100) || packet_count < 50 {
+            debug!(track = %ctx.track_id, "[SFU] Keyframe received");
+        }
+    }
+
+    if packet_count.is_multiple_of(100) {
+        trace!(count = %packet_count, track = %ctx.track_id, "[SFU] Forwarded packets");
+    }
+
+    if ctx.is_audio {
+        let chunk = crate::pb::stream_processor::AudioChunk {
+            session_id: format!("{}:{}", ctx.room_id, ctx.user_id),
+            audio_data: packet.payload.to_vec(),
+            target_language: "".to_string(),
+        };
+        // Best effort send, ignore full channel
+        let _ = ctx.cc_tx.try_send(chunk);
+    }
+
+    ctx.broadcaster.broadcast(packet).await;
 }
 
 /// Orchestrates the handling of a new incoming track.

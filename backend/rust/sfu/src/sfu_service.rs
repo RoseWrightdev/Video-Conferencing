@@ -56,9 +56,9 @@ impl MySfu {
         request: Request<CreateSessionRequest>,
     ) -> Result<Response<CreateSessionResponse>, Status> {
         let req = request.into_inner();
-        
+
         if req.room_id.is_empty() || req.user_id.is_empty() {
-             return Err(Status::invalid_argument(
+            return Err(Status::invalid_argument(
                 "room_id and user_id must not be empty",
             ));
         }
@@ -104,7 +104,13 @@ impl MySfu {
         let peer_pc = peer.pc.clone();
 
         // 5. Initial Sync: Subscribe to EXISTING tracks from other peers
-        MediaSetup::subscribe_to_existing_tracks(&peer, user_id.as_ref(), room_id.as_ref(), &self.tracks).await;
+        MediaSetup::subscribe_to_existing_tracks(
+            &peer,
+            user_id.as_ref(),
+            room_id.as_ref(),
+            &self.tracks,
+        )
+        .await;
 
         // Setup OnTrack Handler: Where THIS client sends media to us
         track_handler::attach_track_handler(
@@ -173,14 +179,17 @@ impl MySfu {
         request: Request<ListenRequest>,
     ) -> Result<Response<ReceiverStream<Result<SfuEvent, Status>>>, Status> {
         let req = request.into_inner();
-        
+
         if req.room_id.is_empty() || req.user_id.is_empty() {
-             return Err(Status::invalid_argument(
+            return Err(Status::invalid_argument(
                 "room_id and user_id must not be empty",
             ));
         }
 
-        let session_key = (RoomId::from(req.room_id.clone()), UserId::from(req.user_id.clone()));
+        let session_key = (
+            RoomId::from(req.room_id.clone()),
+            UserId::from(req.user_id.clone()),
+        );
         // Note: we need req.room_id (String) for comparisons if tracks keys are strong types?
         // Wait, tracks keys ARE strong types. So we need strong types for comparisons.
 
@@ -200,9 +209,12 @@ impl MySfu {
 
                 let mut track_kind = "video".to_string();
                 // Find the broadcaster to get the correct kind
-                    for track_entry in self.tracks.iter() {
+                for track_entry in self.tracks.iter() {
                     let (t_room, t_user, t_stream, _t_track) = track_entry.key();
-                    if t_room.as_ref() == req.room_id && t_user == source_user_id && t_stream == stream_id {
+                    if t_room.as_ref() == req.room_id
+                        && t_user == source_user_id
+                        && t_stream == stream_id
+                    {
                         track_kind = track_entry.value().kind.clone();
                         break;
                     }
@@ -275,7 +287,10 @@ impl SfuService for MySfu {
         request: Request<SignalMessage>,
     ) -> Result<Response<SignalResponse>, Status> {
         let req = request.into_inner();
-        let session_key = (RoomId::from(req.room_id.clone()), UserId::from(req.user_id.clone()));
+        let session_key = (
+            RoomId::from(req.room_id.clone()),
+            UserId::from(req.user_id.clone()),
+        );
 
         let peer = match self.peers.get(&session_key) {
             Some(p) => p,
@@ -366,7 +381,10 @@ impl SfuService for MySfu {
         request: Request<DeleteSessionRequest>,
     ) -> Result<Response<DeleteSessionResponse>, Status> {
         let req = request.into_inner();
-        let session_key = (RoomId::from(req.room_id.clone()), UserId::from(req.user_id.clone()));
+        let session_key = (
+            RoomId::from(req.room_id.clone()),
+            UserId::from(req.user_id.clone()),
+        );
         if let Some((_, peer)) = self.peers.remove(&session_key) {
             info!(?session_key, "Deleting session and closing PeerConnection");
             let _ = peer.pc.close().await;
@@ -389,7 +407,10 @@ impl SfuService for MySfu {
 
             // Remove from RoomManager & Update Metrics
             SFU_ACTIVE_PEERS.dec();
-            if self.room_manager.remove_user(&session_key.0, &session_key.1) {
+            if self
+                .room_manager
+                .remove_user(&session_key.0, &session_key.1)
+            {
                 SFU_ACTIVE_ROOMS.dec();
             }
         }

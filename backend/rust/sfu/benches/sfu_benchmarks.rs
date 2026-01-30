@@ -216,12 +216,105 @@ fn bench_broadcast_scaling(c: &mut Criterion) {
     group.finish();
 }
 
+// 6. Benchmark Full Packet Pipeline (End-to-End Simulation)
+// Simulates the full hot path: Keyframe Detection -> Broadcasting -> Subscription Writes
+fn bench_full_packet_pipeline(c: &mut Criterion) {
+    let rt = Runtime::new().unwrap();
+    let api = MediaSetup::create_webrtc_api();
+    let config = MediaSetup::get_rtc_config();
+    let pc = rt.block_on(api.new_peer_connection(config)).unwrap();
+
+    let broadcaster = Arc::new(TrackBroadcaster::new(
+        "video".to_string(),
+        Default::default(),
+        Arc::new(pc),
+        12345,
+    ));
+
+    // Setup: Add subscribers
+    let subscriber_count = 50;
+    let mut writers = rt.block_on(broadcaster.writers.write());
+    for i in 0..subscriber_count {
+        let (tx, _rx) = tokio::sync::mpsc::channel(100);
+        writers.push(BroadcasterWriter {
+            tx,
+            ssrc: 2000 + i as u32,
+            payload_type: 96,
+        });
+    }
+    drop(writers);
+
+    // Setup: Create packets
+    // 1. VP8 Keyframe (Start of stream)
+    let vp8_keyframe = Packet {
+        header: Header {
+            payload_type: 96,
+            ..Default::default()
+        },
+        payload: Bytes::from(vec![0x10, 0x01, 0x02, 0x03]), // P-bit = 0 (Keyframe)
+    };
+    // 2. VP8 Delta Frame
+    let vp8_delta = Packet {
+        header: Header {
+            payload_type: 96,
+            ..Default::default()
+        },
+        payload: Bytes::from(vec![0x11, 0x01, 0x02, 0x03]), // P-bit = 1 (Delta)
+    };
+
+    let mut group = c.benchmark_group("full_pipeline");
+
+    // Scenario A: VP8 Keyframe (Heavy Path - Parsing + Broadcast)
+    group.bench_function("pipeline_vp8_keyframe", |b| {
+        b.to_async(&rt).iter(|| {
+            let mut p = vp8_keyframe.clone();
+            let bc = broadcaster.clone();
+            async move {
+                // Simulate detect_keyframe logic inline to capture cost
+                let is_keyframe = if !p.payload.is_empty() {
+                    (p.payload[0] & 0x01) == 0
+                } else {
+                    false
+                };
+
+                if is_keyframe {
+                    bc.mark_keyframe_received();
+                }
+                bc.broadcast(&mut p).await;
+            }
+        })
+    });
+
+    // Scenario B: VP8 Delta Frame (Light Path)
+    group.bench_function("pipeline_vp8_delta", |b| {
+        b.to_async(&rt).iter(|| {
+            let mut p = vp8_delta.clone();
+            let bc = broadcaster.clone();
+            async move {
+                // Simulate detect_keyframe logic inline to capture cost
+                let is_keyframe = if !p.payload.is_empty() {
+                    (p.payload[0] & 0x01) == 0
+                } else {
+                    false
+                };
+                if is_keyframe {
+                    bc.mark_keyframe_received();
+                }
+                bc.broadcast(&mut p).await;
+            }
+        })
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_packet_cloning,
     bench_string_cloning,
     bench_broadcast_loop,
     bench_room_manager,
-    bench_broadcast_scaling
+    bench_broadcast_scaling,
+    bench_full_packet_pipeline
 );
 criterion_main!(benches);

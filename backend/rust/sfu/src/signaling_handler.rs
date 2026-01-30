@@ -29,7 +29,7 @@ pub async fn perform_renegotiation(
     send_track_added_event(&event_tx, &user_id, track_mapping_event).await;
 
     // B. Create Offer
-    if let Some(_) = create_and_gather_offer(&peer_pc, &user_id).await {
+    if (create_and_gather_offer(&peer_pc, &user_id).await).is_some() {
         // C. Send Offer
         let local_desc = peer_pc.local_description().await.unwrap_or_default();
         send_renegotiation_offer(&event_tx, &user_id, local_desc).await;
@@ -124,8 +124,14 @@ mod tests {
         let event_tx = Arc::new(Mutex::new(Some(tokio::sync::mpsc::channel(10).0)));
         let signaling_lock = Arc::new(Mutex::new(()));
 
-        // Should run without panic
-        perform_renegotiation(pc, event_tx, crate::id_types::UserId::from("user1"), signaling_lock, None).await;
+        perform_renegotiation(
+            pc,
+            event_tx,
+            crate::id_types::UserId::from("user1"),
+            signaling_lock,
+            None,
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -172,7 +178,13 @@ mod tests {
         let event_tx = Arc::new(Mutex::new(None));
         let signaling_lock = Arc::new(Mutex::new(()));
 
-        // Should just warn and return, no panic
-        perform_renegotiation(pc, event_tx, crate::id_types::UserId::from("user1"), signaling_lock, None).await;
+        perform_renegotiation(
+            pc,
+            event_tx,
+            crate::id_types::UserId::from("user1"),
+            signaling_lock,
+            None,
+        )
+        .await;
     }
 }
