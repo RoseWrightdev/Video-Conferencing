@@ -14,7 +14,8 @@ use crate::metrics::{
 /// Holds the channel to the writer task and the negotiated SSRC/PayloadType.
 pub struct BroadcasterWriter {
     /// Channel to send packets to the dedicated writer task.
-    pub tx: mpsc::Sender<webrtc::rtp::packet::Packet>,
+    /// Uses Arc<Packet> for efficient sharing across multiple subscribers.
+    pub tx: mpsc::Sender<Arc<webrtc::rtp::packet::Packet>>,
     /// The SSRC to use for rewriting packets for this subscriber.
     pub ssrc: u32,
     /// The Payload Type to use for rewriting packets.
@@ -74,7 +75,7 @@ impl TrackBroadcaster {
     ) {
         // Buffer of 128 packets. At 50fps video, this is ~2.5 seconds.
         // For audio (20ms packets), this is ~2.5 seconds.
-        let (tx, mut rx) = mpsc::channel::<webrtc::rtp::packet::Packet>(128);
+        let (tx, mut rx) = mpsc::channel::<Arc<webrtc::rtp::packet::Packet>>(128);
 
         let mut writers = self.writers.write().await;
         writers.push(BroadcasterWriter {
@@ -88,11 +89,28 @@ impl TrackBroadcaster {
         // Spawn dedicated sender task for this writer
         tokio::spawn(async move {
             debug!(kind = %kind, track = %track_id, "[SFU] Started writer task");
-            while let Some(packet) = rx.recv().await {
+            while let Some(packet_arc) = rx.recv().await {
+                // Deep clone the packet and rewrite SSRC/PT for this specific subscriber
+                let mut packet = (*packet_arc).clone();
+                packet.header.ssrc = ssrc;
+                if payload_type != 0 {
+                    packet.header.payload_type = payload_type;
+                }
+
                 if let Err(e) = writer.write_rtp(&packet).await {
-                    if e.to_string().contains("Broken pipe")
-                        || e.to_string().contains("Connection reset")
-                    {
+                    let is_connection_error = std::error::Error::source(&e)
+                        .and_then(|source| source.downcast_ref::<std::io::Error>())
+                        .map(|io_err| {
+                            matches!(
+                                io_err.kind(),
+                                std::io::ErrorKind::BrokenPipe
+                                    | std::io::ErrorKind::ConnectionReset
+                                    | std::io::ErrorKind::ConnectionAborted
+                            )
+                        })
+                        .unwrap_or(false);
+
+                    if is_connection_error {
                         debug!(kind = %kind, track = %track_id, "[SFU] Writer task finishing: peer disconnected");
                     } else {
                         warn!(kind = %kind, track = %track_id, error = %e, "[SFU] Error writing RTP to track");
@@ -102,6 +120,7 @@ impl TrackBroadcaster {
             }
             debug!(kind = %kind, track = %track_id, "[SFU] Writer task exiting");
         });
+
 
         info!(
             kind = %self.kind,
@@ -165,7 +184,8 @@ impl TrackBroadcaster {
 
     /// Broadcasts a single RTP packet to all active subscribers.
     ///
-    /// - Rewrites SSRC and Payload Type for each subscriber.
+    /// - Uses Arc<Packet> for efficient sharing across subscribers (cheap clone).
+    /// - Worker tasks handle SSRC/PT rewriting and deep cloning.
     /// - Uses non-blocking channel sends (`try_send`). If a subscriber is lagging (channel full), the packet is dropped for that subscriber to protect global performance.
     pub async fn broadcast(&self, packet: &mut webrtc::rtp::packet::Packet) {
         let writers = self.writers.read().await;
@@ -175,16 +195,16 @@ impl TrackBroadcaster {
 
         let mut needs_cleanup = false;
 
+        // Wrap packet in Arc for efficient sharing
+        let packet_arc = Arc::new(packet.clone());
+
         for w in writers.iter() {
-            let mut packet_clone = packet.clone();
-            packet_clone.header.ssrc = w.ssrc;
-            if w.payload_type != 0 {
-                packet_clone.header.payload_type = w.payload_type;
-            }
+            // Cheap Arc clone instead of expensive packet clone
+            let packet_to_send = Arc::clone(&packet_arc);
 
             // Non-blocking send: if the peer is lagging, drop the packet
             // rather than stalling the entire SFU read loop.
-            match w.tx.try_send(packet_clone) {
+            match w.tx.try_send(packet_to_send) {
                 Ok(_) => {
                     SFU_PACKETS_FORWARDED_TOTAL
                         .with_label_values(&[&self.kind])

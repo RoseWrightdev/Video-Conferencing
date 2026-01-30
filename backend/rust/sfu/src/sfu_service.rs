@@ -141,31 +141,17 @@ impl MySfu {
             .await
             .map_err(|e| Status::internal(format!("Failed to create offer: {}", e)))?;
 
-        let mut gather_complete = peer_pc.gathering_complete_promise().await;
         peer_pc
             .set_local_description(offer)
             .await
             .map_err(|e| Status::internal(format!("Failed to set local description: {}", e)))?;
 
-        use webrtc::ice_transport::ice_gathering_state::RTCIceGatheringState;
-        if peer_pc.ice_gathering_state() != RTCIceGatheringState::Complete {
-            info!(session = ?session_key, "[SFU] Waiting for initial ICE gathering");
-            let timeout_res = tokio::time::timeout(
-                tokio::time::Duration::from_millis(1500),
-                gather_complete.recv(),
-            )
-            .await;
-
-            if timeout_res.is_err() {
-                tracing::warn!(session = ?session_key, "ICE gathering timed out");
-                return Err(Status::unavailable("ICE gathering timed out, please retry"));
-            }
-        }
-
+        // Trickle ICE: Return immediately without waiting for gathering to complete
+        // The on_ice_candidate handler will send additional candidates via the event stream
         let local_desc = peer_pc.local_description().await.unwrap_or_default();
         let sdp = local_desc.sdp;
 
-        info!(session = ?session_key, "Session created. Initial SDP Offer (Wait completed)");
+        info!(session = ?session_key, "Session created. Initial SDP Offer (Trickle ICE enabled)");
 
         Ok(Response::new(CreateSessionResponse { sdp_offer: sdp }))
     }
