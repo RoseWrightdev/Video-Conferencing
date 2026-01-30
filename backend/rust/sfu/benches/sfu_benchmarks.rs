@@ -85,8 +85,10 @@ fn bench_broadcast_loop(c: &mut Criterion) {
     // Inject 100 dummy writers (subscribers)
     // We use a dummy channel that simply drops the messages
     let mut writers = rt.block_on(broadcaster.writers.write());
+    let mut _rxs = Vec::new();
     for i in 0..100 {
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        _rxs.push(rx);
         // calculate ssrc
         let ssrc = 1000 + i;
         writers.push(BroadcasterWriter {
@@ -184,8 +186,11 @@ fn bench_broadcast_scaling(c: &mut Criterion) {
                 ));
 
                 let mut writers = rt.block_on(broadcaster.writers.write());
+                // Keep receivers alive to prevent "channel closed" logic from triggering
+                let mut _keep_alive = Vec::with_capacity(count);
                 for i in 0..count {
-                    let (tx, _rx) = tokio::sync::mpsc::channel(10); // Minimal buffer to save RAM
+                    let (tx, rx) = tokio::sync::mpsc::channel(10); // Minimal buffer to save RAM
+                    _keep_alive.push(rx);
                     writers.push(BroadcasterWriter {
                         tx,
                         ssrc: 1000 + i as u32,

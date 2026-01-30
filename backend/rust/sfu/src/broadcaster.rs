@@ -173,6 +173,8 @@ impl TrackBroadcaster {
             return;
         }
 
+        let mut needs_cleanup = false;
+
         for w in writers.iter() {
             let mut packet_clone = packet.clone();
             packet_clone.header.ssrc = w.ssrc;
@@ -182,32 +184,37 @@ impl TrackBroadcaster {
 
             // Non-blocking send: if the peer is lagging, drop the packet
             // rather than stalling the entire SFU read loop.
-            if let Err(e) = w.tx.try_send(packet_clone) {
-                match e {
-                    mpsc::error::TrySendError::Full(_) => {
-                        SFU_PACKETS_DROPPED_TOTAL
-                            .with_label_values(&["buffer_full"])
-                            .inc();
-                        // Only log occasionally to avoid log flooding
-                        static DROP_COUNT: std::sync::atomic::AtomicU64 =
-                            std::sync::atomic::AtomicU64::new(0);
-                        let count = DROP_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if count.is_multiple_of(100) {
-                            warn!(kind = %self.kind, ssrc = %w.ssrc, "[SFU] Writer channel full, dropping packet (total dropped: {})", count + 1);
-                        }
-                    }
-                    mpsc::error::TrySendError::Closed(_) => {
-                        SFU_PACKETS_DROPPED_TOTAL
-                            .with_label_values(&["channel_closed"])
-                            .inc();
-                        // Peer session likely closed, entry will be cleaned up eventually
+            match w.tx.try_send(packet_clone) {
+                Ok(_) => {
+                    SFU_PACKETS_FORWARDED_TOTAL
+                        .with_label_values(&[&self.kind])
+                        .inc();
+                }
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    SFU_PACKETS_DROPPED_TOTAL
+                        .with_label_values(&["buffer_full"])
+                        .inc();
+                    // Only log occasionally to avoid log flooding
+                    static DROP_COUNT: std::sync::atomic::AtomicU64 =
+                        std::sync::atomic::AtomicU64::new(0);
+                    let count = DROP_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if count.is_multiple_of(100) {
+                        warn!(kind = %self.kind, ssrc = %w.ssrc, "[SFU] Writer channel full, dropping packet (total dropped: {})", count + 1);
                     }
                 }
-            } else {
-                SFU_PACKETS_FORWARDED_TOTAL
-                    .with_label_values(&[&self.kind])
-                    .inc();
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    SFU_PACKETS_DROPPED_TOTAL
+                        .with_label_values(&["channel_closed"])
+                        .inc();
+                    needs_cleanup = true;
+                }
             }
+        }
+        drop(writers);
+
+        if needs_cleanup {
+            let mut writers = self.writers.write().await;
+            writers.retain(|w| !w.tx.is_closed());
         }
     }
 }
@@ -349,5 +356,53 @@ mod tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         assert!(*called2.lock().await);
+    }
+
+    #[tokio::test]
+    async fn test_zombie_writer_cleanup() {
+        let api = APIBuilder::new().build();
+        let config = RTCConfiguration::default();
+        let pc = Arc::new(api.new_peer_connection(config).await.unwrap());
+        let codec = RTCRtpCodecCapability {
+            mime_type: "video/vp8".into(),
+            ..Default::default()
+        };
+        let broadcaster = TrackBroadcaster::new("video".into(), codec.clone(), pc, 12345);
+
+        // 1. Create a dummy writer (using a real channel to simulate connection state)
+        let called = Arc::new(tokio::sync::Mutex::new(false));
+        let mock_writer = Arc::new(MockTrackWriter {
+            fail_kind: Some(std::io::ErrorKind::ConnectionReset),
+            fail_msg: Some("Connection reset".into()),
+            write_called: called.clone(),
+        });
+
+        broadcaster
+            .add_writer(mock_writer, "zombie_track".into(), 111, 96)
+            .await;
+
+        assert_eq!(broadcaster.writers.read().await.len(), 1, "Should have 1 writer initially");
+
+        // 2. Trigger the failure.
+        // Because add_writer spawns the loop, we must send a packet to trigger the write_rtp call which fails.
+        let mut packet = webrtc::rtp::packet::Packet::default();
+        packet.header.ssrc = 12345;
+        broadcaster.broadcast(&mut packet).await;
+
+        // 3. Wait for the spawned task to catch the error and exit.
+        // Once it exits, `rx` is dropped.
+        // Then `tx` held in `broadcaster.writers` becomes closed.
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        assert!(*called.lock().await, "Mock writer should have been called");
+
+        // 4. Now broadcast AGAIN. This is where we expect cleanup to happen.
+        // The previous broadcast triggered the close. This broadcast attempts to send to a closed channel.
+        broadcaster.broadcast(&mut packet).await;
+
+        // 5. Assert writers count.
+        // CURRENTLY (Before Fix): This should be 1 (Leak).
+        // AFTER FIX: This should be 0.
+        let count = broadcaster.writers.read().await.len();
+        assert_eq!(count, 0, "Zombie writer should be removed. Found {} writers", count);
     }
 }
