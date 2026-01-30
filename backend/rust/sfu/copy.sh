@@ -38,16 +38,12 @@ find "$SRC" \
     echo "FILE: $file" >> "$OUTPUT"
     echo "--------------------------------------------------------------------------------" >> "$OUTPUT"
     awk '
-    BEGIN { in_tests = 0; depth = 0 }
-    !in_tests && /^\s*mod\s+tests\s*\{/ {
-        in_tests = 1
-        depth = 0
-    }
+    BEGIN { in_tests = 0; depth = 0; buffer = ""; looking_for_brace = 0 }
+    
+    # If we'"'"'re already inside a test block, handle brace counting
     in_tests {
-        # count {
         n_open = gsub(/\{/, "{")
         depth += n_open
-        # count }
         n_close = gsub(/\}/, "}")
         depth -= n_close
         
@@ -57,6 +53,76 @@ find "$SRC" \
         }
         next
     }
+
+    # Check for #[cfg(test)] on its own line. 
+    # Using [ \t] instead of \s for better compatibility.
+    /^[ \t]*#\[cfg\(test\)\][ \t]*$/ {
+        buffer = $0
+        next
+    }
+
+    # Check for #[tokio::test].
+    # This marks the start of a function we want to delete.
+    /^[ \t]*#\[tokio::test(\(.*\))?\][ \t]*$/ {
+        in_tests = 1
+        depth = 0
+        # Wait for the opening brace of the function to start counting
+        looking_for_brace = 1
+        next
+    }
+    
+    # If we are looking for the start of the block (after tokio::test)
+    looking_for_brace {
+        # Check if this line has the opening brace
+        if ($0 ~ /\{/) {
+             looking_for_brace = 0
+             # Count braces in this line
+             temp_line = $0
+             n_open = gsub(/\{/, "{", temp_line)
+             depth += n_open
+             n_close = gsub(/\}/, "}", temp_line)
+             depth -= n_close
+             
+             if (depth <= 0) {
+                 in_tests = 0
+                 depth = 0
+             }
+        }
+        # Swallow the line
+        next
+    }
+
+    # Check for start of mod tests
+    # Matches: "mod tests {" or "#[cfg(test)] mod tests {"
+    /^[ \t]*(#\[cfg\(test\)\][ \t]*)?mod[ \t]+tests[ \t]*\{/ {
+        in_tests = 1
+        depth = 0
+        
+        # Count braces in this starting line to initialize depth
+        # We work on a copy to avoid messing up if we needed to print (we don'"'"'t here)
+        temp_line = $0
+        n_open = gsub(/\{/, "{", temp_line)
+        depth += n_open
+        n_close = gsub(/\}/, "}", temp_line)
+        depth -= n_close
+        
+        if (depth <= 0) {
+            in_tests = 0
+            depth = 0
+        }
+        
+        # Clear buffer (discard any preceding #[cfg(test)])
+        buffer = ""
+        next
+    }
+    
+    # If we have a buffered line that wasn'"'"'t consumed by mod tests, print it now
+    buffer != "" {
+        print buffer
+        buffer = ""
+    }
+
+    # Print the current line (if we'"'"'re not in tests)
     { print }
     ' "$file" >> "$OUTPUT"
     echo -e "\n\n" >> "$OUTPUT"
